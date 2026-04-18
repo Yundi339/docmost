@@ -77,6 +77,7 @@ export const useTreeSocket = () => {
 
           break;
         case "moveTreeNode":
+          console.log("[WS moveTreeNode] received for node:", event.payload.id);
           // move node
           if (treeApi.find(event.payload.id)) {
             treeApi.move({
@@ -93,6 +94,7 @@ export const useTreeSocket = () => {
               },
             });
 
+            console.log("[WS moveTreeNode] setting tree data, root count:", treeApi.data.length);
             setTreeData(treeApi.data);
           }
 

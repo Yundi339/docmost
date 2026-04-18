@@ -42,10 +42,6 @@ export function findBreadcrumbPath(
   path: SpaceTreeNode[] = [],
 ): SpaceTreeNode[] | null {
   for (const node of tree) {
-    if (!node.name || node.name.trim() === "") {
-      node.name = "untitled";
-    }
-
     if (node.id === pageId) {
       return [...path, node];
     }
@@ -159,44 +155,69 @@ export function buildTreeWithChildren(items: SpaceTreeNode[]): SpaceTreeNode[] {
   return result;
 }
 
+/**
+ * Collect all node IDs at every level of a tree.
+ */
+function collectAllIds(nodes: SpaceTreeNode[]): Set<string> {
+  const ids = new Set<string>();
+  const walk = (items: SpaceTreeNode[]) => {
+    for (const n of items) {
+      ids.add(n.id);
+      if (n.children?.length) walk(n.children as SpaceTreeNode[]);
+    }
+  };
+  walk(nodes);
+  return ids;
+}
+
 export function appendNodeChildren(
   treeItems: SpaceTreeNode[],
   nodeId: string,
   children: SpaceTreeNode[],
 ) {
-  // Preserve deeper children if they exist and remove node if deleted
-  return treeItems.map((node) => {
-    if (node.id === nodeId) {
-      const newIds = new Set(children.map((c) => c.id));
+  // Collect ALL node IDs across the entire tree so we can detect nodes that
+  // already exist elsewhere (e.g. recently moved via drag-and-drop).
+  const allTreeIds = collectAllIds(treeItems);
 
-      const existingMap = new Map(
-        (node.children ?? [])
-          .filter((c) => newIds.has(c.id))
-          .map((c) => [c.id, c]),
-      );
+  function merge(items: SpaceTreeNode[]): SpaceTreeNode[] {
+    return items.map((node) => {
+      if (node.id === nodeId) {
+        const existingMap = new Map(
+          (node.children ?? []).map((c) => [c.id, c]),
+        );
+        const newIds = new Set(children.map((c) => c.id));
 
-      const merged = children.map((newChild) => {
-        const existing = existingMap.get(newChild.id);
-        return existing && existing.children
-          ? { ...newChild, children: existing.children }
-          : newChild;
-      });
+        // Start with server children, but skip any that already exist
+        // elsewhere in the tree (they were moved away from this parent locally).
+        const merged = children
+          .filter((c) => existingMap.has(c.id) || !allTreeIds.has(c.id))
+          .map((newChild) => {
+            const existing = existingMap.get(newChild.id);
+            return existing && existing.children
+              ? { ...newChild, children: existing.children }
+              : newChild;
+          });
 
-      return {
-        ...node,
-        children: merged,
-      };
-    }
+        // Keep existing children not in server response
+        // (they may have been moved here locally but server hasn't synced yet)
+        for (const existing of node.children ?? []) {
+          if (!newIds.has(existing.id)) {
+            merged.push(existing);
+          }
+        }
 
-    if (node.children) {
-      return {
-        ...node,
-        children: appendNodeChildren(node.children, nodeId, children),
-      };
-    }
+        return { ...node, children: merged };
+      }
 
-    return node;
-  });
+      if (node.children) {
+        return { ...node, children: merge(node.children) };
+      }
+
+      return node;
+    });
+  }
+
+  return merge(treeItems);
 }
 
 /**
@@ -206,7 +227,9 @@ export function mergeRootTrees(
   prevRoots: SpaceTreeNode[],
   incomingRoots: SpaceTreeNode[],
 ): SpaceTreeNode[] {
-  const seen = new Set(prevRoots.map((r) => r.id));
+  // Collect ALL node ids at every level of the existing tree,
+  // so nodes that were moved from root into a subtree are not re-added.
+  const seen = collectAllIds(prevRoots);
 
   // add new roots that were not present before
   const merged = [...prevRoots];

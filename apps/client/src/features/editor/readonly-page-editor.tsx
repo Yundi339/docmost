@@ -9,6 +9,7 @@ import { Placeholder } from "@tiptap/extension-placeholder";
 import { useAtom } from "jotai";
 import { readOnlyEditorAtom } from "@/features/editor/atoms/editor-atoms.ts";
 import { useEditorScroll } from "./hooks/use-editor-scroll";
+import { useTranslation } from "react-i18next";
 
 interface PageEditorProps {
   title: string;
@@ -21,6 +22,7 @@ export default function ReadonlyPageEditor({
   content,
   pageId,
 }: PageEditorProps) {
+  const { t } = useTranslation();
   const [, setReadOnlyEditor] = useAtom(readOnlyEditorAtom);
   const isComponentMounted = useRef(false);
   const editorCreated = useRef(false);
@@ -59,7 +61,7 @@ export default function ReadonlyPageEditor({
     Heading,
     Text,
     Placeholder.configure({
-      placeholder: "Untitled",
+      placeholder: t("Untitled"),
       showOnlyWhenEditable: false,
     }),
   ];
