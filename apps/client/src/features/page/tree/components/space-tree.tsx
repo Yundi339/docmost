@@ -289,7 +289,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
             }
           }}
           openByDefault={false}
-          disableMultiSelection={true}
+          disableMultiSelection={false}
           className={classes.tree}
           rowClassName={classes.row}
           rowHeight={30}
@@ -428,7 +428,12 @@ function Node({ node, style, dragHandle, tree }: NodeRendererProps<any>) {
         to={pageUrl}
         // @ts-ignore
         ref={dragHandle}
-        onClick={() => {
+        onClick={(e) => {
+          // Prevent link navigation on multi-select (Ctrl/Meta/Shift+click)
+          if (e.ctrlKey || e.metaKey || e.shiftKey) {
+            e.preventDefault();
+            return;
+          }
           if (mobileSidebarOpened) {
             toggleMobileSidebar();
           }

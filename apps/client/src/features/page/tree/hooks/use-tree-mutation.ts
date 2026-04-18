@@ -101,116 +101,142 @@ export function useTreeMutation<T>(spaceId: string) {
     parentNode: NodeApi<T> | null;
     index: number;
   }) => {
-    const draggedNodeId = args.dragIds[0];
+    const { dragIds, dragNodes, parentId } = args;
 
-    tree.move({
-      id: draggedNodeId,
-      parentId: args.parentId,
-      index: args.index,
-    });
-
-    const newDragIndex = tree.find(draggedNodeId)?.childIndex;
-
-    const currentTreeData = args.parentId
-      ? tree.find(args.parentId).children
-      : tree.data;
-
-    // if there is a parentId, tree.find(args.parentId).children returns a SimpleNode array
-    // we have to access the node differently via currentTreeData[args.index]?.data?.position
-    // this makes it possible to correctly sort children of a parent node that is not the root
-
-    const afterPosition =
-      // @ts-ignore
-      currentTreeData[newDragIndex - 1]?.position ||
-      // @ts-ignore
-      currentTreeData[args.index - 1]?.data?.position ||
-      null;
-
-    const beforePosition =
-      // @ts-ignore
-      currentTreeData[newDragIndex + 1]?.position ||
-      // @ts-ignore
-      currentTreeData[args.index + 1]?.data?.position ||
-      null;
-
-    let newPosition: string;
-
-    if (afterPosition && beforePosition && afterPosition === beforePosition) {
-      // if after is equal to before, put it next to the after node
-      newPosition = generateJitteredKeyBetween(afterPosition, null);
-    } else {
-      // if both are null then, it is the first index
-      newPosition = generateJitteredKeyBetween(afterPosition, beforePosition);
+    // Collect previous parents before any moves (for hasChildren updates)
+    const previousParents = new Map<string, NodeApi<T>>();
+    for (const dragNode of dragNodes) {
+      const prev = dragNode.parent;
+      if (
+        prev.id !== parentId &&
+        prev.id !== "__REACT_ARBORIST_INTERNAL_ROOT__"
+      ) {
+        previousParents.set(prev.id, prev);
+      }
     }
 
-    // update the node position in tree
-    tree.update({
-      id: draggedNodeId,
-      changes: { position: newPosition } as any,
-    });
+    // Move each dragged node into the target parent at consecutive indices
+    const moveResults: {
+      nodeId: string;
+      position: string;
+      dragNode: NodeApi<T>;
+      oldParentId: string | null;
+    }[] = [];
 
-    const previousParent = args.dragNodes[0].parent;
-    if (
-      previousParent.id !== args.parentId &&
-      previousParent.id !== "__REACT_ARBORIST_INTERNAL_ROOT__"
-    ) {
-      // if the page was moved to another parent,
-      // check if the previous still has children
-      // if no children left, change 'hasChildren' to false, to make the page toggle arrows work properly
-      const childrenCount = previousParent.children.filter(
-        (child) => child.id !== draggedNodeId
+    for (let i = 0; i < dragIds.length; i++) {
+      const draggedNodeId = dragIds[i];
+
+      tree.move({
+        id: draggedNodeId,
+        parentId: parentId,
+        index: args.index + i,
+      });
+
+      const newDragIndex = tree.find(draggedNodeId)?.childIndex;
+
+      const currentTreeData = parentId
+        ? tree.find(parentId).children
+        : tree.data;
+
+      const afterPosition =
+        // @ts-ignore
+        currentTreeData[newDragIndex - 1]?.position ||
+        // @ts-ignore
+        currentTreeData[newDragIndex - 1]?.data?.position ||
+        null;
+
+      const beforePosition =
+        // @ts-ignore
+        currentTreeData[newDragIndex + 1]?.position ||
+        // @ts-ignore
+        currentTreeData[newDragIndex + 1]?.data?.position ||
+        null;
+
+      let newPosition: string;
+
+      if (afterPosition && beforePosition && afterPosition === beforePosition) {
+        newPosition = generateJitteredKeyBetween(afterPosition, null);
+      } else {
+        newPosition = generateJitteredKeyBetween(afterPosition, beforePosition);
+      }
+
+      tree.update({
+        id: draggedNodeId,
+        changes: { position: newPosition } as any,
+      });
+
+      const nodeData = dragNodes[i].data as unknown as SpaceTreeNode;
+      moveResults.push({
+        nodeId: draggedNodeId,
+        position: newPosition,
+        dragNode: dragNodes[i],
+        oldParentId: nodeData.parentPageId ?? null,
+      });
+    }
+
+    // Update hasChildren for previous parents that lost all dragged children
+    for (const [prevParentId, prevParent] of previousParents) {
+      const remainingChildren = prevParent.children.filter(
+        (child) => !dragIds.includes(child.id)
       ).length;
-      if (childrenCount === 0) {
+      if (remainingChildren === 0) {
         tree.update({
-          id: previousParent.id,
-          changes: { ...previousParent.data, hasChildren: false } as any,
+          id: prevParentId,
+          changes: { ...prevParent.data, hasChildren: false } as any,
         });
       }
     }
 
     setData(tree.data);
 
-    const payload: IMovePage = {
-      pageId: draggedNodeId,
-      position: newPosition,
-      parentPageId: args.parentId,
-    };
+    // Call API and emit WebSocket for each moved node
+    for (const result of moveResults) {
+      const nodeData = result.dragNode.data as unknown as SpaceTreeNode;
+      const payload: IMovePage = {
+        pageId: result.nodeId,
+        position: result.position,
+        parentPageId: parentId,
+      };
 
-    const draggedNode = args.dragNodes[0];
-    const nodeData = draggedNode.data as SpaceTreeNode;
-    const oldParentId = nodeData.parentPageId ?? null;
-    const pageData = {
-      id: nodeData.id,
-      slugId: nodeData.slugId,
-      title: nodeData.name,
-      icon: nodeData.icon,
-      position: newPosition,
-      spaceId: nodeData.spaceId,
-      parentPageId: args.parentId,
-      hasChildren: nodeData.hasChildren,
-    };
+      const pageData = {
+        id: nodeData.id,
+        slugId: nodeData.slugId,
+        title: nodeData.name,
+        icon: nodeData.icon,
+        position: result.position,
+        spaceId: nodeData.spaceId,
+        parentPageId: parentId,
+        hasChildren: nodeData.hasChildren,
+      };
 
-    try {
-      await movePageMutation.mutateAsync(payload);
+      try {
+        await movePageMutation.mutateAsync(payload);
 
-      updateCacheOnMovePage(spaceId, draggedNodeId, oldParentId, args.parentId, pageData);
+        updateCacheOnMovePage(
+          spaceId,
+          result.nodeId,
+          result.oldParentId,
+          parentId,
+          pageData
+        );
 
-      setTimeout(() => {
-        emit({
-          operation: "moveTreeNode",
-          spaceId: spaceId,
-          payload: {
-            id: draggedNodeId,
-            parentId: args.parentId,
-            oldParentId,
-            index: args.index,
-            position: newPosition,
-            pageData,
-          },
-        });
-      }, 50);
-    } catch (error) {
-      console.error("Error moving page:", error);
+        setTimeout(() => {
+          emit({
+            operation: "moveTreeNode",
+            spaceId: spaceId,
+            payload: {
+              id: result.nodeId,
+              parentId: parentId,
+              oldParentId: result.oldParentId,
+              index: args.index,
+              position: result.position,
+              pageData,
+            },
+          });
+        }, 50);
+      } catch (error) {
+        console.error("Error moving page:", error);
+      }
     }
   };
 
