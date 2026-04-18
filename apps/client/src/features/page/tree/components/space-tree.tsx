@@ -38,7 +38,7 @@ import {
 } from "@/features/page/tree/atoms/tree-data-atom.ts";
 import clsx from "clsx";
 import EmojiPicker from "@/components/ui/emoji-picker.tsx";
-import { useTreeMutation } from "@/features/page/tree/hooks/use-tree-mutation.ts";
+import { useTreeMutation, isTreeMoveInProgress } from "@/features/page/tree/hooks/use-tree-mutation.ts";
 import {
   appendNodeChildren,
   buildTree,
@@ -128,6 +128,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
       const treeData = buildTree(allItems);
 
       setData((prev) => {
+        console.log("[SpaceTree initData] merging tree data. prev root count:", prev.length, "new root count:", treeData.length);
         // fresh space; full reset
         if (prev.length === 0 || prev[0]?.spaceId !== spaceId) {
           setIsDataLoaded(true);
@@ -137,7 +138,9 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
 
         // same space; append only missing roots
         setIsDataLoaded(true);
-        return mergeRootTrees(prev, treeData);
+        const merged = mergeRootTrees(prev, treeData);
+        console.log("[SpaceTree initData] merged root count:", merged.length);
+        return merged;
       });
     }
   }, [pagesData, hasNextPage, spaceId]);
@@ -255,6 +258,22 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
 
   const filteredData = data.filter((node) => node?.spaceId === spaceId);
 
+  // Debug: check for duplicate IDs in data passed to Tree
+  {
+    const allIds: string[] = [];
+    const collectIds = (nodes: any[]) => {
+      for (const n of nodes) {
+        allIds.push(n.id);
+        if (n.children?.length) collectIds(n.children);
+      }
+    };
+    collectIds(filteredData);
+    const dupes = allIds.filter((id, i) => allIds.indexOf(id) !== i);
+    if (dupes.length > 0) {
+      console.error("[SpaceTree render] DUPLICATE IDs in filteredData:", dupes, JSON.parse(JSON.stringify(filteredData)));
+    }
+  }
+
   return (
     <div ref={mergedRef} className={classes.treeContainer}>
       {isDataLoaded && filteredData.length === 0 && (
@@ -340,10 +359,9 @@ function Node({ node, style, dragHandle, tree }: NodeRendererProps<any>) {
 
   async function handleLoadChildren(node: NodeApi<SpaceTreeNode>) {
     if (!node.data.hasChildren) return;
-    // in conflict with use-query-subscription.ts => case "addTreeNode","moveTreeNode" etc with websocket
-    // if (node.data.children && node.data.children.length > 0) {
-    //   return;
-    // }
+    // Skip loading during move operations to prevent stale server data
+    // from overwriting optimistic tree updates
+    if (isTreeMoveInProgress()) return;
 
     try {
       const params: SidebarPagesParams = {
@@ -352,6 +370,9 @@ function Node({ node, style, dragHandle, tree }: NodeRendererProps<any>) {
       };
 
       const childrenTree = await fetchAllAncestorChildren(params);
+
+      // Re-check after await: a move may have started while we were fetching
+      if (isTreeMoveInProgress()) return;
 
       appendChildren({
         parentId: node.data.id,

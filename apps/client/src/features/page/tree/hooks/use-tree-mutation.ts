@@ -24,8 +24,21 @@ import { buildPageUrl } from "@/features/page/page.utils.ts";
 import { getSpaceUrl } from "@/lib/config.ts";
 import { useQueryEmit } from "@/features/websocket/use-query-emit.ts";
 
+// Module-level flag to suppress handleLoadChildren during move operations.
+// When a move is in progress, async child-loading from the server may return
+// stale data that conflicts with the optimistic tree update.
+let _moveInProgress = false;
+export function isTreeMoveInProgress() {
+  return _moveInProgress;
+}
+
 export function useTreeMutation<T>(spaceId: string) {
   const [data, setData] = useAtom(treeDataAtom);
+
+  // Debug: track atom data on each render
+  console.log("[useTreeMutation render] data root count:", data.length, "ref:", (window as any).__lastTreeData === data ? "SAME" : "CHANGED");
+  (window as any).__lastTreeData = data;
+
   const tree = useMemo(() => new SimpleTree<SpaceTreeNode>(data), [data]);
   const createPageMutation = useCreatePageMutation();
   const updatePageMutation = useUpdatePageMutation();
@@ -101,21 +114,31 @@ export function useTreeMutation<T>(spaceId: string) {
     parentNode: NodeApi<T> | null;
     index: number;
   }) => {
-    const { dragIds, dragNodes, parentId } = args;
+    const { dragNodes, parentId } = args;
 
-    // Collect previous parents before any moves (for hasChildren updates)
-    const previousParents = new Map<string, NodeApi<T>>();
-    for (const dragNode of dragNodes) {
-      const prev = dragNode.parent;
-      if (
-        prev.id !== parentId &&
-        prev.id !== "__REACT_ARBORIST_INTERNAL_ROOT__"
-      ) {
-        previousParents.set(prev.id, prev);
+    // Filter out nodes that are descendants of other dragged nodes.
+    // Moving a parent already moves its entire subtree, so descendants
+    // in the selection are redundant and would break nesting.
+    const dragIdSet = new Set(args.dragIds);
+    const filteredDragNodes = dragNodes.filter((node) => {
+      let ancestor = node.parent;
+      while (ancestor && !ancestor.isRoot) {
+        if (dragIdSet.has(ancestor.id)) return false;
+        ancestor = ancestor.parent;
       }
-    }
+      return true;
+    });
+    const dragIds = filteredDragNodes.map((n) => n.id);
 
-    // Move each dragged node into the target parent at consecutive indices
+    // Suppress handleLoadChildren while move is in progress to prevent
+    // stale server data from overwriting our optimistic tree update.
+    _moveInProgress = true;
+
+    // Create a fresh SimpleTree from a deep clone so we don't mutate Jotai atom value
+    const dataCopy = structuredClone(data);
+    const freshTree = new SimpleTree<SpaceTreeNode>(dataCopy);
+
+    // Move and calculate position for each node one at a time
     const moveResults: {
       nodeId: string;
       position: string;
@@ -126,17 +149,29 @@ export function useTreeMutation<T>(spaceId: string) {
     for (let i = 0; i < dragIds.length; i++) {
       const draggedNodeId = dragIds[i];
 
-      tree.move({
+      // For the first node, use args.index from react-arborist.
+      // For subsequent nodes, place them right after the previously moved node
+      // to ensure they stay consecutive. Using args.index + i doesn't work
+      // because each move shifts the array indices.
+      let targetIndex: number;
+      if (i === 0) {
+        targetIndex = args.index;
+      } else {
+        const prevMovedIndex = freshTree.find(dragIds[i - 1])?.childIndex;
+        targetIndex = (prevMovedIndex ?? args.index) + 1;
+      }
+
+      freshTree.move({
         id: draggedNodeId,
         parentId: parentId,
-        index: args.index + i,
+        index: targetIndex,
       });
 
-      const newDragIndex = tree.find(draggedNodeId)?.childIndex;
+      const newDragIndex = freshTree.find(draggedNodeId)?.childIndex;
 
       const currentTreeData = parentId
-        ? tree.find(parentId).children
-        : tree.data;
+        ? freshTree.find(parentId).children
+        : freshTree.data;
 
       const afterPosition =
         // @ts-ignore
@@ -160,34 +195,95 @@ export function useTreeMutation<T>(spaceId: string) {
         newPosition = generateJitteredKeyBetween(afterPosition, beforePosition);
       }
 
-      tree.update({
+      freshTree.update({
         id: draggedNodeId,
         changes: { position: newPosition } as any,
       });
 
-      const nodeData = dragNodes[i].data as unknown as SpaceTreeNode;
+      const nodeData = filteredDragNodes[i].data as unknown as SpaceTreeNode;
       moveResults.push({
         nodeId: draggedNodeId,
         position: newPosition,
-        dragNode: dragNodes[i],
+        dragNode: filteredDragNodes[i],
         oldParentId: nodeData.parentPageId ?? null,
       });
     }
 
     // Update hasChildren for previous parents that lost all dragged children
-    for (const [prevParentId, prevParent] of previousParents) {
-      const remainingChildren = prevParent.children.filter(
-        (child) => !dragIds.includes(child.id)
-      ).length;
-      if (remainingChildren === 0) {
-        tree.update({
-          id: prevParentId,
-          changes: { ...prevParent.data, hasChildren: false } as any,
-        });
+    for (const dragNode of filteredDragNodes) {
+      const previousParent = dragNode.parent;
+      if (
+        previousParent.id !== parentId &&
+        previousParent.id !== "__REACT_ARBORIST_INTERNAL_ROOT__"
+      ) {
+        const childrenCount = previousParent.children.filter(
+          (child) => !dragIds.includes(child.id)
+        ).length;
+        if (childrenCount === 0) {
+          freshTree.update({
+            id: previousParent.id,
+            changes: { hasChildren: false } as any,
+          });
+        }
       }
     }
 
-    setData(tree.data);
+    // Debug: check for duplicate IDs in freshTree data before setting
+    const allIds: string[] = [];
+    const collectIds = (nodes: any[]) => {
+      for (const n of nodes) {
+        allIds.push(n.id);
+        if (n.children?.length) collectIds(n.children);
+      }
+    };
+    collectIds(freshTree.data);
+    const duplicates = allIds.filter((id, i) => allIds.indexOf(id) !== i);
+    if (duplicates.length > 0) {
+      console.error("[onMove] DUPLICATE IDs in freshTree.data BEFORE setData:", duplicates);
+    } else {
+      console.log("[onMove] No duplicate IDs. Total nodes:", allIds.length);
+    }
+
+    // Also check: what does data (the Jotai atom) look like right now?
+    const atomIds: string[] = [];
+    collectIds.call(null, data);
+    // Reuse collectIds but on atom data
+    const collectAtomIds = (nodes: any[]) => {
+      for (const n of nodes) {
+        atomIds.push(n.id);
+        if (n.children?.length) collectAtomIds(n.children);
+      }
+    };
+    collectAtomIds(data);
+    console.log("[onMove] Current atom data root count:", data.length, "total nodes:", atomIds.length);
+
+    const newData = freshTree.data;
+
+    // Optimistically update react-query cache BEFORE setData to prevent
+    // mergeRootTrees from re-adding moved nodes when pagesData effect fires
+    for (const result of moveResults) {
+      const nodeData = result.dragNode.data as unknown as SpaceTreeNode;
+      const pageData = {
+        id: nodeData.id,
+        slugId: nodeData.slugId,
+        title: nodeData.name,
+        icon: nodeData.icon,
+        position: result.position,
+        spaceId: nodeData.spaceId,
+        parentPageId: parentId,
+        hasChildren: nodeData.hasChildren,
+      };
+
+      updateCacheOnMovePage(
+        spaceId,
+        result.nodeId,
+        result.oldParentId,
+        parentId,
+        pageData
+      );
+    }
+
+    setData(newData);
 
     // Call API and emit WebSocket for each moved node
     for (const result of moveResults) {
@@ -212,14 +308,6 @@ export function useTreeMutation<T>(spaceId: string) {
       try {
         await movePageMutation.mutateAsync(payload);
 
-        updateCacheOnMovePage(
-          spaceId,
-          result.nodeId,
-          result.oldParentId,
-          parentId,
-          pageData
-        );
-
         setTimeout(() => {
           emit({
             operation: "moveTreeNode",
@@ -238,6 +326,9 @@ export function useTreeMutation<T>(spaceId: string) {
         console.error("Error moving page:", error);
       }
     }
+
+    // Allow handleLoadChildren to run again now that API calls are done
+    _moveInProgress = false;
   };
 
   const onRename: RenameHandler<T> = ({ name, id }) => {
