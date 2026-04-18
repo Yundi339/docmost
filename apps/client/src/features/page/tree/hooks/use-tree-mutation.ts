@@ -35,10 +35,6 @@ export function isTreeMoveInProgress() {
 export function useTreeMutation<T>(spaceId: string) {
   const [data, setData] = useAtom(treeDataAtom);
 
-  // Debug: track atom data on each render
-  console.log("[useTreeMutation render] data root count:", data.length, "ref:", (window as any).__lastTreeData === data ? "SAME" : "CHANGED");
-  (window as any).__lastTreeData = data;
-
   const tree = useMemo(() => new SimpleTree<SpaceTreeNode>(data), [data]);
   const createPageMutation = useCreatePageMutation();
   const updatePageMutation = useUpdatePageMutation();
@@ -227,35 +223,6 @@ export function useTreeMutation<T>(spaceId: string) {
         }
       }
     }
-
-    // Debug: check for duplicate IDs in freshTree data before setting
-    const allIds: string[] = [];
-    const collectIds = (nodes: any[]) => {
-      for (const n of nodes) {
-        allIds.push(n.id);
-        if (n.children?.length) collectIds(n.children);
-      }
-    };
-    collectIds(freshTree.data);
-    const duplicates = allIds.filter((id, i) => allIds.indexOf(id) !== i);
-    if (duplicates.length > 0) {
-      console.error("[onMove] DUPLICATE IDs in freshTree.data BEFORE setData:", duplicates);
-    } else {
-      console.log("[onMove] No duplicate IDs. Total nodes:", allIds.length);
-    }
-
-    // Also check: what does data (the Jotai atom) look like right now?
-    const atomIds: string[] = [];
-    collectIds.call(null, data);
-    // Reuse collectIds but on atom data
-    const collectAtomIds = (nodes: any[]) => {
-      for (const n of nodes) {
-        atomIds.push(n.id);
-        if (n.children?.length) collectAtomIds(n.children);
-      }
-    };
-    collectAtomIds(data);
-    console.log("[onMove] Current atom data root count:", data.length, "total nodes:", atomIds.length);
 
     const newData = freshTree.data;
 
