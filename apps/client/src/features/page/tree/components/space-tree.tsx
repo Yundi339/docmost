@@ -128,7 +128,6 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
       const treeData = buildTree(allItems);
 
       setData((prev) => {
-        console.log("[SpaceTree initData] merging tree data. prev root count:", prev.length, "new root count:", treeData.length);
         // fresh space; full reset
         if (prev.length === 0 || prev[0]?.spaceId !== spaceId) {
           setIsDataLoaded(true);
@@ -139,7 +138,6 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
         // same space; append only missing roots
         setIsDataLoaded(true);
         const merged = mergeRootTrees(prev, treeData);
-        console.log("[SpaceTree initData] merged root count:", merged.length);
         return merged;
       });
     }
@@ -257,22 +255,6 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
   }, [setTreeApi]);
 
   const filteredData = data.filter((node) => node?.spaceId === spaceId);
-
-  // Debug: check for duplicate IDs in data passed to Tree
-  {
-    const allIds: string[] = [];
-    const collectIds = (nodes: any[]) => {
-      for (const n of nodes) {
-        allIds.push(n.id);
-        if (n.children?.length) collectIds(n.children);
-      }
-    };
-    collectIds(filteredData);
-    const dupes = allIds.filter((id, i) => allIds.indexOf(id) !== i);
-    if (dupes.length > 0) {
-      console.error("[SpaceTree render] DUPLICATE IDs in filteredData:", dupes, JSON.parse(JSON.stringify(filteredData)));
-    }
-  }
 
   return (
     <div ref={mergedRef} className={classes.treeContainer}>
