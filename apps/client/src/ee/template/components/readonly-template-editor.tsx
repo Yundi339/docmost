@@ -6,6 +6,7 @@ import { mainExtensions } from "@/features/editor/extensions/extensions";
 import { UniqueID } from "@docmost/editor-ext";
 import { ITemplate } from "@/ee/template/types/template.types";
 import TemplateMeta from "@/ee/template/components/template-meta";
+import { useTranslation } from "react-i18next";
 
 type ReadonlyTemplateEditorProps = {
   template: ITemplate;
@@ -14,6 +15,7 @@ type ReadonlyTemplateEditorProps = {
 export default function ReadonlyTemplateEditor({
   template,
 }: ReadonlyTemplateEditorProps) {
+  const { t } = useTranslation();
   const extensions = useMemo(() => {
     const filteredExtensions = mainExtensions.filter(
       (ext) => ext.name !== "uniqueID",
@@ -32,7 +34,7 @@ export default function ReadonlyTemplateEditor({
     <>
       <div style={{ padding: "0 3rem" }}>
         <Title order={1} size="2.5rem" lh={1.2}>
-          {template.title || "Untitled"}
+          {template.title || t("Untitled")}
         </Title>
 
         <TemplateMeta template={template} />

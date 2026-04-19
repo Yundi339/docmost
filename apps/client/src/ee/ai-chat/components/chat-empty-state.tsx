@@ -12,30 +12,30 @@ import classes from "../styles/ai-chat.module.css";
 
 type Suggestion = {
   icon: React.ReactNode;
-  text: string;
-  prompt: string;
+  textKey: string;
+  promptKey: string;
 };
 
 const SUGGESTIONS: Suggestion[] = [
   {
     icon: <IconSearch size={16} />,
-    text: "Search across all pages",
-    prompt: "Search for pages about ",
+    textKey: "Search across all pages",
+    promptKey: "Search for pages about ",
   },
   {
     icon: <IconFilePlus size={16} />,
-    text: "Create a new page",
-    prompt: "Create a new page titled ",
+    textKey: "Create a new page",
+    promptKey: "Create a new page titled ",
   },
   {
     icon: <IconFileText size={16} />,
-    text: "Summarize a page",
-    prompt: "Summarize the page @",
+    textKey: "Summarize a page",
+    promptKey: "Summarize the page @",
   },
   {
     icon: <IconEdit size={16} />,
-    text: "Update page content",
-    prompt: "Update the page @",
+    textKey: "Update page content",
+    promptKey: "Update the page @",
   },
 ];
 
@@ -65,23 +65,23 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
           isStreaming={isStreaming}
           onSend={onSend}
           onStop={onStop}
-          placeholder="Ask anything... Use @ to mention pages"
+          placeholder={t("Ask anything... Use @ to mention pages")}
           autofocus
         />
       </div>
 
       <div className={classes.suggestionsSection}>
-        <div className={classes.suggestionsLabel}>Get started</div>
+        <div className={classes.suggestionsLabel}>{t("Get started")}</div>
         <div className={classes.suggestionsGrid}>
           {SUGGESTIONS.map((s) => (
             <button
-              key={s.text}
+              key={s.textKey}
               type="button"
               className={classes.suggestionCard}
-              onClick={() => handleSuggestionClick(s.prompt)}
+              onClick={() => handleSuggestionClick(s.promptKey)}
             >
               <span className={classes.suggestionIcon}>{s.icon}</span>
-              <span className={classes.suggestionText}>{s.text}</span>
+              <span className={classes.suggestionText}>{t(s.textKey)}</span>
             </button>
           ))}
         </div>

@@ -93,15 +93,15 @@ export function CloudLoginForm() {
           <JoinedWorkspaces />
 
           {joinedWorkspaces?.length > 0 && (
-            <Divider my="xs" label="OR" labelPosition="center" />
+            <Divider my="xs" label={t("OR")} labelPosition="center" />
           )}
 
           <form onSubmit={form.onSubmit(onSubmit)}>
             <TextInput
               type="text"
               placeholder="my-team"
-              description="Enter your workspace hostname"
-              label="Workspace hostname"
+              description={t("Enter your workspace hostname")}
+              label={t("Workspace hostname")}
               rightSection={<Text fw={500}>.{getSubdomainHost()}</Text>}
               rightSectionWidth={150}
               withErrorStyles={false}
@@ -112,7 +112,7 @@ export function CloudLoginForm() {
             </Button>
           </form>
 
-          <Divider my="lg" label="or" labelPosition="center" />
+          <Divider my="lg" label={t("or")} labelPosition="center" />
 
           {findEmailSent ? (
             <Text ta="center" size="sm" c="dimmed">

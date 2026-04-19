@@ -7,8 +7,10 @@ import { buildSsoLoginUrl } from "@/ee/security/sso.utils.ts";
 import { SSO_PROVIDER } from "@/ee/security/contants.ts";
 import { GoogleIcon } from "@/components/icons/google-icon.tsx";
 import { LdapLoginModal } from "@/ee/components/ldap-login-modal.tsx";
+import { useTranslation } from "react-i18next";
 
 export default function SsoLogin() {
+  const { t } = useTranslation();
   const { data, isLoading } = useWorkspacePublicDataQuery();
   const [ldapModalOpened, setLdapModalOpened] = useState(false);
   const [selectedLdapProvider, setSelectedLdapProvider] = useState<IAuthProvider | null>(null);
@@ -74,7 +76,7 @@ export default function SsoLogin() {
           </Stack>
 
           {!data.enforceSso && (
-            <Divider my="xs" label="OR" labelPosition="center" />
+            <Divider my="xs" label={t("OR")} labelPosition="center" />
           )}
         </>
       )}

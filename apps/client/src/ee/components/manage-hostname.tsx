@@ -101,7 +101,7 @@ function ChangeHostnameForm({ onClose }: ChangeHostnameFormProps) {
       <TextInput
         type="text"
         placeholder="e.g my-team"
-        label="Hostname"
+        label={t("Hostname")}
         variant="filled"
         rightSection={<Text fw={500}>.{getSubdomainHost()}</Text>}
         rightSectionWidth={150}
