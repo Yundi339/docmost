@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import {
   CreateHandler,
   DeleteHandler,
@@ -34,8 +33,6 @@ export function isTreeMoveInProgress() {
 
 export function useTreeMutation<T>(spaceId: string) {
   const [data, setData] = useAtom(treeDataAtom);
-
-  const tree = useMemo(() => new SimpleTree<SpaceTreeNode>(data), [data]);
   const createPageMutation = useCreatePageMutation();
   const updatePageMutation = useUpdatePageMutation();
   const removePageMutation = useRemovePageMutation();
@@ -70,17 +67,20 @@ export function useTreeMutation<T>(spaceId: string) {
       children: [],
     } as any;
 
+    // Use a fresh deep clone to avoid directly mutating Jotai atom value
+    const freshCreate = new SimpleTree<SpaceTreeNode>(structuredClone(data));
+
     let lastIndex: number;
     if (parentId === null) {
-      lastIndex = tree.data.length;
+      lastIndex = freshCreate.data.length;
     } else {
-      lastIndex = tree.find(parentId).children.length;
+      lastIndex = freshCreate.find(parentId).children.length;
     }
     // to place the newly created node at the bottom
     index = lastIndex;
 
-    tree.create({ parentId, index, data });
-    setData(tree.data);
+    freshCreate.create({ parentId, index, data });
+    setData(freshCreate.data);
 
     setTimeout(() => {
       emit({
@@ -299,8 +299,9 @@ export function useTreeMutation<T>(spaceId: string) {
   };
 
   const onRename: RenameHandler<T> = ({ name, id }) => {
-    tree.update({ id, changes: { name } as any });
-    setData(tree.data);
+    const freshRename = new SimpleTree<SpaceTreeNode>(structuredClone(data));
+    freshRename.update({ id, changes: { name } as any });
+    setData(freshRename.data);
 
     try {
       updatePageMutation.mutateAsync({ pageId: id, title: name });
@@ -330,13 +331,14 @@ export function useTreeMutation<T>(spaceId: string) {
     try {
       await removePageMutation.mutateAsync(args.ids[0]);
 
-      const node = tree.find(args.ids[0]);
+      const freshDelete = new SimpleTree<SpaceTreeNode>(structuredClone(data));
+      const node = freshDelete.find(args.ids[0]);
       if (!node) {
         return;
       }
 
-      tree.drop({ id: args.ids[0] });
-      setData(tree.data);
+      freshDelete.drop({ id: args.ids[0] });
+      setData(freshDelete.data);
 
       if (pageSlug && isPageInNode(node, pageSlug.split("-")[1])) {
         navigate(getSpaceUrl(spaceSlug));

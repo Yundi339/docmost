@@ -10,10 +10,11 @@ import {
   UseGuards,
   Logger,
 } from '@nestjs/common';
-import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   AI_CHAT_THROTTLER,
   AUTH_THROTTLER,
+  FORGOT_PASSWORD_THROTTLER,
 } from '../../integrations/throttle/throttler-names';
 import { LoginDto } from './dto/login.dto';
 import { AuthService } from './services/auth.service';
@@ -138,6 +139,7 @@ export class AuthController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @Throttle({ [FORGOT_PASSWORD_THROTTLER]: { ttl: 300_000, limit: 3 } })
   @Post('forgot-password')
   async forgotPassword(
     @Body() forgotPasswordDto: ForgotPasswordDto,

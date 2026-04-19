@@ -61,7 +61,7 @@ export class EnvironmentService {
   }
 
   getJwtTokenExpiresIn(): string {
-    return this.configService.get<string>('JWT_TOKEN_EXPIRES_IN', '90d');
+    return this.configService.get<string>('JWT_TOKEN_EXPIRES_IN', '30d');
   }
 
   getCookieExpiresIn(): Date {
@@ -70,7 +70,7 @@ export class EnvironmentService {
     try {
       msUntilExpiry = ms(expiresInStr as StringValue);
     } catch (err) {
-      msUntilExpiry = ms('90d');
+      msUntilExpiry = ms('30d');
     }
     return new Date(Date.now() + msUntilExpiry);
   }
@@ -209,17 +209,9 @@ export class EnvironmentService {
 
   isDisableTelemetry(): boolean {
     const disable = this.configService
-      .get<string>('DISABLE_TELEMETRY', 'false')
+      .get<string>('DISABLE_TELEMETRY', 'true')
       .toLowerCase();
     return disable === 'true';
-  }
-
-  getPostHogHost(): string {
-    return this.configService.get<string>('POSTHOG_HOST');
-  }
-
-  getPostHogKey(): string {
-    return this.configService.get<string>('POSTHOG_KEY');
   }
 
   getSearchDriver(): string {

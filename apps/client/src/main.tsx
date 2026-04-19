@@ -25,12 +25,6 @@ import { Notifications } from "@mantine/notifications";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HelmetProvider } from "react-helmet-async";
 import "./i18n";
-import {
-  getPostHogHost,
-  getPostHogKey,
-  isCloud,
-  isPostHogEnabled,
-} from "@/lib/config.ts";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,25 +40,7 @@ export const queryClient = new QueryClient({
 const container = document.getElementById("root") as HTMLElement;
 const root = (container as any).__reactRoot ??= ReactDOM.createRoot(container);
 
-async function renderApp() {
-  let PostHogProvider: React.ComponentType<{ client: any; children: React.ReactNode }> | null = null;
-  let posthogClient: any = null;
-
-  if (isCloud() && isPostHogEnabled) {
-    const [posthogModule, posthogReactModule] = await Promise.all([
-      import("posthog-js"),
-      import("posthog-js/react"),
-    ]);
-    posthogClient = posthogModule.default;
-    posthogClient.init(getPostHogKey(), {
-      api_host: getPostHogHost(),
-      defaults: "2025-05-24",
-      disable_session_recording: true,
-      capture_pageleave: false,
-    });
-    PostHogProvider = posthogReactModule.PostHogProvider;
-  }
-
+function renderApp() {
   const appContent = (
     <HelmetProvider>
       <App />
@@ -77,13 +53,7 @@ async function renderApp() {
         <ModalsProvider>
           <QueryClientProvider client={queryClient}>
             <Notifications position="bottom-center" limit={3} zIndex={10000} />
-            {PostHogProvider && posthogClient ? (
-              <PostHogProvider client={posthogClient}>
-                {appContent}
-              </PostHogProvider>
-            ) : (
-              appContent
-            )}
+            {appContent}
           </QueryClientProvider>
         </ModalsProvider>
       </MantineProvider>

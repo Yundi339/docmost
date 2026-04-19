@@ -60,7 +60,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       }
 
       res.setCookie('joinedWorkspaces', JSON.stringify(workspaceIds), {
-        httpOnly: false,
+        httpOnly: true,
+        sameSite: 'lax',
         domain: '.' + this.environmentService.getSubdomainHost(),
         path: '/',
         expires: addDays(new Date(), 365),
