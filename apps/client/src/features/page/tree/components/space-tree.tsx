@@ -145,6 +145,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
 
   useEffect(() => {
     const effectSpaceId = spaceId;
+    let selectTimer: ReturnType<typeof setTimeout>;
 
     const fetchData = async () => {
       if (isDataLoaded && currentPage) {
@@ -201,7 +202,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
               appendNodeChildren(currentData, rootChild.id, rootChild.children),
             );
 
-            setTimeout(() => {
+            selectTimer = setTimeout(() => {
               // focus on node and open all parents
               treeApiRef.current?.select(currentPage.id);
             }, 100);
@@ -211,13 +212,19 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
     };
 
     fetchData();
+    return () => {
+      clearTimeout(selectTimer);
+    };
   }, [isDataLoaded, currentPage?.id]);
 
   const [, appendChildren] = useAtom(appendNodeChildrenAtom);
 
   useEffect(() => {
+    let outerTimer: ReturnType<typeof setTimeout>;
+    let innerTimer: ReturnType<typeof setTimeout>;
+
     if (currentPage?.id) {
-      setTimeout(async () => {
+      outerTimer = setTimeout(async () => {
         // focus on node and open all parents
         treeApiRef.current?.select(currentPage.id, { align: "auto" });
 
@@ -233,7 +240,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
               parentId: node.data.id,
               children: childrenTree,
             });
-            setTimeout(() => {
+            innerTimer = setTimeout(() => {
               node.open();
             }, 100);
           } catch (error) {
@@ -244,6 +251,10 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
     } else {
       treeApiRef.current?.deselectAll();
     }
+    return () => {
+      clearTimeout(outerTimer);
+      clearTimeout(innerTimer);
+    };
   }, [currentPage?.id]);
 
   // Clean up tree API on unmount

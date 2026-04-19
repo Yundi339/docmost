@@ -54,7 +54,7 @@ function LanguageSwitcher() {
         { value: "ru-RU", label: "Русский (Russian)" },
         { value: "zh-CN", label: "中文 (简体)" },
       ]}
-      value={language || "en-US"}
+      value={language || "zh-CN"}
       onChange={handleChange}
       allowDeselect={false}
       checkIconPosition="right"

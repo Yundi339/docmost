@@ -41,7 +41,7 @@ export const useTreeSocket = () => {
   }, []);
 
   useEffect(() => {
-    socket?.on("message", (event: WebSocketEvent) => {
+    const handleSocketMessage = (event: WebSocketEvent) => {
       const initialData = initialTreeData.current;
       const treeApi = new SimpleTree<SpaceTreeNode>(initialData);
 
@@ -108,6 +108,11 @@ export const useTreeSocket = () => {
           }
           break;
       }
-    });
+    };
+
+    socket?.on("message", handleSocketMessage);
+    return () => {
+      socket?.off("message", handleSocketMessage);
+    };
   }, [socket]);
 };
