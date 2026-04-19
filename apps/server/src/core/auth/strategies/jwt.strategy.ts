@@ -75,6 +75,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   private async validateApiKey(req: any, payload: JwtApiKeyPayload) {
+    // Try EE module first, then fall back to OSS ApiKeyService
     let ApiKeyModule: any;
     let isApiKeyModuleReady = false;
 
@@ -83,9 +84,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       ApiKeyModule = require('./../../../ee/api-key/api-key.service');
       isApiKeyModuleReady = true;
     } catch (err) {
-      this.logger.debug(
-        'API Key module requested but enterprise module not bundled in this build',
-      );
       isApiKeyModuleReady = false;
     }
 
@@ -97,6 +95,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       return ApiKeyService.validateApiKey(payload);
     }
 
-    throw new UnauthorizedException('Enterprise API Key module missing');
+    // Fallback to OSS ApiKeyService
+    try {
+      const { ApiKeyService } = require('../../api-key/api-key.service');
+      const apiKeyService = this.moduleRef.get(ApiKeyService, { strict: false });
+      return apiKeyService.validateApiKey(payload);
+    } catch (err) {
+      throw new UnauthorizedException('API Key module not available');
+    }
   }
 }

@@ -5,10 +5,14 @@ import { EnvironmentService } from './environment.service';
 // Features with full OSS backend implementation that work without EE modules
 const OSS_AVAILABLE_FEATURES = new Set([
   'comment:viewer',
+  'comment:resolution',
   'page:permissions',
   'sharing:controls',
   'retention',
   'security:settings',
+  'templates',
+  'api:keys',
+  'audit:logs',
 ]);
 
 @Injectable()

@@ -25,9 +25,9 @@ export default function WorkspaceApiKeys() {
   const [revokeModalOpened, setRevokeModalOpened] = useState(false);
   const [selectedApiKey, setSelectedApiKey] = useState<IApiKey | null>(null);
   const { data, isLoading } = useGetApiKeysQuery({ cursor, adminView: true });
-  const { isAdmin } = useUserRole();
+  const { isOwner } = useUserRole();
 
-  if (!isAdmin) {
+  if (!isOwner) {
     return null;
   }
 

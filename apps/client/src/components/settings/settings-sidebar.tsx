@@ -108,7 +108,7 @@ const groupedData: DataGroup[] = [
         icon: IconKey,
         path: "/settings/api-keys",
         feature: Feature.API_KEYS,
-        role: "admin",
+        role: "owner",
       },
       {
         label: "AI settings",
@@ -122,7 +122,6 @@ const groupedData: DataGroup[] = [
         path: "/settings/audit",
         feature: Feature.AUDIT_LOGS,
         role: "owner",
-        env: "selfhosted",
       },
     ],
   },

@@ -27,8 +27,6 @@ export default defineConfig(({ mode }) => {
         SUBDOMAIN_HOST,
         COLLAB_URL,
         BILLING_TRIAL_DAYS,
-        POSTHOG_HOST,
-        POSTHOG_KEY,
       },
       APP_VERSION: JSON.stringify(process.env.npm_package_version),
     },

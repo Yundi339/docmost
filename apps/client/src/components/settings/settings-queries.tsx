@@ -58,7 +58,13 @@ export const prefetchLicense = () => {
 export const prefetchSsoProviders = () => {
   queryClient.prefetchQuery({
     queryKey: ["sso-providers"],
-    queryFn: () => getSsoProviders(),
+    queryFn: async () => {
+      try {
+        return await getSsoProviders();
+      } catch {
+        return { items: [], meta: {} };
+      }
+    },
   });
 };
 
