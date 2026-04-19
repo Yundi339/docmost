@@ -200,7 +200,7 @@ export default function ChatInput({
         link: false,
       }),
       Placeholder.configure({
-        placeholder: placeholder || "Ask anything... Use @ to mention pages",
+        placeholder: placeholder || t("Ask anything... Use @ to mention pages"),
       }),
       CharacterCount.configure({
         limit: 50000,
@@ -285,7 +285,7 @@ export default function ChatInput({
             <div key={page.id} className={classes.attachmentChip}>
               <IconFileText size={14} />
               <span className={classes.attachmentChipName}>
-                {page.title || "Untitled"}
+                {page.title || t("Untitled")}
               </span>
               {onRemoveContextPage && (
                 <button
@@ -335,7 +335,7 @@ export default function ChatInput({
               type="button"
               className={classes.plusButton}
               onClick={() => setPlusMenuOpen((o) => !o)}
-              aria-label="Add content"
+              aria-label={t("Add content")}
             >
               <IconPlus size={14} />
             </button>
@@ -370,7 +370,7 @@ export default function ChatInput({
               }}
             >
               <IconAt size={16} className={classes.plusMenuIcon} />
-              Mention a page
+              {t("Mention a page")}
             </button>
           </Popover.Dropdown>
         </Popover>
@@ -382,7 +382,7 @@ export default function ChatInput({
             type="button"
             className={classes.stopButton}
             onClick={onStop}
-            aria-label="Stop generation"
+            aria-label={t("Stop generation")}
           >
             <IconPlayerStopFilled size={14} />
           </button>
@@ -392,7 +392,7 @@ export default function ChatInput({
             className={classes.sendButton}
             onClick={handleSubmit}
             disabled={!hasContent}
-            aria-label="Send message"
+            aria-label={t("Send message")}
           >
             <IconArrowUp size={16} stroke={2.5} />
           </button>

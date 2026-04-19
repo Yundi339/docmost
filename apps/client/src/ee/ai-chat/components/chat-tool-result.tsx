@@ -2,6 +2,7 @@ import { useState } from "react";
 import { IconChevronRight, IconChevronDown } from "@tabler/icons-react";
 import type { AiChatToolCall } from "../types/ai-chat.types";
 import classes from "../styles/chat-message.module.css";
+import { useTranslation } from "react-i18next";
 
 export const TOOL_LABELS: Record<string, string> = {
   list_spaces: "Listed spaces",
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export default function ChatToolResult({ toolCall }: Props) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const label = TOOL_LABELS[toolCall.name] || toolCall.name;
 
@@ -31,7 +33,7 @@ export default function ChatToolResult({ toolCall }: Props) {
         ) : (
           <IconChevronRight size={12} />
         )}
-        <span>{label}</span>
+        <span>{t(label)}</span>
       </div>
       {expanded && (
         <div className={classes.toolStepDetails}>
