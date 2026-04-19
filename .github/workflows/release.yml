@@ -46,40 +46,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push by digest
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          outputs: type=image,name=docmost/docmost,push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ matrix.suffix }}
-          cache-to: type=gha,scope=${{ matrix.suffix }},mode=max
-
-      - name: Export digest
-        run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@v4
-        with:
-          name: digest-${{ matrix.suffix }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-
       - name: Strip v prefix
         id: strip-v
         run: echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
-        
-      - name: Export Docker image
+
+      - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -90,6 +61,7 @@ jobs:
             docmost/docmost:${{ steps.strip-v.outputs.version }}
           outputs: type=docker,dest=docmost-${{ matrix.suffix }}.docker.tar
           cache-from: type=gha,scope=${{ matrix.suffix }}
+          cache-to: type=gha,scope=${{ matrix.suffix }},mode=max
 
       - name: Compress image
         run: gzip docmost-${{ matrix.suffix }}.docker.tar
@@ -105,38 +77,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download digests
-        uses: actions/download-artifact@v4
-        with:
-          pattern: digest-*
-          path: /tmp/digests
-          merge-multiple: true
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata for tags
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: docmost/docmost
-          tags: |
-            type=semver,pattern={{version}},value=${{ env.VERSION }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ env.VERSION }},enable=${{ !contains(env.VERSION, '-') }}
-            type=raw,value=latest,enable=${{ !contains(env.VERSION, '-') }}
-
-      - name: Create manifest list and push
-        working-directory: /tmp/digests
-        run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'docmost/docmost@sha256:%s ' *)
-
       - name: Download image archives
         uses: actions/download-artifact@v4
         with:
