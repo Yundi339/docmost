@@ -463,6 +463,7 @@ export class PageController {
       dto.pageId,
       user.id,
       spaceCanEdit,
+      dto.all,
     );
   }
 

@@ -275,6 +275,7 @@ export class PageService {
     pageId?: string,
     userId?: string,
     spaceCanEdit?: boolean,
+    all?: boolean,
   ): Promise<CursorPaginationResult<Partial<Page> & { hasChildren: boolean }>> {
     let query = this.db
       .selectFrom('pages')
@@ -293,10 +294,12 @@ export class PageService {
       .where('deletedAt', 'is', null)
       .where('spaceId', '=', spaceId);
 
-    if (pageId) {
-      query = query.where('parentPageId', '=', pageId);
-    } else {
-      query = query.where('parentPageId', 'is', null);
+    if (!all) {
+      if (pageId) {
+        query = query.where('parentPageId', '=', pageId);
+      } else {
+        query = query.where('parentPageId', 'is', null);
+      }
     }
 
     const result = await executeWithCursorPagination(query, {

@@ -76,6 +76,7 @@ export interface SidebarPagesParams {
   pageId?: string;
   cursor?: string;
   limit?: number;
+  all?: boolean;
 }
 
 export interface IPageInput {

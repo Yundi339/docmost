@@ -256,7 +256,7 @@ export function useGetRootSidebarPagesQuery(data: SidebarPagesParams) {
   return useInfiniteQuery({
     queryKey: ["root-sidebar-pages", data.spaceId],
     queryFn: async ({ pageParam }) => {
-      return getSidebarPages({ spaceId: data.spaceId, cursor: pageParam, limit: 100 });
+      return getSidebarPages({ spaceId: data.spaceId, cursor: pageParam, limit: 500, all: true });
     },
     initialPageParam: undefined,
     getNextPageParam: (lastPage) =>

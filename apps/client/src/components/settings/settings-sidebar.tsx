@@ -84,7 +84,7 @@ const groupedData: DataGroup[] = [
         label: "Billing",
         icon: IconCoin,
         path: "/settings/billing",
-        role: "admin",
+        role: "owner",
         env: "cloud",
       },
       {
@@ -133,6 +133,7 @@ const groupedData: DataGroup[] = [
         label: "License & Edition",
         icon: IconKey,
         path: "/settings/license",
+        role: "owner",
       },
     ],
   },
@@ -170,7 +171,7 @@ export default function SettingsSidebar() {
   };
 
   const menuItems = groupedData.map((group) => {
-    if (group.heading === "System" && (!isAdmin || isCloud())) {
+    if (group.heading === "System" && (!isOwner || isCloud())) {
       return null;
     }
 

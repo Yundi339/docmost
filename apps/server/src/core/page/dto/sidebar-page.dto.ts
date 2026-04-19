@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class SidebarPageDto {
   @IsOptional()
@@ -8,4 +8,8 @@ export class SidebarPageDto {
   @IsOptional()
   @IsString()
   pageId: string;
+
+  @IsOptional()
+  @IsBoolean()
+  all: boolean;
 }

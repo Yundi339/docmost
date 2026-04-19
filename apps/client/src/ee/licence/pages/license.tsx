@@ -15,9 +15,9 @@ export default function License() {
   const { t } = useTranslation();
   const [entitlements] = useAtom(entitlementAtom);
   const hasLicense = entitlements != null && entitlements.tier !== "free";
-  const { isAdmin } = useUserRole();
+  const { isOwner } = useUserRole();
 
-  if (!isAdmin) {
+  if (!isOwner) {
     return null;
   }
 

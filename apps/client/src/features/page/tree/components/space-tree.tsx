@@ -48,16 +48,13 @@ import {
 } from "@/features/page/tree/utils/utils.ts";
 import { SpaceTreeNode } from "@/features/page/tree/types.ts";
 import {
-  getPageBreadcrumbs,
   getPageById,
-  getSidebarPages,
 } from "@/features/page/services/page-service.ts";
-import { IPage, SidebarPagesParams } from "@/features/page/types/page.types.ts";
+import { SidebarPagesParams } from "@/features/page/types/page.types.ts";
 import { queryClient } from "@/main.tsx";
 import { OpenMap } from "react-arborist/dist/main/state/open-slice";
 import { useDisclosure, useElementSize, useMergedRef } from "@mantine/hooks";
 import { useClipboard } from "@/hooks/use-clipboard";
-import { dfs } from "react-arborist/dist/module/utils";
 import { useQueryEmit } from "@/features/websocket/use-query-emit.ts";
 import { buildPageUrl } from "@/features/page/page.utils.ts";
 import { notifications } from "@mantine/notifications";
@@ -125,7 +122,8 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
   useEffect(() => {
     if (pagesData?.pages && !hasNextPage) {
       const allItems = pagesData.pages.flatMap((page) => page.items);
-      const treeData = buildTree(allItems);
+      const flatNodes = buildTree(allItems);
+      const treeData = buildTreeWithChildren(flatNodes);
 
       setData((prev) => {
         // fresh space; full reset
@@ -143,119 +141,42 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
     }
   }, [pagesData, hasNextPage, spaceId]);
 
+  const [, appendChildren] = useAtom(appendNodeChildrenAtom);
+
+  // Select and reveal current page in tree (all data already loaded)
   useEffect(() => {
-    const effectSpaceId = spaceId;
     let selectTimer: ReturnType<typeof setTimeout>;
 
-    const fetchData = async () => {
-      if (isDataLoaded && currentPage) {
-        // check if pageId node is present in the tree
-        const node = dfs(treeApiRef.current?.root, currentPage.id);
-        if (node) {
-          // if node is found, no need to traverse its ancestors
-          return;
-        }
+    if (isDataLoaded && currentPage?.id) {
+      selectTimer = setTimeout(() => {
+        treeApiRef.current?.select(currentPage.id);
+      }, 100);
+    }
 
-        // if not found, fetch and build its ancestors and their children
-        if (!currentPage.id) return;
-        const ancestors = await getPageBreadcrumbs(currentPage.id);
-
-        if (spaceIdRef.current !== effectSpaceId) return;
-
-        if (ancestors && ancestors?.length > 1) {
-          let flatTreeItems = [...buildTree(ancestors)];
-
-          const fetchAndUpdateChildren = async (ancestor: IPage) => {
-            // we don't want to fetch the children of the opened page
-            if (ancestor.id === currentPage.id) {
-              return;
-            }
-            const children = await fetchAllAncestorChildren({
-              pageId: ancestor.id,
-              spaceId: ancestor.spaceId,
-            });
-
-            flatTreeItems = [
-              ...flatTreeItems,
-              ...children.filter(
-                (child) => !flatTreeItems.some((item) => item.id === child.id),
-              ),
-            ];
-          };
-
-          const fetchPromises = ancestors.map((ancestor) =>
-            fetchAndUpdateChildren(ancestor),
-          );
-
-          // Wait for all fetch operations to complete
-          Promise.all(fetchPromises).then(() => {
-            if (spaceIdRef.current !== effectSpaceId) return;
-
-            // build tree with children
-            const ancestorsTree = buildTreeWithChildren(flatTreeItems);
-            // child of root page we're attaching the built ancestors to
-            const rootChild = ancestorsTree[0];
-
-            // attach built ancestors to tree using functional updater
-            // to avoid stale closure overwriting the current tree data
-            setData((currentData) =>
-              appendNodeChildren(currentData, rootChild.id, rootChild.children),
-            );
-
-            selectTimer = setTimeout(() => {
-              // focus on node and open all parents
-              treeApiRef.current?.select(currentPage.id);
-            }, 100);
-          });
-        }
-      }
-    };
-
-    fetchData();
     return () => {
       clearTimeout(selectTimer);
     };
   }, [isDataLoaded, currentPage?.id]);
 
-  const [, appendChildren] = useAtom(appendNodeChildrenAtom);
-
+  // Auto-expand current page to show its children
   useEffect(() => {
-    let outerTimer: ReturnType<typeof setTimeout>;
-    let innerTimer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout>;
 
-    if (currentPage?.id) {
-      outerTimer = setTimeout(async () => {
-        // focus on node and open all parents
-        treeApiRef.current?.select(currentPage.id, { align: "auto" });
-
-        // auto-expand current page to show its children
+    if (isDataLoaded && currentPage?.id) {
+      timer = setTimeout(() => {
         const node = treeApiRef.current?.get(currentPage.id);
         if (node && node.data.hasChildren && node.isClosed) {
-          try {
-            const childrenTree = await fetchAllAncestorChildren({
-              pageId: node.data.id,
-              spaceId: node.data.spaceId,
-            });
-            appendChildren({
-              parentId: node.data.id,
-              children: childrenTree,
-            });
-            innerTimer = setTimeout(() => {
-              node.open();
-            }, 100);
-          } catch (error) {
-            console.error("Failed to auto-expand current page:", error);
-          }
+          node.open();
         }
       }, 200);
-    } else {
+    } else if (!currentPage?.id) {
       treeApiRef.current?.deselectAll();
     }
+
     return () => {
-      clearTimeout(outerTimer);
-      clearTimeout(innerTimer);
+      clearTimeout(timer);
     };
-  }, [currentPage?.id]);
+  }, [isDataLoaded, currentPage?.id]);
 
   // Clean up tree API on unmount
   useEffect(() => {
@@ -352,6 +273,8 @@ function Node({ node, style, dragHandle, tree }: NodeRendererProps<any>) {
 
   async function handleLoadChildren(node: NodeApi<SpaceTreeNode>) {
     if (!node.data.hasChildren) return;
+    // Skip if children already loaded (from full tree data)
+    if (node.children?.length > 0) return;
     // Skip loading during move operations to prevent stale server data
     // from overwriting optimistic tree updates
     if (isTreeMoveInProgress()) return;

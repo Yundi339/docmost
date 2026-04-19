@@ -13,10 +13,10 @@ import { useTranslation } from "react-i18next";
 
 export default function Billing() {
   const { data: billing, isError: isBillingError } = useBillingQuery();
-  const { isAdmin } = useUserRole();
+  const { isOwner } = useUserRole();
   const { t } = useTranslation();
 
-  if (!isAdmin) {
+  if (!isOwner) {
     return null;
   }
 
