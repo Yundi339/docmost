@@ -51,7 +51,13 @@ export class CommentService {
     createCommentDto: CreateCommentDto,
   ) {
     const { page, workspaceId, user } = opts;
-    const commentContent = JSON.parse(createCommentDto.content);
+
+    let commentContent: any;
+    try {
+      commentContent = JSON.parse(createCommentDto.content);
+    } catch {
+      throw new BadRequestException('Invalid comment content');
+    }
 
     if (createCommentDto.parentCommentId) {
       const parentComment = await this.commentRepo.findById(

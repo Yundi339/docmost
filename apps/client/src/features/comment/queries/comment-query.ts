@@ -32,11 +32,13 @@ export function useCommentsQuery(params: ICommentParams) {
     enabled: !!params.pageId,
   });
 
+  const shouldFetchNext = query.hasNextPage && !query.isFetchingNextPage;
+
   useEffect(() => {
-    if (query.hasNextPage && !query.isFetchingNextPage) {
+    if (shouldFetchNext) {
       query.fetchNextPage();
     }
-  }, [query.hasNextPage, query.isFetchingNextPage, query.fetchNextPage]);
+  }, [shouldFetchNext]);
 
   const data = useMemo<IPagination<IComment> | undefined>(() => {
     if (!query.data) return undefined;

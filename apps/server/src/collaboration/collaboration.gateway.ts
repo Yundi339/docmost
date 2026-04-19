@@ -1,9 +1,10 @@
 import { Hocuspocus } from '@hocuspocus/server';
+import { DirectConnection } from '@hocuspocus/server';
 import { IncomingMessage } from 'http';
 import WebSocket from 'ws';
 import { AuthenticationExtension } from './extensions/authentication.extension';
 import { PersistenceExtension } from './extensions/persistence.extension';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EnvironmentService } from '../integrations/environment/environment.service';
 import {
   createRetryStrategy,
@@ -34,6 +35,7 @@ export class CollaborationGateway {
   private readonly redisSync: RedisSyncExtension<CollabEventHandlers> | null =
     null;
   private readonly withRedis: boolean;
+  private readonly logger = new Logger(CollaborationGateway.name);
 
   constructor(
     private authenticationExtension: AuthenticationExtension,
@@ -145,7 +147,7 @@ export class CollaborationGateway {
     return this.redisSync?.handleEvent(eventName, documentName, payload);
   }
 
-  openDirectConnection(documentName: string, context?: any) {
+  openDirectConnection(documentName: string, context?: any): Promise<DirectConnection> {
     return this.hocuspocus.openDirectConnection(documentName, context);
   }
 
@@ -179,7 +181,7 @@ export class CollaborationGateway {
         if (this.hocuspocus.getDocumentsCount() === 0) resolve('');
         this.hocuspocus.closeConnections();
       } catch (error) {
-        console.error(error);
+        this.logger.error('Error during graceful shutdown', error);
       }
     });
 

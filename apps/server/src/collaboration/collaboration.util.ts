@@ -113,7 +113,7 @@ export function htmlToJson(html: string) {
   try {
     return addUniqueIdsToDoc(pmJson, tiptapExtensions);
   } catch (error) {
-    console.warn('failed to add unique ids to doc', error);
+    Logger.warn('failed to add unique ids to doc', error);
     return pmJson;
   }
 }

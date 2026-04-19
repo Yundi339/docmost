@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from '@nestjs-labs/nestjs-ioredis';
 import type { Redis } from 'ioredis';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
@@ -8,6 +8,7 @@ const THROTTLE_SECONDS = 15 * 60; // 15 minutes
 
 @Injectable()
 export class SessionActivityService {
+  private readonly logger = new Logger(SessionActivityService.name);
   private readonly redis: Redis;
 
   constructor(
@@ -26,11 +27,13 @@ export class SessionActivityService {
       .then((result) => {
         if (result === null) return; // key already exists, throttled
 
-        this.userSessionRepo.updateLastActiveAt(sessionId).catch(() => {});
+        this.userSessionRepo
+          .updateLastActiveAt(sessionId)
+          .catch((err) => this.logger.warn(`Failed to update session lastActiveAt: ${err.message}`));
         this.userRepo
           .updateUser({ lastActiveAt: new Date() }, userId, workspaceId)
-          .catch(() => {});
+          .catch((err) => this.logger.warn(`Failed to update user lastActiveAt: ${err.message}`));
       })
-      .catch(() => {});
+      .catch((err) => this.logger.warn(`Failed to track session activity: ${err.message}`));
   }
 }

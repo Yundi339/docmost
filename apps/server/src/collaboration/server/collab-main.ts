@@ -29,7 +29,10 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api', { exclude: ['/'] });
 
-  app.enableCors();
+  app.enableCors({
+    origin: process.env.APP_URL || 'http://localhost:3000',
+    credentials: true,
+  });
 
   const reflector = app.get(Reflector);
   app.useGlobalInterceptors(new TransformHttpResponseInterceptor(reflector));

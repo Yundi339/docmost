@@ -82,7 +82,7 @@ export class WorkspaceRepo {
   async findFirst(): Promise<Workspace> {
     return await this.db
       .selectFrom('workspaces')
-      .selectAll()
+      .select(this.baseFields)
       .orderBy('createdAt', 'asc')
       .limit(1)
       .executeTakeFirst();
@@ -91,7 +91,7 @@ export class WorkspaceRepo {
   async findByHostname(hostname: string): Promise<Workspace> {
     return await this.db
       .selectFrom('workspaces')
-      .selectAll()
+      .select(this.baseFields)
       .where(sql`LOWER(hostname)`, '=', sql`LOWER(${hostname})`)
       .executeTakeFirst();
   }

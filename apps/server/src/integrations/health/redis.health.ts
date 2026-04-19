@@ -27,7 +27,7 @@ export class RedisHealthIndicator {
       redis.disconnect();
       return indicator.up();
     } catch (e) {
-      this.logger.error(e);
+      this.logger.error('Redis health check failed');
       return indicator.down(`${key} is not available`);
     }
   }

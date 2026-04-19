@@ -16,7 +16,7 @@ interface CustomAvatarProps {
   mt?: string | number;
 }
 
-export const CustomAvatar = React.forwardRef<
+export const CustomAvatar = React.memo(React.forwardRef<
   HTMLInputElement,
   CustomAvatarProps
 >(({ avatarUrl, name, type, ...props }: CustomAvatarProps, ref) => {
@@ -32,4 +32,4 @@ export const CustomAvatar = React.forwardRef<
       {...props}
     />
   );
-});
+}));

@@ -20,6 +20,9 @@ import {
 import DOMPurify from "dompurify";
 import { useTranslation } from "react-i18next";
 
+const noSelectStyle = { userSelect: "none" } as const;
+const flexStyle = { flex: 1 } as const;
+
 interface SearchResultItemProps {
   result: IPageSearch | IAttachmentSearch;
   isAttachmentResult: boolean;
@@ -52,14 +55,14 @@ export function SearchResultItem({
           attachmentResult.page.slugId,
           attachmentResult.page.title,
         )}
-        style={{ userSelect: "none" }}
+        style={noSelectStyle}
       >
         <Group wrap="nowrap" w="100%">
           <Center>
             <IconFile size={16} />
           </Center>
 
-          <div style={{ flex: 1 }}>
+          <div style={flexStyle}>
             <Text>{attachmentResult.fileName}</Text>
             <Text size="xs" opacity={0.6}>
               {attachmentResult.space.name} • {attachmentResult.page.title}
@@ -102,12 +105,12 @@ export function SearchResultItem({
           pageResult.slugId,
           pageResult.title,
         )}
-        style={{ userSelect: "none" }}
+        style={noSelectStyle}
       >
         <Group wrap="nowrap" w="100%">
           <Center>{getPageIcon(pageResult?.icon)}</Center>
 
-          <div style={{ flex: 1 }}>
+          <div style={flexStyle}>
             <Text>{pageResult.title}</Text>
 
             {showSpace && pageResult.space && (

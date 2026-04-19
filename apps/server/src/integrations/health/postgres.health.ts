@@ -23,7 +23,7 @@ export class PostgresHealthIndicator {
       await sql`SELECT 1=1`.execute(this.db);
       return indicator.up();
     } catch (e) {
-      this.logger.error(JSON.stringify(e));
+      this.logger.error('Database health check failed');
       return indicator.down(`${key} is not available`);
     }
   }

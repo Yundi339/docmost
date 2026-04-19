@@ -32,7 +32,7 @@ export class UserController {
       workspace.id,
     );
 
-    const { licenseKey, ...rest } = workspace;
+    const { licenseKey, stripeCustomerId, billingEmail, ...rest } = workspace;
 
     const workspaceInfo = {
       ...rest,
