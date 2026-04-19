@@ -183,7 +183,7 @@ export class AuthController {
     return this.authService.verifyUserToken(verifyUserTokenDto, workspace.id);
   }
 
-  @SkipThrottle({ [AUTH_THROTTLER]: true })
+  @SkipThrottle({ [AUTH_THROTTLER]: true, [FORGOT_PASSWORD_THROTTLER]: true })
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('collab-token')

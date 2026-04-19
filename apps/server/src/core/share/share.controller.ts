@@ -140,9 +140,6 @@ export class ShareController {
       throw new NotFoundException('Page not found');
     }
 
-    // User must be able to edit the page to create a share
-    //TODO: i dont think this is neccessary if we prevent restricted pages from getting shared
-    // rather, use space level permission and workspace/space level sharing restriction
     await this.pageAccessService.validateCanEdit(page, user);
 
     // Prevent sharing restricted pages

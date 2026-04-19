@@ -102,8 +102,8 @@ export class CommentController {
 
   @HttpCode(HttpStatus.OK)
   @Post('info')
-  async findOne(@Body() input: CommentIdDto, @AuthUser() user: User) {
-    const comment = await this.commentRepo.findById(input.commentId);
+  async findOne(@Body() input: CommentIdDto, @AuthUser() user: User, @AuthWorkspace() workspace: Workspace) {
+    const comment = await this.commentRepo.findById(input.commentId, workspace.id);
     if (!comment) {
       throw new NotFoundException('Comment not found');
     }
@@ -121,7 +121,7 @@ export class CommentController {
   @HttpCode(HttpStatus.OK)
   @Post('update')
   async update(@Body() dto: UpdateCommentDto, @AuthUser() user: User, @AuthWorkspace() workspace: Workspace) {
-    const comment = await this.commentRepo.findById(dto.commentId, {
+    const comment = await this.commentRepo.findById(dto.commentId, workspace.id, {
       includeCreator: true,
       includeResolvedBy: true,
     });
@@ -142,7 +142,7 @@ export class CommentController {
   @HttpCode(HttpStatus.OK)
   @Post('delete')
   async delete(@Body() input: CommentIdDto, @AuthUser() user: User, @AuthWorkspace() workspace: Workspace) {
-    const comment = await this.commentRepo.findById(input.commentId);
+    const comment = await this.commentRepo.findById(input.commentId, workspace.id);
     if (!comment) {
       throw new NotFoundException('Comment not found');
     }

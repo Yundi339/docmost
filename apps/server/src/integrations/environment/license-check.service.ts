@@ -2,6 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { EnvironmentService } from './environment.service';
 
+// Features with full OSS backend implementation that work without EE modules
+const OSS_AVAILABLE_FEATURES = new Set([
+  'comment:viewer',
+  'page:permissions',
+  'sharing:controls',
+  'retention',
+  'security:settings',
+]);
+
 @Injectable()
 export class LicenseCheckService {
   constructor(
@@ -22,7 +31,8 @@ export class LicenseCheckService {
       });
       return licenseService.isValidEELicense(licenseKey);
     } catch {
-      return false;
+      // Self-hosted without EE: treat as valid for OSS features
+      return true;
     }
   }
 
@@ -45,7 +55,8 @@ export class LicenseCheckService {
       });
       return licenseService.hasFeature(licenseKey, feature);
     } catch {
-      return false;
+      // Self-hosted without EE: allow OSS-implemented features
+      return OSS_AVAILABLE_FEATURES.has(feature);
     }
   }
 
@@ -58,7 +69,8 @@ export class LicenseCheckService {
       });
       return licenseService.getFeatures(licenseKey);
     } catch {
-      return [];
+      // Self-hosted without EE: return OSS-implemented features
+      return [...OSS_AVAILABLE_FEATURES];
     }
   }
 
@@ -81,7 +93,7 @@ export class LicenseCheckService {
       return plan ?? 'standard';
     }
 
-    return this.getLicenseType(licenseKey) ?? 'free';
+    return this.getLicenseType(licenseKey) ?? 'business';
   }
 
   private getLicenseType(licenseKey: string): string | null {
@@ -93,7 +105,8 @@ export class LicenseCheckService {
       });
       return licenseService.getLicenseType(licenseKey);
     } catch {
-      return null;
+      // Self-hosted without EE: report as business tier
+      return 'business';
     }
   }
 }

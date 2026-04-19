@@ -122,8 +122,6 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
     }
   }, [hasNextPage, fetchNextPage, isFetching, spaceId]);
 
-  const pagesCount = pagesData?.pages?.length;
-
   useEffect(() => {
     if (pagesData?.pages && !hasNextPage) {
       const allItems = pagesData.pages.flatMap((page) => page.items);
@@ -143,7 +141,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
         return merged;
       });
     }
-  }, [pagesCount, hasNextPage, spaceId]);
+  }, [pagesData, hasNextPage, spaceId]);
 
   useEffect(() => {
     const effectSpaceId = spaceId;

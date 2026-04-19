@@ -17,9 +17,9 @@ import { jsonObjectFrom } from 'kysely/helpers/postgres';
 export class CommentRepo {
   constructor(@InjectKysely() private readonly db: KyselyDB) {}
 
-  // todo, add workspaceId
   async findById(
     commentId: string,
+    workspaceId: string,
     opts?: { includeCreator: boolean; includeResolvedBy: boolean },
   ): Promise<Comment> {
     return await this.db
@@ -28,6 +28,7 @@ export class CommentRepo {
       .$if(opts?.includeCreator, (qb) => qb.select(this.withCreator))
       .$if(opts?.includeResolvedBy, (qb) => qb.select(this.withResolvedBy))
       .where('id', '=', commentId)
+      .where('workspaceId', '=', workspaceId)
       .executeTakeFirst();
   }
 
