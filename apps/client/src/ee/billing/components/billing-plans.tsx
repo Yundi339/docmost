@@ -20,10 +20,12 @@ import { getCheckoutLink } from "@/ee/billing/services/billing-service.ts";
 import { useBillingPlans } from "@/ee/billing/queries/billing-query.ts";
 import { useAtomValue } from "jotai";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom";
+import { useTranslation } from "react-i18next";
 
 export default function BillingPlans() {
   const { data: plans } = useBillingPlans();
   const workspace = useAtomValue(workspaceAtom);
+  const { t } = useTranslation();
   const [isAnnual, setIsAnnual] = useState(true);
   const [selectedTierValue, setSelectedTierValue] = useState<string | null>(
     null,
@@ -76,7 +78,7 @@ export default function BillingPlans() {
         index > 0 ? firstTieredPlan.pricingTiers[index - 1].upTo : 0;
       return {
         value: tier.upTo.toString(),
-        label: `${prevMaxUsers + 1}-${tier.upTo} users`,
+        label: t("{{min}}-{{max}} users", { min: prevMaxUsers + 1, max: tier.upTo }),
       };
     }) || [];
 
@@ -86,11 +88,11 @@ export default function BillingPlans() {
       {showTieredPricingNotice && !hasTieredPlans && (
         <Alert
           icon={<IconInfoCircle size={16} />} 
-          title="Want the old tiered pricing?" 
+          title={t("Want the old tiered pricing?")} 
           color="blue"
           mb="lg"
         >
-          Contact support to switch back to our tiered pricing model.
+          {t("Contact support to switch back to our tiered pricing model.")}
         </Alert>
       )}
 
@@ -100,8 +102,8 @@ export default function BillingPlans() {
         <Group justify="center" align="center" gap="sm">
           {hasTieredPlans && (
             <Select
-              label="Team size"
-              description="Select the number of users"
+              label={t("Team size")}
+              description={t("Select the number of users")}
               value={selectedTierValue}
               onChange={setSelectedTierValue}
               data={selectData}
@@ -113,16 +115,16 @@ export default function BillingPlans() {
 
           <Group justify="center" align="start">
             <Flex justify="center" gap="md" align="center">
-              <Text size="md">Monthly</Text>
+              <Text size="md">{t("Monthly")}</Text>
               <Switch
                 defaultChecked={isAnnual}
                 onChange={(event) => setIsAnnual(event.target.checked)}
                 size="sm"
               />
               <Text size="md">
-                Annually
+                {t("Annually")}
                 <Badge component="span" variant="light" color="blue">
-                  15% OFF
+                  {t("15% OFF")}
                 </Badge>
               </Text>
             </Flex>
@@ -190,23 +192,23 @@ export default function BillingPlans() {
                     </Title>
                     <Text size="lg" c="dimmed">
                       {plan.billingScheme === 'per_unit' 
-                        ? `per user/month`
-                        : `per month`}
+                        ? t("per user/month")
+                        : t("per month")}
                     </Text>
                   </Group>
                   <Text size="sm" c="dimmed">
-                    {isAnnual ? "Billed annually" : "Billed monthly"}
+                    {isAnnual ? t("Billed annually") : t("Billed monthly")}
                   </Text>
                   {plan.billingScheme === 'tiered' && plan.pricingTiers && (
                     <Text size="md" fw={500}>
-                      For {plan.pricingTiers.find(tier => tier.upTo.toString() === selectedTierValue)?.upTo || plan.pricingTiers[0].upTo} users
+                      {t("For {{count}} users", { count: plan.pricingTiers.find(tier => tier.upTo.toString() === selectedTierValue)?.upTo || plan.pricingTiers[0].upTo })}
                     </Text>
                   )}
                 </Stack>
 
                 {/* CTA Button */}
                 <Button onClick={() => handleCheckout(priceId)} fullWidth>
-                  Subscribe
+                  {t("Subscribe")}
                 </Button>
 
                 {/* Features */}

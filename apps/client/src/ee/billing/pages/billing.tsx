@@ -9,10 +9,12 @@ import React from "react";
 import BillingDetails from "@/ee/billing/components/billing-details.tsx";
 import { useBillingQuery } from "@/ee/billing/queries/billing-query.ts";
 import useUserRole from "@/hooks/use-user-role.tsx";
+import { useTranslation } from "react-i18next";
 
 export default function Billing() {
   const { data: billing, isError: isBillingError } = useBillingQuery();
   const { isAdmin } = useUserRole();
+  const { t } = useTranslation();
 
   if (!isAdmin) {
     return null;
@@ -21,9 +23,9 @@ export default function Billing() {
   return (
     <>
       <Helmet>
-        <title>Billing - {getAppName()}</title>
+        <title>{t("Billing")} - {getAppName()}</title>
       </Helmet>
-      <SettingsTitle title="Billing" />
+      <SettingsTitle title={t("Billing")} />
 
       <BillingTrial />
       <BillingDetails />

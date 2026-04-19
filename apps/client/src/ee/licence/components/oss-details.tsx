@@ -1,7 +1,8 @@
 import { Group, List, Stack, Table, Text, ThemeIcon } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 
-const enterpriseFeatures = [
+const enterpriseFeatureKeys = [
   "AI Integration (Chat, Search & Assistant)",
   "MCP Support",
   "SSO (SAML, OIDC, LDAP)",
@@ -19,6 +20,7 @@ const enterpriseFeatures = [
 ];
 
 export default function OssDetails() {
+  const { t } = useTranslation();
   return (
     <Stack gap="lg">
       <Table.ScrollContainer minWidth={500} py="md">
@@ -30,10 +32,10 @@ export default function OssDetails() {
         >
           <Table.Tbody>
             <Table.Tr>
-              <Table.Th w={160}>Edition</Table.Th>
+              <Table.Th w={160}>{t("Edition")}</Table.Th>
               <Table.Td>
                 <Group wrap="nowrap">
-                  Open Source
+                  {t("Open Source")}
                   <div>
                     <ThemeIcon
                       color="green"
@@ -52,7 +54,7 @@ export default function OssDetails() {
       </Table.ScrollContainer>
 
       <Stack gap="md">
-        <Text fw={500}>Upgrade to the Enterprise Edition to unlock:</Text>
+        <Text fw={500}>{t("Upgrade to the Enterprise Edition to unlock:")}</Text>
 
         <List
           spacing={4}
@@ -63,13 +65,13 @@ export default function OssDetails() {
             </ThemeIcon>
           }
         >
-          {enterpriseFeatures.map((feature) => (
-            <List.Item key={feature}>{feature}</List.Item>
+          {enterpriseFeatureKeys.map((feature) => (
+            <List.Item key={feature}>{t(feature)}</List.Item>
           ))}
         </List>
 
         <Text size="sm" c="dimmed">
-          Get an enterprise trial key at{" "}
+          {t("Get an enterprise trial key at")}{" "}
           <a
             href="https://customers.docmost.com/"
             target="_blank"
@@ -81,7 +83,7 @@ export default function OssDetails() {
         </Text>
 
         <Text size="sm" c="dimmed">
-          Visit{" "}
+          {t("Visit")}{" "}
           <a
             href="https://docmost.com/pricing"
             target="_blank"
@@ -89,10 +91,10 @@ export default function OssDetails() {
           >
             docmost.com/pricing
           </a>{" "}
-          to purchase an enterprise license.
+          {t("to purchase an enterprise license.")}
         </Text>
         <Text size="sm" c="dimmed">
-          For inquiries, contact{" "}
+          {t("For inquiries, contact")}{" "}
           <a href="mailto:sales@docmost.com">sales@docmost.com</a>
         </Text>
       </Stack>

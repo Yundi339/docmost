@@ -24,9 +24,10 @@ export function MfaSettings() {
   const { data: mfaStatus, isLoading } = useQuery({
     queryKey: ["mfa-status"],
     queryFn: getMfaStatus,
+    enabled: canUseMfa,
   });
 
-  if (isLoading || !mfaStatus) {
+  if (canUseMfa && (isLoading || !mfaStatus)) {
     return null;
   }
 
