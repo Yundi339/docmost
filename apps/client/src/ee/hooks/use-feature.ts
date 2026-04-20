@@ -1,7 +1,5 @@
-import { useAtom } from "jotai";
-import { entitlementAtom } from "@/ee/entitlement/entitlement-atom";
-
-export const useHasFeature = (feature: string): boolean => {
-  const [entitlements] = useAtom(entitlementAtom);
-  return entitlements?.features?.includes(feature) ?? false;
+// All features are unlocked — no license gating
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const useHasFeature = (_feature: string): boolean => {
+  return true;
 };

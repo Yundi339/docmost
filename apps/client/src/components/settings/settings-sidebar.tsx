@@ -21,16 +21,11 @@ import classes from "./settings.module.css";
 import { useTranslation } from "react-i18next";
 import { isCloud } from "@/lib/config.ts";
 import useUserRole from "@/hooks/use-user-role.tsx";
-import { useAtom } from "jotai";
-import { entitlementAtom } from "@/ee/entitlement/entitlement-atom";
-import { Feature } from "@/ee/features";
-import { useUpgradeLabel } from "@/ee/hooks/use-upgrade-label";
 import {
   prefetchApiKeyManagement,
   prefetchApiKeys,
   prefetchBilling,
   prefetchGroups,
-  prefetchLicense,
   prefetchShares,
   prefetchSpaces,
   prefetchSsoProviders,
@@ -39,6 +34,7 @@ import {
   prefetchVerifiedPages,
 } from "@/components/settings/settings-queries.tsx";
 import AppVersion from "@/components/settings/app-version.tsx";
+import { useAtom } from "jotai";
 import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import { useSettingsNavigation } from "@/hooks/use-settings-navigation";
@@ -47,7 +43,7 @@ type DataItem = {
   label: string;
   icon: React.ElementType;
   path: string;
-  feature?: string;
+  notImplemented?: boolean;
   role?: "admin" | "owner";
   env?: "cloud" | "selfhosted";
 };
@@ -71,7 +67,6 @@ const groupedData: DataGroup[] = [
         label: "API keys",
         icon: IconKey,
         path: "/settings/account/api-keys",
-        feature: Feature.API_KEYS,
       },
     ],
   },
@@ -91,7 +86,6 @@ const groupedData: DataGroup[] = [
         label: "Security & SSO",
         icon: IconLock,
         path: "/settings/security",
-        feature: Feature.SECURITY_SETTINGS,
         role: "admin",
       },
       { label: "Groups", icon: IconUsersGroup, path: "/settings/groups" },
@@ -101,13 +95,12 @@ const groupedData: DataGroup[] = [
         label: "Verified pages",
         icon: IconShieldCheck,
         path: "/settings/verifications",
-        feature: Feature.PAGE_VERIFICATION,
+        notImplemented: true,
       },
       {
         label: "API management",
         icon: IconKey,
         path: "/settings/api-keys",
-        feature: Feature.API_KEYS,
         role: "owner",
       },
       {
@@ -120,18 +113,6 @@ const groupedData: DataGroup[] = [
         label: "Audit log",
         icon: IconHistory,
         path: "/settings/audit",
-        feature: Feature.AUDIT_LOGS,
-        role: "owner",
-      },
-    ],
-  },
-  {
-    heading: "System",
-    items: [
-      {
-        label: "License & Edition",
-        icon: IconKey,
-        path: "/settings/license",
         role: "owner",
       },
     ],
@@ -144,17 +125,12 @@ export default function SettingsSidebar() {
   const [active, setActive] = useState(location.pathname);
   const { goBack } = useSettingsNavigation();
   const { isAdmin, isOwner } = useUserRole();
-  const [entitlements] = useAtom(entitlementAtom);
-  const upgradeLabel = useUpgradeLabel();
   const [mobileSidebarOpened] = useAtom(mobileSidebarAtom);
   const toggleMobileSidebar = useToggleSidebar(mobileSidebarAtom);
 
   useEffect(() => {
     setActive(location.pathname);
   }, [location.pathname]);
-
-  const hasFeature = (f: string) =>
-    entitlements?.features?.includes(f) ?? false;
 
   const canShowItem = (item: DataItem) => {
     if (item.env === "cloud" && !isCloud()) return false;
@@ -164,16 +140,7 @@ export default function SettingsSidebar() {
     return true;
   };
 
-  const isItemDisabled = (item: DataItem) => {
-    if (!item.feature) return false;
-    return !hasFeature(item.feature);
-  };
-
   const menuItems = groupedData.map((group) => {
-    if (group.heading === "System" && (!isOwner || isCloud())) {
-      return null;
-    }
-
     return (
       <div key={group.heading}>
         <Text c="dimmed" className={classes.linkHeader}>
@@ -198,11 +165,6 @@ export default function SettingsSidebar() {
             case "Billing":
               prefetchHandler = prefetchBilling;
               break;
-            case "License & Edition":
-              if (entitlements?.tier !== "free") {
-                prefetchHandler = prefetchLicense;
-              }
-              break;
             case "Security & SSO":
               prefetchHandler = prefetchSsoProviders;
               break;
@@ -225,7 +187,7 @@ export default function SettingsSidebar() {
               break;
           }
 
-          const isDisabled = isItemDisabled(item);
+          const isDisabled = !!item.notImplemented;
           const linkElement = (
             <Link
               onMouseEnter={!isDisabled ? prefetchHandler : undefined}
@@ -257,7 +219,7 @@ export default function SettingsSidebar() {
             return (
               <Tooltip
                 key={item.label}
-                label={upgradeLabel}
+                label={t("Not implemented yet")}
                 position="right"
                 withArrow
               >
