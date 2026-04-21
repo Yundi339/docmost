@@ -95,7 +95,6 @@ const groupedData: DataGroup[] = [
         label: "Verified pages",
         icon: IconShieldCheck,
         path: "/settings/verifications",
-        notImplemented: true,
       },
       {
         label: "API management",

@@ -10,12 +10,8 @@ export async function getSsoProviderById(data: {
 }
 
 export async function getSsoProviders(): Promise<IPagination<IAuthProvider>> {
-  try {
-    const req = await api.post<IPagination<IAuthProvider>>("/sso/providers");
-    return req.data;
-  } catch {
-    return { items: [], meta: {} } as unknown as IPagination<IAuthProvider>;
-  }
+  const req = await api.post<IPagination<IAuthProvider>>("/sso/providers");
+  return req.data;
 }
 
 export async function createSsoProvider(data: any): Promise<IAuthProvider> {

@@ -16,7 +16,6 @@ const ALL_FEATURES = [
   'attachment:indexing',
   'security:settings',
   'mcp',
-  'scim',
   'page:verification',
   'audit:logs',
   'retention',

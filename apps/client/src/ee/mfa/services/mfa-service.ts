@@ -11,12 +11,8 @@ import {
 } from "@/ee/mfa";
 
 export async function getMfaStatus(): Promise<MfaStatusResponse> {
-  try {
-    const req = await api.post("/mfa/status");
-    return req.data;
-  } catch {
-    return { isEnabled: false } as MfaStatusResponse;
-  }
+  const req = await api.post("/mfa/status");
+  return req.data;
 }
 
 export async function setupMfa(

@@ -11,7 +11,6 @@ export const Feature = {
   ATTACHMENT_INDEXING: 'attachment:indexing',
   SECURITY_SETTINGS: 'security:settings',
   MCP: 'mcp',
-  SCIM: 'scim',
   PAGE_VERIFICATION: 'page:verification',
   AUDIT_LOGS: 'audit:logs',
   RETENTION: 'retention',
