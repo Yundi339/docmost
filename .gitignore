@@ -5,6 +5,10 @@ data
 # compiled output
 /dist
 /node_modules
+_env
+_doc
+skills
+instructions
 
 # Logs
 logs

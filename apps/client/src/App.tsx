@@ -47,7 +47,6 @@ const CreateWorkspace = lazy(() => import("@/ee/pages/create-workspace.tsx"));
 const VerifyEmail = lazy(() => import("@/ee/pages/verify-email.tsx"));
 const Security = lazy(() => import("@/ee/security/pages/security.tsx"));
 const License = lazy(() => import("@/ee/licence/pages/license.tsx"));
-const PdfRenderPage = lazy(() => import("@/ee/pdf-export/pdf-render-page.tsx"));
 const UserApiKeys = lazy(() => import("@/ee/api-key/pages/user-api-keys"));
 const WorkspaceApiKeys = lazy(() => import("@/ee/api-key/pages/workspace-api-keys"));
 const AiSettings = lazy(() => import("@/ee/ai/pages/ai-settings.tsx"));
@@ -93,7 +92,6 @@ export default function App() {
           <Route path={"/share/p/:pageSlug"} element={<SharedPage />} />
         </Route>
 
-        <Route path={"/pdf-render/:pageId"} element={<PdfRenderPage />} />
         <Route path={"/share/:shareId"} element={<ShareRedirect />} />
         <Route path={"/p/:pageSlug"} element={<PageRedirect />} />
 
