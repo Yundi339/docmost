@@ -236,6 +236,14 @@ export default function PageEditor({
               event.preventDefault();
               return true;
             }
+            if (event.key === "Tab") {
+              const editor = editorRef.current;
+              if (!editor) return false;
+              event.preventDefault();
+              return editor.view.someProp("handleKeyDown", (f) =>
+                f(editor.view, event),
+              );
+            }
             if (platformModifierKey(event) && event.code === "KeyK") {
               searchSpotlight.open();
               return true;
@@ -405,7 +413,7 @@ export default function PageEditor({
   return (
     <div className="editor-container" style={{ position: "relative" }}>
       <div ref={menuContainerRef}>
-        <EditorContent editor={editor} />
+        <EditorContent editor={editor} translate="yes" />
 
         {editor && (
           <SearchAndReplaceDialog editor={editor} editable={editable} />
