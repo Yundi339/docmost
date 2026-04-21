@@ -6,6 +6,7 @@ import { validate as isValidUUID } from 'uuid';
 import * as path from 'path';
 import { Page } from '@docmost/db/types/entity.types';
 import { isAttachmentNode } from '../../common/helpers/prosemirror/utils';
+import { sanitizeFileName } from '../../common/helpers';
 
 export type PageExportTree = Record<string, Page[]>;
 
@@ -139,11 +140,11 @@ export function buildTree(pages: Page[]): PageExportTree {
       titleCount[parentPageId] = {};
     }
 
-    let title = getPageTitle(page.title);
+    let title = sanitizeFileName(getPageTitle(page.title));
 
     if (titleCount[parentPageId][title]) {
       title = `${title} (${titleCount[parentPageId][title]})`;
-      titleCount[parentPageId][getPageTitle(page.title)] += 1;
+      titleCount[parentPageId][sanitizeFileName(getPageTitle(page.title))] += 1;
     } else {
       titleCount[parentPageId][title] = 1;
     }
