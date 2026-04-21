@@ -41,6 +41,8 @@ import {
 } from '../dto/duplicate-page.dto';
 import { Node as PMNode } from '@tiptap/pm/model';
 import { StorageService } from '../../../integrations/storage/storage.service';
+import { getAttachmentFolderPath } from '../../attachment/attachment.utils';
+import { AttachmentType } from '../../attachment/attachment.constants';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { QueueJob, QueueName } from '../../../integrations/queue/constants';
@@ -691,10 +693,13 @@ export class PageService {
 
           const newPageId = pageAttachment.newPageId;
 
-          const newPathFile = attachment.filePath.replace(
-            attachment.id,
-            newAttachmentId,
-          );
+          // Rebuild the path from components instead of string-replacing the
+          // attachment id, because non-ASCII filenames are stored raw and a
+          // naive replace can break when ids are substrings or collide.
+          const newPathFile = `${getAttachmentFolderPath(
+            AttachmentType.File,
+            attachment.workspaceId,
+          )}/${newAttachmentId}/${attachment.fileName}`;
 
           try {
             await this.storageService.copy(attachment.filePath, newPathFile);
