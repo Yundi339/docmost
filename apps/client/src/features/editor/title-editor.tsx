@@ -28,6 +28,7 @@ import localEmitter from "@/lib/local-emitter.ts";
 import { PageEditMode } from "@/features/user/types/user.types.ts";
 import { searchSpotlight } from "@/features/search/constants.ts";
 import { platformModifierKey } from "@/lib";
+import { currentUserAtom } from "@/features/user/atoms/current-user-atom.ts";
 
 export interface TitleEditorProps {
   pageId: string;
@@ -53,6 +54,9 @@ export function TitleEditor({
   const navigate = useNavigate();
   const [activePageId, setActivePageId] = useState(pageId);
   const currentPageEditMode = useAtomValue(currentPageEditModeAtom);
+  const currentUser = useAtomValue(currentUserAtom);
+  const userSpellcheckPref =
+    currentUser?.user?.settings?.preferences?.spellcheck ?? true;
 
   const titleEditor = useEditor({
     extensions: [
@@ -240,6 +244,7 @@ export function TitleEditor({
       <EditorContent
         editor={titleEditor}
         translate="yes"
+        spellCheck={userSpellcheckPref}
         onKeyDown={(event) => {
           // First handle the search hotkey
           getHotkeyHandler([["mod+F", openSearchDialog]])(event);

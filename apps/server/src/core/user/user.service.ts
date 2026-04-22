@@ -61,6 +61,14 @@ export class UserService {
       );
     }
 
+    if (typeof updateUserDto.spellcheck !== 'undefined') {
+      return this.userRepo.updatePreference(
+        userId,
+        'spellcheck',
+        updateUserDto.spellcheck,
+      );
+    }
+
     const notificationSettings: Record<string, NotificationSettingKey> = {
       notificationPageUpdates: 'page.updated',
       notificationPageUserMention: 'page.userMention',

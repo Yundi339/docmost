@@ -112,6 +112,8 @@ export default function PageEditor({
   const { pageSlug } = useParams();
   const slugId = extractPageSlugId(pageSlug);
   const currentPageEditMode = useAtomValue(currentPageEditModeAtom);
+  const userSpellcheckPref =
+    currentUser?.user?.settings?.preferences?.spellcheck ?? true;
   const canScroll = useCallback(
     () => Boolean(isComponentMounted.current && editorRef.current),
     [isComponentMounted],
@@ -402,7 +404,7 @@ export default function PageEditor({
   return (
     <div className="editor-container" style={{ position: "relative" }}>
       <div ref={menuContainerRef}>
-        <EditorContent editor={editor} translate="yes" />
+        <EditorContent editor={editor} translate="yes" spellCheck={userSpellcheckPref} />
 
         {editor && (
           <SearchAndReplaceDialog editor={editor} editable={editable} />
