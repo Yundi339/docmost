@@ -258,8 +258,74 @@ export class SearchService {
         const accessibleSet = new Set(accessibleIds);
         pages = pages.filter((p) => accessibleSet.has(p.id));
       }
+
+      // Attach breadcrumb titles (ancestor titles, root-first, excluding the page itself)
+      if (pages.length > 0) {
+        const breadcrumbsByPageId = await this.getAncestorTitles(
+          pages.map((p) => p.id),
+        );
+        pages = pages.map((p) => ({
+          ...p,
+          breadcrumbs: breadcrumbsByPageId.get(p.id) ?? [],
+        }));
+      }
     }
 
     return { users, groups, pages };
+  }
+
+  /**
+   * For each page id, return its ancestor titles ordered root-first,
+   * excluding the page itself. Single recursive CTE for the whole batch.
+   */
+  private async getAncestorTitles(
+    pageIds: string[],
+  ): Promise<Map<string, string[]>> {
+    if (pageIds.length === 0) return new Map();
+
+    const rows = await this.db
+      .withRecursive('page_ancestors', (db) =>
+        db
+          .selectFrom('pages')
+          .select([
+            'id as startId',
+            'id',
+            'title',
+            'parentPageId',
+            sql<number>`0`.as('depth'),
+          ])
+          .where('id', 'in', pageIds)
+          .unionAll((exp) =>
+            exp
+              .selectFrom('pages as p')
+              .innerJoin(
+                'page_ancestors as pa',
+                'pa.parentPageId',
+                'p.id',
+              )
+              .select([
+                'pa.startId as startId',
+                'p.id as id',
+                'p.title as title',
+                'p.parentPageId as parentPageId',
+                sql<number>`pa.depth + 1`.as('depth'),
+              ]),
+          ),
+      )
+      .selectFrom('page_ancestors')
+      .select(['startId', 'title', 'depth'])
+      .where('depth', '>', 0) // exclude the page itself
+      .orderBy('startId')
+      .orderBy('depth', 'desc') // root first
+      .execute();
+
+    const result = new Map<string, string[]>();
+    for (const row of rows) {
+      const key = row.startId as string;
+      const list = result.get(key) ?? [];
+      list.push(row.title as string);
+      result.set(key, list);
+    }
+    return result;
   }
 }

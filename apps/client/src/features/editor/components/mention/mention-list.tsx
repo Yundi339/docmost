@@ -108,6 +108,7 @@ const MentionList = forwardRef<any, MentionListProps>((props, ref) => {
             icon: page.icon,
             spaceName: page.space?.name,
             spaceSlug: page.space?.slug,
+            breadcrumbs: page.breadcrumbs ?? [],
           })),
         );
       }
@@ -371,9 +372,14 @@ const MentionList = forwardRef<any, MentionListProps>((props, ref) => {
                     <AutoTooltipText size="sm" fw={500} truncate>
                       {item.label}
                     </AutoTooltipText>
-                    {item.spaceName && (
+                    {(item.breadcrumbs?.length || item.spaceName) && (
                       <Text size="xs" c="dimmed" truncate>
-                        {item.spaceName}
+                        {[
+                          item.spaceName,
+                          ...(item.breadcrumbs ?? []),
+                        ]
+                          .filter(Boolean)
+                          .join(" / ")}
                       </Text>
                     )}
                   </div>

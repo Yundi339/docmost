@@ -28,4 +28,5 @@ export type MentionSuggestionItem =
   icon: string;
   spaceName?: string;
   spaceSlug?: string;
+  breadcrumbs?: string[];
 };
