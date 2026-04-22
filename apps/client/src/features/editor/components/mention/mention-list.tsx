@@ -89,6 +89,7 @@ const MentionList = forwardRef<any, MentionListProps>((props, ref) => {
           suggestion.users.map((user) => ({
             id: uuid7(),
             label: user.name,
+            email: user.email,
             entityType: "user",
             entityId: user.id,
             avatarUrl: user.avatarUrl,
@@ -336,10 +337,15 @@ const MentionList = forwardRef<any, MentionListProps>((props, ref) => {
                     name={item.label}
                   />
 
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <AutoTooltipText size="sm" fw={500}>
                       {item.label}
                     </AutoTooltipText>
+                    {item.email && (
+                      <Text size="xs" c="dimmed" truncate="end">
+                        {item.email}
+                      </Text>
+                    )}
                   </div>
                 </Group>
               </UnstyledButton>
