@@ -23,7 +23,6 @@ import {
   IconChevronRight,
   IconCopy,
   IconDotsVertical,
-  IconFileDescription,
   IconFileExport,
   IconLink,
   IconPlus,
@@ -37,14 +36,12 @@ import {
   treeDataAtom,
 } from "@/features/page/tree/atoms/tree-data-atom.ts";
 import clsx from "clsx";
-import EmojiPicker from "@/components/ui/emoji-picker.tsx";
 import { useTreeMutation, isTreeMoveInProgress } from "@/features/page/tree/hooks/use-tree-mutation.ts";
 import {
   appendNodeChildren,
   buildTree,
   buildTreeWithChildren,
   mergeRootTrees,
-  updateTreeNodeIcon,
 } from "@/features/page/tree/utils/utils.ts";
 import { SpaceTreeNode } from "@/features/page/tree/types.ts";
 import {
@@ -306,10 +303,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
 
 function Node({ node, style, dragHandle, tree }: NodeRendererProps<any>) {
   const { t } = useTranslation();
-  const updatePageMutation = useUpdatePageMutation();
-  const [treeData, setTreeData] = useAtom(treeDataAtom);
   const [, appendChildren] = useAtom(appendNodeChildrenAtom);
-  const emit = useQueryEmit();
   const { spaceSlug } = useParams();
   const timerRef = useRef(null);
   const [mobileSidebarOpened] = useAtom(mobileSidebarAtom);
@@ -363,48 +357,6 @@ function Node({ node, style, dragHandle, tree }: NodeRendererProps<any>) {
     }
   }
 
-  const handleUpdateNodeIcon = (nodeId: string, newIcon: string) => {
-    const updatedTree = updateTreeNodeIcon(treeData, nodeId, newIcon);
-    setTreeData(updatedTree);
-  };
-
-  const handleEmojiIconClick = (e: any) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleEmojiSelect = (emoji: { native: string }) => {
-    handleUpdateNodeIcon(node.id, emoji.native);
-    updatePageMutation
-      .mutateAsync({ pageId: node.id, icon: emoji.native })
-      .then((data) => {
-        setTimeout(() => {
-          emit({
-            operation: "updateOne",
-            spaceId: node.data.spaceId,
-            entity: ["pages"],
-            id: node.id,
-            payload: { icon: emoji.native, parentPageId: data.parentPageId },
-          });
-        }, 50);
-      });
-  };
-
-  const handleRemoveEmoji = () => {
-    handleUpdateNodeIcon(node.id, null);
-    updatePageMutation.mutateAsync({ pageId: node.id, icon: null });
-
-    setTimeout(() => {
-      emit({
-        operation: "updateOne",
-        spaceId: node.data.spaceId,
-        entity: ["pages"],
-        id: node.id,
-        payload: { icon: null },
-      });
-    }, 50);
-  };
-
   if (
     node.willReceiveDrop &&
     node.isClosed &&
@@ -443,23 +395,6 @@ function Node({ node, style, dragHandle, tree }: NodeRendererProps<any>) {
         onMouseLeave={cancelPagePrefetch}
       >
         <PageArrow node={node} onExpandTree={() => handleLoadChildren(node)} />
-
-        <div onClick={handleEmojiIconClick} style={{ marginRight: "4px" }}>
-          <EmojiPicker
-            onEmojiSelect={handleEmojiSelect}
-            icon={
-              node.data.icon ? (
-                node.data.icon
-              ) : (
-                <IconFileDescription size="18" />
-              )
-            }
-            readOnly={
-              tree.props.disableEdit === true || node.data.canEdit === false
-            }
-            removeEmojiAction={handleRemoveEmoji}
-          />
-        </div>
 
         <span className={classes.text}>{node.data.name || t("untitled")}</span>
 
