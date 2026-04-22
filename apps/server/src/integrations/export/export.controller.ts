@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ExportService } from './export.service';
 import { ExportPageDto, ExportSpaceDto } from './dto/export-dto';
+import { PageIdDto } from '../../core/page/dto/page.dto';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { User } from '@docmost/db/types/entity.types';
 import SpaceAbilityFactory from '../../core/casl/abilities/space-ability.factory';
@@ -106,6 +107,33 @@ export class ExportController {
 
       res.send(result.stream);
     }
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('pages/markdown')
+  async exportPageAsMarkdown(
+    @Body() dto: PageIdDto,
+    @AuthUser() user: User,
+    @Res() res: FastifyReply,
+  ) {
+    const page = await this.pageRepo.findById(dto.pageId);
+
+    if (!page || page.deletedAt) {
+      throw new NotFoundException('Page not found');
+    }
+
+    await this.pageAccessService.validateCanView(page, user);
+
+    const markdownContent = await this.exportService.exportPageAsMarkdown(
+      dto.pageId,
+    );
+
+    res.headers({
+      'Content-Type': 'text/markdown; charset=utf-8',
+    });
+
+    res.send(markdownContent);
   }
 
   @UseGuards(JwtAuthGuard)
