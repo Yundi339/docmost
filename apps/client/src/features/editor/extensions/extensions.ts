@@ -52,6 +52,7 @@ import {
   Columns,
   Column,
   Status,
+  MoveBlock,
 } from "@docmost/editor-ext";
 import {
   randomElement,
@@ -310,6 +311,7 @@ export const mainExtensions = [
     },
   }),
   Selection,
+  MoveBlock,
   Attachment.configure({
     view: AttachmentView,
   }),

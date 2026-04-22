@@ -30,4 +30,5 @@ export * from "./lib/columns";
 export * from "./lib/status";
 export * from "./lib/pdf";
 export * from "./lib/resizable-nodeview";
+export * from "./lib/move-block";
 
