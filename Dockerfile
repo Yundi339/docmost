@@ -15,7 +15,7 @@ RUN pnpm build
 FROM base AS installer
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl bash \
+  && apt-get install -y --no-install-recommends curl bash gosu \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -47,6 +47,12 @@ RUN mkdir -p /app/data/storage
 
 VOLUME ["/app/data/storage"]
 
+# Entrypoint runs as root to fix bind-mount ownership, then drops to node via gosu
+USER root
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 3000
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["pnpm", "start"]
