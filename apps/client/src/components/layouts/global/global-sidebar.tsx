@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ScrollArea, Text, Divider, Modal } from "@mantine/core";
 import {
   IconHome,
@@ -34,13 +34,24 @@ export default function GlobalSidebar() {
   const [mobileSidebarOpened] = useAtom(mobileSidebarAtom);
   const toggleMobileSidebar = useToggleSidebar(mobileSidebarAtom);
   const { data: favoriteSpacesData, isPending: isFavoritesPending } = useFavoritesQuery("space");
-  const favoriteSpaces = favoriteSpacesData?.pages.flatMap((p) => p.items) ?? [];
-  const sortedFavoriteSpaces = [...favoriteSpaces]
-    .filter((fav) => fav.space)
-    .sort((a, b) => {
-      const cmp = (a.space!.name ?? "").localeCompare(b.space!.name ?? "", undefined, { sensitivity: "base" });
-      return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
-    });
+  const favoriteSpaces = useMemo(
+    () => favoriteSpacesData?.pages.flatMap((p) => p.items) ?? [],
+    [favoriteSpacesData],
+  );
+  const sortedFavoriteSpaces = useMemo(
+    () =>
+      [...favoriteSpaces]
+        .filter((fav) => fav.space)
+        .sort((a, b) => {
+          const cmp = (a.space!.name ?? "").localeCompare(
+            b.space!.name ?? "",
+            undefined,
+            { sensitivity: "base" },
+          );
+          return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+        }),
+    [favoriteSpaces],
+  );
   const [inviteOpened, { open: openInvite, close: closeInvite }] =
     useDisclosure(false);
 
