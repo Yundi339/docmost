@@ -339,7 +339,8 @@ export class AttachmentController {
       return res.send(fileResponse);
     } catch (err: any) {
       this.logger.error(err);
-      throw new BadRequestException('Error processing file upload.');
+      const detail = err?.message ? `: ${err.message}` : '';
+      throw new BadRequestException(`Error processing file upload${detail}`);
     }
   }
 
