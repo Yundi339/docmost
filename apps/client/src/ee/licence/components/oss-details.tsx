@@ -71,31 +71,7 @@ export default function OssDetails() {
         </List>
 
         <Text size="sm" c="dimmed">
-          {t("Get an enterprise trial key at")}{" "}
-          <a
-            href="https://customers.docmost.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            customers.docmost.com
-          </a>
-          .
-        </Text>
-
-        <Text size="sm" c="dimmed">
-          {t("Visit")}{" "}
-          <a
-            href="https://docmost.com/pricing"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            docmost.com/pricing
-          </a>{" "}
-          {t("to purchase an enterprise license.")}
-        </Text>
-        <Text size="sm" c="dimmed">
-          {t("For inquiries, contact")}{" "}
-          <a href="mailto:sales@docmost.com">sales@docmost.com</a>
+          {t("Contact your administrator to enable enterprise features.")}
         </Text>
       </Stack>
     </Stack>

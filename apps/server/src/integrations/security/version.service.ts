@@ -24,7 +24,7 @@ export class VersionService {
     return {
       currentVersion,
       latestVersion,
-      releaseUrl: 'https://github.com/Yundi339/docmost/releases',
+      releaseUrl: '',
     };
   }
 }

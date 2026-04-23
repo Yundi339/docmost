@@ -56,12 +56,7 @@ export default function WorkspaceApiKeys() {
       <SettingsTitle title={t("API management")} />
 
       <Text size="sm" c="dimmed" mb="md">
-        <Trans
-          i18nKey="Manage API keys for all users in the workspace. View the <anchor>API documentation</anchor> for usage details."
-          components={{
-            anchor: <Anchor href="https://docmost.com/api-docs" target="_blank" size="sm" />,
-          }}
-        />
+        {t("Manage API keys for all users in the workspace.")}
       </Text>
 
       <RestrictApiToAdmins />
