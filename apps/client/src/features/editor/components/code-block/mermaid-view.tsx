@@ -29,9 +29,11 @@ export default function MermaidView({ props }: MermaidViewProps) {
   }, [computedColorScheme]);
 
   // Re-render the diagram whenever the node content or theme changes.
+  // Debounced to avoid expensive re-renders on every keystroke while editing.
   useEffect(() => {
-    const id = `mermaid-${uuidv4()}`;
-    if (node.textContent.length > 0) {
+    if (node.textContent.length === 0) return;
+    const timer = setTimeout(() => {
+      const id = `mermaid-${uuidv4()}`;
       mermaid
         .render(id, node.textContent)
         .then((item) => {
@@ -50,7 +52,8 @@ export default function MermaidView({ props }: MermaidViewProps) {
             );
           }
         });
-    }
+    }, 300);
+    return () => clearTimeout(timer);
   }, [node.textContent, computedColorScheme]);
 
   const svgContent = (

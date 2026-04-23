@@ -243,7 +243,7 @@ export function useGetSidebarPagesQuery(
   data: SidebarPagesParams | null,
 ): UseInfiniteQueryResult<InfiniteData<IPagination<IPage>, unknown>> {
   return useInfiniteQuery({
-    queryKey: ["sidebar-pages", data],
+    queryKey: ["sidebar-pages", data?.pageId, data?.spaceId],
     enabled: !!data?.pageId || !!data?.spaceId,
     queryFn: ({ pageParam }) => getSidebarPages({ ...data, cursor: pageParam, limit: 100 }),
     initialPageParam: undefined,

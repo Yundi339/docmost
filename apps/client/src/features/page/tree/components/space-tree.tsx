@@ -140,6 +140,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
     }
   }, [hasNextPage, fetchNextPage, isFetching, spaceId]);
 
+  const pagesCount = pagesData?.pages?.length ?? 0;
   useEffect(() => {
     if (pagesData?.pages && !hasNextPage) {
       const allItems = pagesData.pages.flatMap((page) => page.items);
@@ -160,7 +161,8 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
         return merged;
       });
     }
-  }, [pagesData, hasNextPage, spaceId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagesCount, hasNextPage, spaceId]);
 
   // Restore persisted open state after tree data loads
   const hasRestoredOpenState = useRef(false);

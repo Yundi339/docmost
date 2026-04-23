@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActionIcon, Tooltip, Text } from "@mantine/core";
 import {
   IconMinus,
@@ -48,19 +48,27 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
   const applyTransform = useCallback(() => {
-    if (contentRef.current) {
-      contentRef.current.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    // Apply transform directly to the SVG element (not the wrapper), so its
+    // layout is independent of parent max-width/flex constraints.
+    const svg = contentRef.current?.querySelector(
+      "svg",
+    ) as SVGSVGElement | null;
+    if (svg) {
+      svg.style.transformOrigin = "0 0";
+      svg.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
     }
   }, [scale, offsetX, offsetY]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyTransform();
   }, [applyTransform]);
 
-  // Auto-fit SVG to viewport after initial mount / when children (SVG) render
+  // Auto-fit SVG to viewport after initial mount / when children (SVG) render.
+  // useLayoutEffect so the initial fit is computed before the browser paints,
+  // avoiding a flash of unscaled SVG.
   const didAutoFitRef = useRef(false);
   const userZoomedRef = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const viewport = viewportRef.current;
     const content = contentRef.current;
     if (!viewport || !content) return;
@@ -72,21 +80,32 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
         if (attempt < 20) setTimeout(() => tryFit(attempt + 1), 50);
         return;
       }
+      // Strip mermaid's inline max-width/height so the SVG renders at its
+      // natural (viewBox) size. Transform is applied directly on the SVG.
+      svg.style.maxWidth = "none";
+      svg.style.height = "auto";
+      // Clear any existing transform for clean measurement
+      const prevTransform = svg.style.transform;
+      svg.style.transform = "none";
       const vpRect = viewport.getBoundingClientRect();
       const svgRect = svg.getBoundingClientRect();
-      // Compute natural (unscaled) size from current scale
-      const currentScale = didAutoFitRef.current ? scale : 1;
-      const svgW = svgRect.width / currentScale;
-      const svgH = svgRect.height / currentScale;
+      const svgW = svgRect.width;
+      const svgH = svgRect.height;
       if (!svgW || !svgH || !vpRect.width || !vpRect.height) {
+        svg.style.transform = prevTransform;
         if (attempt < 20) setTimeout(() => tryFit(attempt + 1), 50);
         return;
       }
       const fit = Math.min(vpRect.width / svgW, vpRect.height / svgH);
-      const newScale = clampScale(Math.max(1, fit));
+      const newScale = clampScale(fit);
+      const newOx = (vpRect.width - svgW * newScale) / 2;
+      const newOy = (vpRect.height - svgH * newScale) / 2;
+      // Apply transform synchronously so the user never sees the unscaled SVG
+      svg.style.transformOrigin = "0 0";
+      svg.style.transform = `translate(${newOx}px, ${newOy}px) scale(${newScale})`;
       setScale(newScale);
-      setOffsetX((vpRect.width / 2) * (1 - newScale));
-      setOffsetY((vpRect.height - svgH * newScale) / 2);
+      setOffsetX(newOx);
+      setOffsetY(newOy);
       didAutoFitRef.current = true;
     };
     tryFit();
@@ -98,9 +117,41 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
       tryFit();
     });
     ro.observe(viewport);
+
+    // Watch for SVG replacements (mermaid re-renders the SVG via
+    // dangerouslySetInnerHTML on content changes, which resets inline
+    // max-width and breaks our fit). Observe the direct wrapper of the SVG
+    // for childList changes; re-fetch the wrapper each time because it
+    // may not exist at the moment this effect runs.
+    const mo = new MutationObserver(() => {
+      if (userZoomedRef.current) return;
+      didAutoFitRef.current = false;
+      tryFit();
+    });
+    const attachMo = () => {
+      const svg = content.querySelector("svg");
+      const wrapper = svg?.parentElement;
+      if (wrapper) {
+        mo.observe(wrapper, { childList: true });
+        // Run fit once the wrapper exists (in case tryFit missed it during
+        // its polling window).
+        if (!didAutoFitRef.current) tryFit();
+        return true;
+      }
+      return false;
+    };
+    if (!attachMo()) {
+      // Retry until SVG is present, then attach observer
+      const t = setInterval(() => {
+        if (attachMo()) clearInterval(t);
+      }, 100);
+      setTimeout(() => clearInterval(t), 3000);
+    }
+
     return () => {
       cancelled = true;
       ro.disconnect();
+      mo.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -308,17 +359,21 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
       setOffsetY(0);
       return;
     }
+    svg.style.maxWidth = "none";
+    svg.style.height = "auto";
+    const prev = svg.style.transform;
+    svg.style.transform = "none";
     const vpRect = viewport.getBoundingClientRect();
-    // Use rendered size divided by current scale to get the unscaled natural size
     const svgRect = svg.getBoundingClientRect();
-    const svgW = svgRect.width / scale;
-    const svgH = svgRect.height / scale;
+    svg.style.transform = prev;
+    const svgW = svgRect.width;
+    const svgH = svgRect.height;
     const fit = Math.min(vpRect.width / svgW, vpRect.height / svgH);
     const newScale = clampScale(fit);
     setScale(newScale);
-    setOffsetX((vpRect.width / 2) * (1 - newScale));
+    setOffsetX((vpRect.width - svgW * newScale) / 2);
     setOffsetY((vpRect.height - svgH * newScale) / 2);
-  }, [scale]);
+  }, []);
 
   // Fullscreen – use CSS-only approach (position:fixed) for reliability on mobile
   const toggleFullscreen = useCallback(() => {
