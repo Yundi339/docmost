@@ -1072,6 +1072,7 @@
   "Toggle MFA enforcement": "MFA 강제 설정 전환",
   "Toggle allow members to create templates": "멤버 템플릿 생성 허용 전환",
   "Toggle block": "토글 블록",
+  "Toggle color scheme": "색상 테마 전환",
   "Toggle full page width": "전체 페이지 너비 전환",
   "Toggle generative AI": "생성 AI 토글",
   "Toggle header cell": "헤더 셀 전환",

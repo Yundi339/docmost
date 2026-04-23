@@ -20,7 +20,8 @@ import {
 import { AttachmentService } from './services/attachment.service';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { FileInterceptor } from '../../common/interceptors/file.interceptor';
-import bytes from 'bytes';
+// @ts-ignore - bytes is a CJS module; default import is undefined at runtime
+import * as bytes from 'bytes';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';

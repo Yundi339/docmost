@@ -1074,6 +1074,7 @@
   "Toggle MFA enforcement": "切换 MFA 强制执行",
   "Toggle allow members to create templates": "切换允许成员创建模板",
   "Toggle block": "折叠块",
+  "Toggle color scheme": "切换颜色主题",
   "Toggle full page width": "切换整页宽度",
   "Toggle generative AI": "切换生成型AI",
   "Toggle header cell": "切换表头单元格",

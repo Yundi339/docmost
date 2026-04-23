@@ -20,7 +20,8 @@ import {
   SpaceCaslSubject,
 } from '../../core/casl/interfaces/space-ability.type';
 import { FileInterceptor } from '../../common/interceptors/file.interceptor';
-import bytes from 'bytes';
+// @ts-ignore - bytes is a CJS module; default import is undefined at runtime
+import * as bytes from 'bytes';
 import * as path from 'path';
 import { ImportService } from './services/import.service';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';

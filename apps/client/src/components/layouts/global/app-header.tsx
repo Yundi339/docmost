@@ -34,6 +34,7 @@ import {
 } from "@/features/search/constants.ts";
 import { NotificationPopover } from "@/features/notification/components/notification-popover.tsx";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
+import { ThemeToggle } from "@/components/theme-toggle.tsx";
 
 const links = [
   { link: APP_ROUTE.HOME, label: "Home" },
@@ -162,6 +163,7 @@ export function AppHeader() {
             </>
           )}
           <NotificationPopover />
+          <ThemeToggle />
           {isCloud() && isTrial && trialDaysLeft !== 0 && (
             <Badge
               variant="light"

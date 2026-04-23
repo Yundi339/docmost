@@ -10,12 +10,30 @@ import { useTranslation } from "react-i18next";
 import React from "react";
 import { EmptyState } from "@/components/ui/empty-state.tsx";
 import { IconAlertTriangle, IconFileOff } from "@tabler/icons-react";
-import { Button } from "@mantine/core";
+import { Button, Container, Skeleton, Stack } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { ErrorBoundary } from "react-error-boundary";
 const MemoizedFullEditor = React.memo(FullEditor);
 const MemoizedPageHeader = React.memo(PageHeader);
 const MemoizedHistoryModal = React.memo(HistoryModal);
+
+function PageLoadingSkeleton() {
+  return (
+    <Container size={900} mt="xl">
+      <Stack gap="md">
+        <Skeleton height={48} width="60%" radius="sm" />
+        <Skeleton height={18} width="40%" radius="sm" />
+        <Skeleton height={12} mt="xl" radius="sm" />
+        <Skeleton height={12} radius="sm" />
+        <Skeleton height={12} width="85%" radius="sm" />
+        <Skeleton height={12} width="70%" radius="sm" />
+        <Skeleton height={12} mt="md" radius="sm" />
+        <Skeleton height={12} width="90%" radius="sm" />
+        <Skeleton height={12} width="75%" radius="sm" />
+      </Stack>
+    </Container>
+  );
+}
 
 export default function Page() {
   const { t } = useTranslation();
@@ -59,7 +77,7 @@ function PageContent({ pageSlug }: { pageSlug: string | undefined }) {
     (space?.settings?.comments?.allowViewerComments === true);
 
   if (isLoading) {
-    return <></>;
+    return <PageLoadingSkeleton />;
   }
 
   if (isError || !page) {
@@ -88,7 +106,7 @@ function PageContent({ pageSlug }: { pageSlug: string | undefined }) {
   }
 
   if (!space) {
-    return <></>;
+    return <PageLoadingSkeleton />;
   }
 
   return (

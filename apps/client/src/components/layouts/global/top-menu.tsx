@@ -3,18 +3,12 @@ import {
   Menu,
   Text,
   UnstyledButton,
-  useMantineColorScheme,
 } from "@mantine/core";
 import {
-  IconBrightnessFilled,
   IconBrush,
-  IconCheck,
   IconChevronDown,
-  IconDeviceDesktop,
   IconLogout,
-  IconMoon,
   IconSettings,
-  IconSun,
   IconUserCircle,
   IconUsers,
 } from "@tabler/icons-react";
@@ -31,7 +25,6 @@ export default function TopMenu() {
   const { t } = useTranslation();
   const [currentUser] = useAtom(currentUserAtom);
   const { logout } = useAuth();
-  const { colorScheme, setColorScheme } = useMantineColorScheme();
 
   const user = currentUser?.user;
   const workspace = currentUser?.workspace;
@@ -114,44 +107,6 @@ export default function TopMenu() {
         >
           {t("My preferences")}
         </Menu.Item>
-
-        <Menu.Sub>
-          <Menu.Sub.Target>
-            <Menu.Sub.Item leftSection={<IconBrightnessFilled size={16} />}>
-              {t("Theme")}
-            </Menu.Sub.Item>
-          </Menu.Sub.Target>
-
-          <Menu.Sub.Dropdown>
-            <Menu.Item
-              onClick={() => setColorScheme("light")}
-              leftSection={<IconSun size={16} />}
-              rightSection={
-                colorScheme === "light" ? <IconCheck size={16} /> : null
-              }
-            >
-              {t("Light")}
-            </Menu.Item>
-            <Menu.Item
-              onClick={() => setColorScheme("dark")}
-              leftSection={<IconMoon size={16} />}
-              rightSection={
-                colorScheme === "dark" ? <IconCheck size={16} /> : null
-              }
-            >
-              {t("Dark")}
-            </Menu.Item>
-            <Menu.Item
-              onClick={() => setColorScheme("auto")}
-              leftSection={<IconDeviceDesktop size={16} />}
-              rightSection={
-                colorScheme === "auto" ? <IconCheck size={16} /> : null
-              }
-            >
-              {t("System settings")}
-            </Menu.Item>
-          </Menu.Sub.Dropdown>
-        </Menu.Sub>
 
         <Menu.Divider />
 
