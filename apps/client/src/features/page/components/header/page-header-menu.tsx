@@ -1,7 +1,9 @@
-import { ActionIcon, Group, Menu, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Group, Menu, Slider, Text, Tooltip } from "@mantine/core";
 import {
   IconArrowRight,
   IconArrowsHorizontal,
+  IconAlignLeft,
+  IconAlignCenter,
   IconDots,
   IconEye,
   IconEyeOff,
@@ -32,6 +34,12 @@ import { extractPageSlugId } from "@/lib";
 import { treeApiAtom } from "@/features/page/tree/atoms/tree-api-atom.ts";
 import { useDeletePageModal } from "@/features/page/hooks/use-delete-page-modal.tsx";
 import { PageWidthToggle } from "@/features/user/components/page-width-pref.tsx";
+import {
+  pageMaxWidthAtom,
+  pageAlignAtom,
+  PAGE_WIDTH_MAX,
+  PAGE_WIDTH_MIN,
+} from "@/features/user/atoms/page-width-atom.ts";
 import { Trans, useTranslation } from "react-i18next";
 import ExportModal from "@/components/common/export-modal";
 import { htmlToMarkdown } from "@docmost/editor-ext";
@@ -65,6 +73,7 @@ interface PageHeaderMenuProps {
 export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
   const { t } = useTranslation();
   const toggleAside = useToggleAside();
+  const [pageAlign, setPageAlign] = useAtom(pageAlignAtom);
 
   useHotkeys(
     [
@@ -115,6 +124,26 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
         </ActionIcon>
       </Tooltip>
 
+      <Tooltip
+        label={pageAlign === "left" ? t("Center page") : t("Align page left")}
+        openDelay={250}
+        withArrow
+      >
+        <ActionIcon
+          variant="subtle"
+          color="dark"
+          onClick={() =>
+            setPageAlign(pageAlign === "left" ? "center" : "left")
+          }
+        >
+          {pageAlign === "left" ? (
+            <IconAlignCenter size={20} stroke={2} />
+          ) : (
+            <IconAlignLeft size={20} stroke={2} />
+          )}
+        </ActionIcon>
+      </Tooltip>
+
       <PageActionMenu readOnly={readOnly} />
     </>
   );
@@ -144,6 +173,7 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
     { open: openVerificationModal, close: closeVerificationModal },
   ] = useDisclosure(false);
   const [pageEditor] = useAtom(pageEditorAtom);
+  const [pageMaxWidth, setPageMaxWidth] = useAtom(pageMaxWidthAtom);
   const pageUpdatedAt = useTimeAgo(page?.updatedAt);
   const favoriteIds = useFavoriteIds("page", page?.spaceId);
   const addFavoriteMutation = useAddFavoriteMutation();
@@ -260,6 +290,23 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
             <Group wrap="nowrap">
               <PageWidthToggle label={t("Full width")} />
             </Group>
+          </Menu.Item>
+
+          <Menu.Item
+            closeMenuOnClick={false}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text size="sm" mb={4}>
+              {t("Page width")}: {pageMaxWidth}px
+            </Text>
+            <Slider
+              min={PAGE_WIDTH_MIN}
+              max={PAGE_WIDTH_MAX}
+              step={50}
+              value={pageMaxWidth}
+              onChange={setPageMaxWidth}
+              label={(v) => `${v}px`}
+            />
           </Menu.Item>
 
           <Menu.Item

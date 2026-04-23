@@ -57,6 +57,54 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     applyTransform();
   }, [applyTransform]);
 
+  // Auto-fit SVG to viewport after initial mount / when children (SVG) render
+  const didAutoFitRef = useRef(false);
+  const userZoomedRef = useRef(false);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) return;
+    let cancelled = false;
+    const tryFit = (attempt = 0) => {
+      if (cancelled) return;
+      const svg = content.querySelector("svg") as SVGSVGElement | null;
+      if (!svg) {
+        if (attempt < 20) setTimeout(() => tryFit(attempt + 1), 50);
+        return;
+      }
+      const vpRect = viewport.getBoundingClientRect();
+      const svgRect = svg.getBoundingClientRect();
+      // Compute natural (unscaled) size from current scale
+      const currentScale = didAutoFitRef.current ? scale : 1;
+      const svgW = svgRect.width / currentScale;
+      const svgH = svgRect.height / currentScale;
+      if (!svgW || !svgH || !vpRect.width || !vpRect.height) {
+        if (attempt < 20) setTimeout(() => tryFit(attempt + 1), 50);
+        return;
+      }
+      const fit = Math.min(vpRect.width / svgW, vpRect.height / svgH);
+      const newScale = clampScale(Math.max(1, fit));
+      setScale(newScale);
+      setOffsetX((vpRect.width / 2) * (1 - newScale));
+      setOffsetY((vpRect.height - svgH * newScale) / 2);
+      didAutoFitRef.current = true;
+    };
+    tryFit();
+
+    // Re-fit when viewport size changes (e.g. page width slider), unless the
+    // user has manually zoomed.
+    const ro = new ResizeObserver(() => {
+      if (userZoomedRef.current) return;
+      tryFit();
+    });
+    ro.observe(viewport);
+    return () => {
+      cancelled = true;
+      ro.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Show "Click to zoom with scroll" hint when user scrolls without focus or Ctrl
   const flashHint = useCallback(() => {
     setShowHint(true);
@@ -99,6 +147,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
       const direction = e.deltaY < 0 ? 1 : -1;
       const newScale = clampScale(scale * (1 + direction * ZOOM_STEP));
 
+      userZoomedRef.current = true;
       setScale(newScale);
       setOffsetX(mouseX - worldX * newScale);
       setOffsetY(mouseY - worldY * newScale);
@@ -122,6 +171,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   useEffect(() => {
     if (!isDragging) return;
     const handleMouseMove = (e: MouseEvent) => {
+      userZoomedRef.current = true;
       setOffsetX(dragStartRef.current.offsetX + e.clientX - dragStartRef.current.x);
       setOffsetY(dragStartRef.current.offsetY + e.clientY - dragStartRef.current.y);
     };
@@ -196,12 +246,14 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
           touchRef.current;
         const worldX = (centerX - startOffsetX) / startScale;
         const worldY = (centerY - startOffsetY) / startScale;
+        userZoomedRef.current = true;
         setScale(newScale);
         setOffsetX(centerX - worldX * newScale);
         setOffsetY(centerY - worldY * newScale);
       } else if (e.touches.length === 1 && touchRef.current.isSingleFinger) {
         const dx = e.touches[0].clientX - touchRef.current.startX;
         const dy = e.touches[0].clientY - touchRef.current.startY;
+        userZoomedRef.current = true;
         setOffsetX(touchRef.current.startOffsetX + dx);
         setOffsetY(touchRef.current.startOffsetY + dy);
       }
@@ -231,6 +283,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
       const worldX = (cx - offsetX) / scale;
       const worldY = (cy - offsetY) / scale;
       const newScale = clampScale(scale * (1 + direction * ZOOM_STEP));
+      userZoomedRef.current = true;
       setScale(newScale);
       setOffsetX(cx - worldX * newScale);
       setOffsetY(cy - worldY * newScale);
@@ -239,10 +292,33 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   );
 
   const resetView = useCallback(() => {
-    setScale(1);
-    setOffsetX(0);
-    setOffsetY(0);
-  }, []);
+    userZoomedRef.current = false;
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) {
+      setScale(1);
+      setOffsetX(0);
+      setOffsetY(0);
+      return;
+    }
+    const svg = content.querySelector("svg") as SVGSVGElement | null;
+    if (!svg) {
+      setScale(1);
+      setOffsetX(0);
+      setOffsetY(0);
+      return;
+    }
+    const vpRect = viewport.getBoundingClientRect();
+    // Use rendered size divided by current scale to get the unscaled natural size
+    const svgRect = svg.getBoundingClientRect();
+    const svgW = svgRect.width / scale;
+    const svgH = svgRect.height / scale;
+    const fit = Math.min(vpRect.width / svgW, vpRect.height / svgH);
+    const newScale = clampScale(fit);
+    setScale(newScale);
+    setOffsetX((vpRect.width / 2) * (1 - newScale));
+    setOffsetY((vpRect.height - svgH * newScale) / 2);
+  }, [scale]);
 
   // Fullscreen – use CSS-only approach (position:fixed) for reliability on mobile
   const toggleFullscreen = useCallback(() => {

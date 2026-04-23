@@ -13,6 +13,10 @@ import {
 } from "@mantine/core";
 import { useAtom } from "jotai";
 import { userAtom } from "@/features/user/atoms/current-user-atom.ts";
+import {
+  pageMaxWidthAtom,
+  pageAlignAtom,
+} from "@/features/user/atoms/page-width-atom.ts";
 import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms.ts";
 import { PageEditMode } from "@/features/user/types/user.types.ts";
 import { CustomAvatar } from "@/components/ui/custom-avatar.tsx";
@@ -58,6 +62,8 @@ export function FullEditor({
 }: FullEditorProps) {
   const [user] = useAtom(userAtom);
   const fullPageWidth = user.settings?.preferences?.fullPageWidth;
+  const [pageMaxWidth] = useAtom(pageMaxWidthAtom);
+  const [pageAlign] = useAtom(pageAlignAtom);
   const [, setCurrentPageEditMode] = useAtom(currentPageEditModeAtom);
   const userPageEditMode =
     (user?.settings?.preferences?.pageEditMode as PageEditMode) ??
@@ -75,8 +81,13 @@ export function FullEditor({
   return (
     <Container
       fluid={fullPageWidth}
-      size={!fullPageWidth && 900}
+      size={!fullPageWidth && pageMaxWidth}
       className={classes.editor}
+      style={
+        !fullPageWidth && pageAlign === "left"
+          ? { marginLeft: 0, marginRight: "auto" }
+          : undefined
+      }
     >
       <MemoizedTitleEditor
         pageId={pageId}
