@@ -4,3 +4,6 @@ dist
 /data
 .env*
 .nx
+README*.md
+_doc/
+_env/

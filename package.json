@@ -1,6 +1,5 @@
 {
   "name": "docmost",
-  "homepage": "https://docmost.com",
   "version": "26.04.23.zako",
   "private": true,
   "scripts": {

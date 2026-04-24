@@ -1,25 +1,25 @@
 <div align="center">
     <h1><b>Docmost</b></h1>
     <p>
-        Open-source collaborative wiki and documentation software.<br />
+        开源协作 Wiki 与文档软件<br />
         <a href="README.zh-CN.md">中文</a> | <a href="README.md">English</a>
     </p>
 </div>
 
 ---
 
-## Features
+## 功能
 
-- Real-time collaboration
-- Diagrams (Draw.io, Excalidraw, Mermaid)
-- Spaces & permissions management
-- Groups and comments
-- Page history & search
-- File attachments
-- Embeds (Airtable, Loom, Miro and more)
-- Translations (10+ languages)
+- 实时多人协作
+- 图表支持（Draw.io、Excalidraw、Mermaid）
+- 空间与权限管理
+- 用户组与评论
+- 页面历史记录与全文搜索
+- 文件附件
+- 嵌入内容（Airtable、Loom、Miro 等）
+- 多语言界面（10+ 种语言）
 
-## Quick Start (Docker)
+## 快速启动（Docker）
 
 ```yaml
 services:
@@ -58,8 +58,7 @@ volumes:
   redis_data:
 ```
 
-## License
+## 许可证
 
-Docmost core is licensed under [AGPL 3.0](LICENSE).  
-Enterprise features are under the Docmost Enterprise license — see `packages/ee/License`.
-
+Docmost 核心代码基于 [AGPL 3.0](LICENSE) 开源。  
+企业版功能受 Docmost 企业许可证约束，详见 `packages/ee/License`。
