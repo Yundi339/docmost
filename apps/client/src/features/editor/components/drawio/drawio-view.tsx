@@ -10,7 +10,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { uploadFile } from "@/features/page/services/page-service.ts";
 import { useDisclosure } from "@mantine/hooks";
-import { getDrawioUrl } from "@/lib/config.ts";
+import { getDrawioUrl, isDrawioEnabled } from "@/lib/config.ts";
 import {
   DrawIoEmbed,
   DrawIoEmbedRef,
@@ -38,7 +38,7 @@ export default function DrawioView(props: NodeViewProps) {
   const [isSaving, setIsSaving] = useState(false);
 
   const handleOpen = async () => {
-    if (!editor.isEditable) {
+    if (!editor.isEditable || !isDrawioEnabled()) {
       return;
     }
     isDirtyRef.current = false;

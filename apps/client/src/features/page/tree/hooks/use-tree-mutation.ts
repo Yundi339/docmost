@@ -57,7 +57,7 @@ export function useTreeMutation<T>(spaceId: string) {
       throw new Error("Failed to create page");
     }
 
-    const data = {
+    const newNode = {
       id: createdPage.id,
       slugId: createdPage.slugId,
       name: "",
@@ -67,7 +67,7 @@ export function useTreeMutation<T>(spaceId: string) {
       children: [],
     } as any;
 
-    // Use a fresh deep clone to avoid directly mutating Jotai atom value
+    // Use a fresh deep clone of the tree to avoid directly mutating Jotai atom value
     const freshCreate = new SimpleTree<SpaceTreeNode>(structuredClone(data));
 
     let lastIndex: number;
@@ -79,7 +79,7 @@ export function useTreeMutation<T>(spaceId: string) {
     // to place the newly created node at the bottom
     index = lastIndex;
 
-    freshCreate.create({ parentId, index, data });
+    freshCreate.create({ parentId, index, data: newNode });
     setData(freshCreate.data);
 
     setTimeout(() => {
@@ -89,7 +89,7 @@ export function useTreeMutation<T>(spaceId: string) {
         payload: {
           parentId,
           index,
-          data,
+          data: newNode,
         },
       });
     }, 50);
@@ -100,7 +100,7 @@ export function useTreeMutation<T>(spaceId: string) {
       createdPage.title
     );
     navigate(pageUrl);
-    return data;
+    return newNode;
   };
 
   const onMove: MoveHandler<T> = async (args: {

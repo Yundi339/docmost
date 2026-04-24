@@ -38,6 +38,7 @@ import { uploadPdfAction } from "@/features/editor/components/pdf/upload-pdf-act
 import IconExcalidraw from "@/components/icons/icon-excalidraw";
 import IconMermaid from "@/components/icons/icon-mermaid";
 import IconDrawio from "@/components/icons/icon-drawio";
+import { isDrawioEnabled } from "@/lib/config.ts";
 import { IconColumns4 } from "@/components/icons/icon-columns-4";
 import { IconColumns5 } from "@/components/icons/icon-columns-5";
 import {
@@ -419,14 +420,14 @@ const CommandGroups: SlashMenuGroupedItemsType = {
           .insertContent("flowchart LR\n" + "    A --> B")
           .run(),
     },
-    {
+    ...(isDrawioEnabled() ? [{
       title: "Draw.io (diagrams.net)",
       description: "Insert and design Drawio diagrams",
       searchTerms: ["drawio", "diagrams", "charts", "uml", "whiteboard"],
       icon: IconDrawio,
       command: ({ editor, range }: CommandProps) =>
         editor.chain().focus().deleteRange(range).setDrawio().run(),
-    },
+    }] : []),
     {
       title: "Excalidraw (Whiteboard)",
       description: "Draw and sketch excalidraw diagrams",

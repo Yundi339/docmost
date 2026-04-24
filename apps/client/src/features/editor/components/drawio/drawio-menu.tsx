@@ -25,7 +25,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import { getDrawioUrl, getFileUrl } from "@/lib/config.ts";
+import { getDrawioUrl, getFileUrl, isDrawioEnabled } from "@/lib/config.ts";
 import { uploadFile } from "@/features/page/services/page-service.ts";
 import {
   DrawIoEmbed,
@@ -315,6 +315,7 @@ export function DrawioMenu({ editor }: EditorMenuProps) {
               aria-label={t("Edit")}
               variant="subtle"
               loading={isLoading}
+              disabled={!isDrawioEnabled()}
             >
               <IconEdit size={18} />
             </ActionIcon>
