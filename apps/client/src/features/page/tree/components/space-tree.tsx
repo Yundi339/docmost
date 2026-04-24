@@ -287,6 +287,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
           className={classes.tree}
           rowClassName={classes.row}
           rowHeight={30}
+          paddingBottom={80}
           overscanCount={10}
           dndRootElement={rootElement.current}
           onToggle={() => {
