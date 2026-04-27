@@ -52,18 +52,28 @@ export const CustomCodeBlock = CodeBlock.extend<CodeBlockLowlightOptions>({
       "Mod-a": () => {
         if (this.editor.isActive("codeBlock")) {
           const { state } = this.editor;
-          const { $from } = state.selection;
+          const { selection } = state;
+          const { $from } = selection;
 
           let codeBlockNode = null;
           let codeBlockPos = null;
-          let depth = 0;
 
-          for (depth = $from.depth; depth > 0; depth--) {
-            const node = $from.node(depth);
-            if (node.type.name === "codeBlock") {
-              codeBlockNode = node;
-              codeBlockPos = $from.start(depth) - 1;
-              break;
+          // Handle NodeSelection (e.g. when the mermaid block is clicked and
+          // selected as a whole node) — in that case $from points to the
+          // position *before* the codeBlock, so walking up via $from.node()
+          // would not find it.
+          const selectedNode = (selection as any).node;
+          if (selectedNode && selectedNode.type.name === "codeBlock") {
+            codeBlockNode = selectedNode;
+            codeBlockPos = $from.pos;
+          } else {
+            for (let depth = $from.depth; depth > 0; depth--) {
+              const node = $from.node(depth);
+              if (node.type.name === "codeBlock") {
+                codeBlockNode = node;
+                codeBlockPos = $from.start(depth) - 1;
+                break;
+              }
             }
           }
 
