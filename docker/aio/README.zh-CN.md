@@ -85,6 +85,35 @@ docker build -f docker/aio/Dockerfile -t docmost-aio:local .
 IMAGE=docmost-aio:local ./scripts/docmost-aio-run.sh
 ```
 
+## 混合模式（外部 PostgreSQL / Redis）
+
+容器默认会同时启动内置的 PG + Redis。如果你想复用外部数据库 / 缓存
+（例如已有 RDS / Elasticache / 自建集群），直接传入和原版 docmost 一致的环境变量即可：
+
+| 变量              | 行为                                           |
+| ----------------- | ---------------------------------------------- |
+| `DATABASE_URL`    | 设置后**不**启动内置 PG，应用直接连这个 URL    |
+| `REDIS_URL`       | 设置后**不**启动内置 Redis，应用直接连这个 URL |
+
+示例（外部 PG，内置 Redis）：
+
+```bash
+docker run -d --name docmost \
+  --restart unless-stopped --stop-timeout 120 \
+  -p 3000:3000 -v docmost-aio-data:/app/data \
+  -e APP_URL=https://docs.example.com \
+  -e DATABASE_URL='postgresql://user:pass@db.example.com:5432/docmost?sslmode=require' \
+  ghcr.io/<owner>/docmost-aio:<tag>
+```
+
+两个都用外部时，AIO 镜像就退化为普通的 Docmost 容器（多了一层 supervisord，但只跑 docmost 进程），方便从 AIO 单容器渐进迁移到分体部署，无需切换镜像。
+
+## 数据持久化与升级
+
+- `docker rm` 只删容器，**不**删命名卷 → 数据完整保留。
+- 升级新镜像：`docker stop -t 120 docmost && docker rm docmost && docker pull ... && docker run ... -v docmost-aio-data:/app/data ...`，应用迁移会在启动时自动跑。
+- AIO 镜像内 PostgreSQL 主版本固定为 **15**。如果未来 AIO 升级到 PG 16+，需要走 `pg_upgrade` 或 dump/restore；届时会在 release notes 中说明。
+
 ## 通过 GitHub Actions 构建
 
 使用 **AIO (All-in-One) Image** 工作流（手动 dispatch）。可选输入：

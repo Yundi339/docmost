@@ -76,6 +76,38 @@ docker build -f docker/aio/Dockerfile -t docmost-aio:local .
 IMAGE=docmost-aio:local ./scripts/docmost-aio-run.sh
 ```
 
+## Hybrid mode (external PostgreSQL / Redis)
+
+The container starts the bundled PG + Redis by default. If you want to keep the
+AIO image but reuse an external DB or cache (e.g. RDS, Elasticache, your own
+cluster), pass the same env vars the standard Docmost image accepts:
+
+| Variable        | Behavior                                                      |
+| --------------- | ------------------------------------------------------------- |
+| `DATABASE_URL`  | When set, bundled Postgres is **not** started; app uses this URL. |
+| `REDIS_URL`     | When set, bundled Redis is **not** started; app uses this URL. |
+
+Example (external PG, bundled Redis):
+
+```bash
+docker run -d --name docmost \
+  --restart unless-stopped --stop-timeout 120 \
+  -p 3000:3000 -v docmost-aio-data:/app/data \
+  -e APP_URL=https://docs.example.com \
+  -e DATABASE_URL='postgresql://user:pass@db.example.com:5432/docmost?sslmode=require' \
+  ghcr.io/<owner>/docmost-aio:<tag>
+```
+
+Setting both URLs degrades the AIO image to a plain Docmost container (only the
+docmost process runs under supervisord) — handy for migrating from single-box
+AIO to a split deployment without switching images.
+
+## Persistence and upgrades
+
+- `docker rm` only removes the container; the named volume keeps your data.
+- To upgrade: `docker stop -t 120 docmost && docker rm docmost && docker pull <new-tag> && docker run ... -v docmost-aio-data:/app/data <new-tag>`. App migrations run on startup.
+- The bundled PostgreSQL major version is pinned to **15**. A future bump (PG 16+) will require `pg_upgrade` or dump/restore and will be called out in the release notes.
+
 ## Building via GitHub Actions
 
 Use the **AIO (All-in-One) Image** workflow (manual dispatch). Inputs:

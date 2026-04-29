@@ -18,6 +18,7 @@ FROM node:22-slim AS runtime
 ARG POSTGRES_VERSION=15
 
 ENV DEBIAN_FRONTEND=noninteractive \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     PG_VERSION=${POSTGRES_VERSION} \
     PG_DATA=/app/data/postgres \
     PG_RUN=/var/run/postgresql \
@@ -62,7 +63,10 @@ RUN mkdir -p "$DOCMOST_DATA" "$AIO_STATE_DIR" "$PG_RUN" "$PG_LOG" \
  && chown -R postgres:postgres "$PG_RUN" "$PG_LOG"
 
 # Bundled config / scripts
-COPY docker/aio/supervisord.conf /etc/supervisor/supervisord.conf
+COPY docker/aio/supervisord.base.conf /etc/supervisor/supervisord.base.conf
+COPY docker/aio/program-postgres.conf /etc/supervisor/program-postgres.conf
+COPY docker/aio/program-redis.conf /etc/supervisor/program-redis.conf
+COPY docker/aio/program-docmost.conf /etc/supervisor/program-docmost.conf
 COPY docker/aio/redis.conf /etc/redis/redis-aio.conf
 COPY docker/aio/entrypoint.sh /usr/local/bin/aio-entrypoint.sh
 COPY docker/aio/init-postgres.sh /usr/local/bin/aio-init-postgres.sh
