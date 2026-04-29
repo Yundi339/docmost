@@ -39,6 +39,7 @@ const Groups = lazy(() => import("@/pages/settings/group/groups"));
 const GroupInfo = lazy(() => import("./pages/settings/group/group-info"));
 const Spaces = lazy(() => import("@/pages/settings/space/spaces.tsx"));
 const Shares = lazy(() => import("@/pages/settings/shares/shares.tsx"));
+const SystemStatus = lazy(() => import("@/pages/settings/workspace/system-status"));
 
 // EE pages
 const Billing = lazy(() => import("@/ee/billing/pages/billing.tsx"));
@@ -132,6 +133,7 @@ export default function App() {
             <Route path={"ai/mcp"} element={<AiSettings />} />
             <Route path={"audit"} element={<AuditLogs />} />
             <Route path={"verifications"} element={<VerifiedPages />} />
+            <Route path={"system-status"} element={<SystemStatus />} />
             {!isCloud() && <Route path={"license"} element={<License />} />}
             {isCloud() && <Route path={"billing"} element={<Billing />} />}
           </Route>

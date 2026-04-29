@@ -1,6 +1,6 @@
 {
   "name": "docmost",
-  "version": "26.04.27.0",
+  "version": "26.04.29.0",
   "private": true,
   "scripts": {
     "build": "nx run-many -t build",

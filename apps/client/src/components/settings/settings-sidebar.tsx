@@ -15,6 +15,7 @@ import {
   IconSparkles,
   IconHistory,
   IconShieldCheck,
+  IconActivity,
 } from "@tabler/icons-react";
 import { Link, useLocation } from "react-router-dom";
 import classes from "./settings.module.css";
@@ -112,6 +113,12 @@ const groupedData: DataGroup[] = [
         label: "Audit log",
         icon: IconHistory,
         path: "/settings/audit",
+        role: "owner",
+      },
+      {
+        label: "System Status",
+        icon: IconActivity,
+        path: "/settings/system-status",
         role: "owner",
       },
     ],
