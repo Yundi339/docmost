@@ -11,6 +11,7 @@ import {
 } from "@/ee/licence/services/license-service.ts";
 import { ILicenseInfo } from "@/ee/licence/types/license.types.ts";
 import { notifications } from "@mantine/notifications";
+import { useTranslation } from "react-i18next";
 
 export function useLicenseInfo(): UseQueryResult<ILicenseInfo, Error> {
   return useQuery({
@@ -21,12 +22,13 @@ export function useLicenseInfo(): UseQueryResult<ILicenseInfo, Error> {
 }
 
 export function useActivateMutation() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   return useMutation<ILicenseInfo, Error, string>({
     mutationFn: (licenseKey) => activateLicense(licenseKey),
     onSuccess: () => {
-      notifications.show({ message: "License activated successfully" });
+      notifications.show({ message: t("License activated successfully") });
       queryClient.refetchQueries({
         queryKey: ["license"],
       });
