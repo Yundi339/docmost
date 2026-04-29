@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { usePageQuery } from "@/features/page/queries/page-query";
 import { FullEditor } from "@/features/editor/full-editor";
 import HistoryModal from "@/features/page-history/components/history-modal";
+import VisitorsModal from "@/features/page-visitors/components/visitors-modal";
 import { Helmet } from "react-helmet-async";
 import PageHeader from "@/features/page/components/header/page-header.tsx";
 import { extractPageSlugId } from "@/lib";
@@ -16,6 +17,7 @@ import { ErrorBoundary } from "react-error-boundary";
 const MemoizedFullEditor = React.memo(FullEditor);
 const MemoizedPageHeader = React.memo(PageHeader);
 const MemoizedHistoryModal = React.memo(HistoryModal);
+const MemoizedVisitorsModal = React.memo(VisitorsModal);
 
 function PageLoadingSkeleton() {
   return (
@@ -131,6 +133,7 @@ function PageContent({ pageSlug }: { pageSlug: string | undefined }) {
           canComment={canComment}
         />
         <MemoizedHistoryModal pageId={page.id} />
+        <MemoizedVisitorsModal pageId={page.id} />
       </div>
     )
   );

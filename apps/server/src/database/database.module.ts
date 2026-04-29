@@ -12,6 +12,7 @@ import { PageRepo } from './repos/page/page.repo';
 import { PagePermissionRepo } from './repos/page/page-permission.repo';
 import { CommentRepo } from './repos/comment/comment.repo';
 import { PageHistoryRepo } from './repos/page/page-history.repo';
+import { PageVisitorRepo } from './repos/page/page-visitor.repo';
 import { AttachmentRepo } from './repos/attachment/attachment.repo';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import * as process from 'node:process';
@@ -79,6 +80,7 @@ import { normalizePostgresUrl } from '../common/helpers';
     PageRepo,
     PagePermissionRepo,
     PageHistoryRepo,
+    PageVisitorRepo,
     CommentRepo,
     FavoriteRepo,
     AttachmentRepo,
@@ -103,6 +105,7 @@ import { normalizePostgresUrl } from '../common/helpers';
     PageRepo,
     PagePermissionRepo,
     PageHistoryRepo,
+    PageVisitorRepo,
     CommentRepo,
     FavoriteRepo,
     AttachmentRepo,

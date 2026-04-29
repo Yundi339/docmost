@@ -9,6 +9,7 @@ import {
   IconEyeOff,
   IconFileExport,
   IconHistory,
+  IconUsers,
   IconLink,
   IconList,
   IconMarkdown,
@@ -23,6 +24,7 @@ import React, { useEffect, useRef, useState } from "react";
 import useToggleAside from "@/hooks/use-toggle-aside.tsx";
 import { useAtom, useAtomValue } from "jotai";
 import { historyAtoms } from "@/features/page-history/atoms/history-atoms.ts";
+import { visitorsModalAtom } from "@/features/page-visitors/atoms/visitors-atoms.ts";
 import { useDisclosure, useHotkeys } from "@mantine/hooks";
 import { useClipboard } from "@/hooks/use-clipboard";
 import { useParams } from "react-router-dom";
@@ -66,6 +68,7 @@ import {
   useWatchPageMutation,
   useUnwatchPageMutation,
 } from "@/features/page/queries/watcher-query";
+import useUserRole from "@/hooks/use-user-role";
 
 interface PageHeaderMenuProps {
   readOnly?: boolean;
@@ -155,6 +158,7 @@ interface PageActionMenuProps {
 function PageActionMenu({ readOnly }: PageActionMenuProps) {
   const { t } = useTranslation();
   const [, setHistoryModalOpen] = useAtom(historyAtoms);
+  const [, setVisitorsModalOpen] = useAtom(visitorsModalAtom);
   const clipboard = useClipboard({ timeout: 500 });
   const { pageSlug, spaceSlug } = useParams();
   const { data: page, isLoading } = usePageQuery({
@@ -316,6 +320,10 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
             {t("Page history")}
           </Menu.Item>
 
+          <VisitorRecordsMenuItem
+            onClick={() => setVisitorsModalOpen(true)}
+          />
+
           {!readOnly && (
             <PageVerificationMenuItem
               pageId={page?.id}
@@ -419,6 +427,20 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
         onClose={closeVerificationModal}
       />
     </>
+  );
+}
+
+interface VisitorRecordsMenuItemProps {
+  onClick: () => void;
+}
+function VisitorRecordsMenuItem({ onClick }: VisitorRecordsMenuItemProps) {
+  const { t } = useTranslation();
+  const { isOwner } = useUserRole();
+  if (!isOwner) return null;
+  return (
+    <Menu.Item leftSection={<IconUsers size={16} />} onClick={onClick}>
+      {t("Visitor records")}
+    </Menu.Item>
   );
 }
 

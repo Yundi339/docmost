@@ -244,6 +244,16 @@ export interface PageHistory {
   workspaceId: string;
 }
 
+export interface PageVisitors {
+  id: Generated<string>;
+  pageId: string;
+  userId: string;
+  workspaceId: string;
+  firstVisitedAt: Generated<Timestamp>;
+  lastVisitedAt: Generated<Timestamp>;
+  visitCount: Generated<number>;
+}
+
 export interface Pages {
   content: Json | null;
   contributorIds: Generated<string[] | null>;
@@ -557,6 +567,7 @@ export interface DB {
   pageHistory: PageHistory;
   pageVerifications: PageVerifications;
   pageVerifiers: PageVerifiers;
+  pageVisitors: PageVisitors;
   pages: Pages;
   shares: Shares;
   spaceMembers: SpaceMembers;

@@ -22,6 +22,7 @@ import {
   PageInfoDto,
 } from './dto/page.dto';
 import { PageHistoryService } from './services/page-history.service';
+import { PageVisitorService } from './services/page-visitor.service';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -48,6 +49,7 @@ import {
   IAuditService,
 } from '../../integrations/audit/audit.service';
 import { getPageTitle } from '../../common/helpers';
+import { UserRole } from '../../common/helpers/types/permission';
 
 @UseGuards(JwtAuthGuard)
 @Controller('pages')
@@ -56,6 +58,7 @@ export class PageController {
     private readonly pageService: PageService,
     private readonly pageRepo: PageRepo,
     private readonly pageHistoryService: PageHistoryService,
+    private readonly pageVisitorService: PageVisitorService,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly pageAccessService: PageAccessService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
@@ -80,6 +83,14 @@ export class PageController {
       await this.pageAccessService.validateCanViewWithPermissions(page, user);
 
     const permissions = { canEdit, hasRestriction };
+
+    // Record the visit (fire-and-forget). Owner-only visitor list reads from
+    // this; failures here must never block page rendering.
+    void this.pageVisitorService.recordVisit({
+      pageId: page.id,
+      userId: user.id,
+      workspaceId: page.workspaceId,
+    });
 
     if (dto.format && dto.format !== 'json' && page.content) {
       const contentOutput =
@@ -422,6 +433,29 @@ export class PageController {
     await this.pageAccessService.validateCanView(page, user);
 
     return history;
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('/visitors')
+  async getPageVisitors(
+    @Body() dto: PageIdDto,
+    @Body() pagination: PaginationOptions,
+    @AuthUser() user: User,
+  ) {
+    // Workspace owner only — admins and regular members must not see this.
+    if (user.role !== UserRole.OWNER) {
+      throw new ForbiddenException();
+    }
+
+    const page = await this.pageRepo.findById(dto.pageId);
+    if (!page) {
+      throw new NotFoundException('Page not found');
+    }
+    if (page.workspaceId !== user.workspaceId) {
+      throw new ForbiddenException();
+    }
+
+    return this.pageVisitorService.listVisitors(page.id, pagination);
   }
 
   @HttpCode(HttpStatus.OK)

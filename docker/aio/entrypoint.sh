@@ -89,6 +89,37 @@ if [[ "$BUNDLE_POSTGRES" == "true" && ! -s "$PG_DATA/PG_VERSION" ]]; then
   /usr/local/bin/aio-init-postgres.sh
 fi
 
+# --- upgrade-safety check: PG major version must match the cluster on disk --
+# The image bundles PostgreSQL $PG_VERSION (currently 15). If a previous
+# container wrote data with a different major (e.g. user mounts a volume
+# initialised against a future PG 16 image), refuse to start instead of
+# letting Postgres corrupt or crash silently.
+if [[ "$BUNDLE_POSTGRES" == "true" && -s "$PG_DATA/PG_VERSION" ]]; then
+  CLUSTER_PG_VERSION="$(cat "$PG_DATA/PG_VERSION")"
+  if [[ "$CLUSTER_PG_VERSION" != "$PG_VERSION" ]]; then
+    cat >&2 <<EOF
+
+[aio-entrypoint] FATAL: PostgreSQL version mismatch.
+
+  Cluster on disk: PG ${CLUSTER_PG_VERSION}   (file: ${PG_DATA}/PG_VERSION)
+  Image bundles:   PG ${PG_VERSION}
+
+  This image cannot read a cluster initialised by a different major version.
+  Options to recover:
+
+    1. Use the matching docmost-aio tag that bundles PG ${CLUSTER_PG_VERSION}.
+    2. Dump from the old image and restore into this one:
+         docker run ... <old-image>  pg_dumpall > backup.sql
+         docker run ... <this-image>  psql < backup.sql
+    3. Run pg_upgrade against an out-of-band cluster.
+
+  Aborting startup to protect your data.
+
+EOF
+    exit 1
+  fi
+fi
+
 # Re-apply ownership across restarts
 if [[ "$BUNDLE_POSTGRES" == "true" ]]; then
   chown -R postgres:postgres "$PG_DATA" /var/run/postgresql /var/log/postgresql

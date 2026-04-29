@@ -15,6 +15,7 @@ import {
   Users,
   Workspaces,
   PageHistory as History,
+  PageVisitors,
   GroupUsers,
   SpaceMembers,
   WorkspaceInvitations,
@@ -98,6 +99,11 @@ export type UpdatablePage = Updateable<Omit<Pages, 'id'>>;
 export type PageHistory = Selectable<History>;
 export type InsertablePageHistory = Insertable<History>;
 export type UpdatablePageHistory = Updateable<Omit<History, 'id'>>;
+
+// PageVisitor
+export type PageVisitor = Selectable<PageVisitors>;
+export type InsertablePageVisitor = Insertable<PageVisitors>;
+export type UpdatablePageVisitor = Updateable<Omit<PageVisitors, 'id'>>;
 
 // Comment
 export type Comment = Selectable<Comments>;
