@@ -31,6 +31,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
   const dragStartRef = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
   const touchRef = useRef<{
@@ -404,8 +405,15 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     <div
       ref={wrapperRef}
       className={clsx(classes.wrapper, isFullscreen && classes.fullscreenContainer)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={classes.toolbar}>
+      <div
+        className={clsx(
+          classes.toolbar,
+          (isHovered || isFullscreen) && classes.toolbarVisible,
+        )}
+      >
         <Tooltip label={t("Zoom out")} position="bottom" withArrow>
           <ActionIcon
             variant="subtle"
