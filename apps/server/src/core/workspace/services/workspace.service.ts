@@ -578,6 +578,12 @@ export class WorkspaceService {
       throw new BadRequestException('Workspace member not found');
     }
 
+    // prevent users from changing their own role to avoid self lock-out
+    // (e.g. an OWNER demoting themselves to ADMIN with no way back)
+    if (authUser.id === user.id) {
+      throw new BadRequestException('You cannot change your own role');
+    }
+
     // prevent ADMIN from managing OWNER role
     if (
       (authUser.role === UserRole.ADMIN && newRole === UserRole.OWNER) ||

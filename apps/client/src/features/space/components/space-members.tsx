@@ -28,6 +28,8 @@ import { formatMemberCount } from "@/lib";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "@/components/common/search-input.tsx";
 import { AutoTooltipText } from "@/components/ui/auto-tooltip-text.tsx";
+import { useAtomValue } from "jotai";
+import { currentUserAtom } from "@/features/user/atoms/current-user-atom.ts";
 
 type MemberType = "user" | "group";
 
@@ -69,6 +71,8 @@ export default function SpaceMembersList({
 
   const removeSpaceMember = useRemoveSpaceMemberMutation();
   const changeSpaceMemberRoleMutation = useChangeSpaceMemberRoleMutation();
+  const currentUser = useAtomValue(currentUserAtom);
+  const currentUserId = currentUser?.user?.id;
 
   const handleRoleChange = async (
     memberId: string,
@@ -176,7 +180,8 @@ export default function SpaceMembersList({
                   </Table.Td>
 
                   <Table.Td>
-                    {readOnly ? (
+                    {readOnly ||
+                    (member.type === "user" && member.id === currentUserId) ? (
                       <Text fz="sm">
                         {t(getSpaceRoleLabel(member.role))}
                       </Text>

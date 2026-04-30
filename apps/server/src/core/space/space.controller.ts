@@ -259,6 +259,11 @@ export class SpaceController {
       throw new ForbiddenException();
     }
 
+    // prevent users from changing their own space role
+    if (dto.userId && dto.userId === user.id) {
+      throw new BadRequestException('You cannot change your own role');
+    }
+
     return this.spaceMemberService.updateSpaceMemberRole(dto, workspace.id);
   }
 

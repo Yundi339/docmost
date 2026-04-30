@@ -18,6 +18,8 @@ import { SearchInput } from "@/components/common/search-input.tsx";
 import NoTableResults from "@/components/common/no-table-results.tsx";
 import { usePaginateAndSearch } from "@/hooks/use-paginate-and-search.tsx";
 import MemberActionMenu from "@/features/workspace/components/members/components/members-action-menu.tsx";
+import { useAtomValue } from "jotai";
+import { currentUserAtom } from "@/features/user/atoms/current-user-atom.ts";
 
 export default function WorkspaceMembersTable() {
   const { t } = useTranslation();
@@ -29,6 +31,8 @@ export default function WorkspaceMembersTable() {
   });
   const changeMemberRoleMutation = useChangeMemberRoleMutation();
   const { isAdmin, isOwner } = useUserRole();
+  const currentUser = useAtomValue(currentUserAtom);
+  const currentUserId = currentUser?.user?.id;
 
   const assignableUserRoles = isOwner
     ? userRoleData
@@ -94,7 +98,7 @@ export default function WorkspaceMembersTable() {
                     )}
                   </Table.Td>
                   <Table.Td>
-                    {isAdmin ? (
+                    {isAdmin && user.id !== currentUserId ? (
                       <RoleSelectMenu
                         roles={assignableUserRoles}
                         roleName={getUserRoleLabel(user.role)}
@@ -107,7 +111,7 @@ export default function WorkspaceMembersTable() {
                     )}
                   </Table.Td>
                   <Table.Td>
-                    {isAdmin && (
+                    {isAdmin && user.id !== currentUserId && (
                       <MemberActionMenu
                         userId={user.id}
                         deactivatedAt={user.deactivatedAt}
