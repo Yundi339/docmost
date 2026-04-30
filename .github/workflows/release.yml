@@ -24,9 +24,31 @@ jobs:
           - platform: linux/amd64
             runner: ubuntu-latest
             suffix: amd64
+            variant: standard
+            dockerfile: Dockerfile
+            image: docmost/docmost
+            artifact_prefix: docmost
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
             suffix: arm64
+            variant: standard
+            dockerfile: Dockerfile
+            image: docmost/docmost
+            artifact_prefix: docmost
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            suffix: amd64
+            variant: aio
+            dockerfile: docker/aio/Dockerfile
+            image: docmost/docmost-aio
+            artifact_prefix: docmost-aio
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: arm64
+            variant: aio
+            dockerfile: docker/aio/Dockerfile
+            image: docmost/docmost-aio
+            artifact_prefix: docmost-aio
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -43,29 +65,34 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
           push: false
           tags: |
-            docmost/docmost:latest
-            docmost/docmost:${{ steps.strip-v.outputs.version }}
-          outputs: type=docker,dest=docmost-${{ matrix.suffix }}.docker.tar
-          cache-from: type=gha,scope=${{ matrix.suffix }}
-          cache-to: type=gha,scope=${{ matrix.suffix }},mode=max
+            ${{ matrix.image }}:latest
+            ${{ matrix.image }}:${{ steps.strip-v.outputs.version }}
+          outputs: type=docker,dest=${{ matrix.artifact_prefix }}-${{ steps.strip-v.outputs.version }}-${{ matrix.suffix }}.docker.tar
+          cache-from: type=gha,scope=${{ matrix.variant }}-${{ matrix.suffix }}
+          cache-to: type=gha,scope=${{ matrix.variant }}-${{ matrix.suffix }},mode=max
 
       - name: Compress image
-        run: gzip docmost-${{ matrix.suffix }}.docker.tar
+        run: gzip ${{ matrix.artifact_prefix }}-${{ steps.strip-v.outputs.version }}-${{ matrix.suffix }}.docker.tar
 
       - name: Upload image archive
         uses: actions/upload-artifact@v4
         with:
-          name: docker-image-${{ matrix.suffix }}
-          path: docmost-${{ matrix.suffix }}.docker.tar.gz
+          name: docker-image-${{ matrix.variant }}-${{ matrix.suffix }}
+          path: ${{ matrix.artifact_prefix }}-${{ steps.strip-v.outputs.version }}-${{ matrix.suffix }}.docker.tar.gz
           if-no-files-found: error
 
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Strip v prefix
+        id: strip-v
+        run: echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+
       - name: Download image archives
         uses: actions/download-artifact@v4
         with:
@@ -78,6 +105,8 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           files: |
-            /tmp/images/docmost-amd64.docker.tar.gz
-            /tmp/images/docmost-arm64.docker.tar.gz
+            /tmp/images/docmost-${{ steps.strip-v.outputs.version }}-amd64.docker.tar.gz
+            /tmp/images/docmost-${{ steps.strip-v.outputs.version }}-arm64.docker.tar.gz
+            /tmp/images/docmost-aio-${{ steps.strip-v.outputs.version }}-amd64.docker.tar.gz
+            /tmp/images/docmost-aio-${{ steps.strip-v.outputs.version }}-arm64.docker.tar.gz
           draft: true
