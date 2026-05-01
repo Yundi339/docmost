@@ -29,18 +29,18 @@ import { useTranslation } from "react-i18next";
 import { getFileUrl } from "@/lib/config.ts";
 import { uploadFile } from "@/features/page/services/page-service.ts";
 import { svgStringToFile } from "@/lib";
-import "@excalidraw/excalidraw/index.css";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { IAttachment } from "@/features/attachments/types/attachment.types";
 import ReactClearModal from "react-clear-modal";
-import { useHandleLibrary } from "@excalidraw/excalidraw";
-import { localStorageLibraryAdapter } from "@/features/editor/components/excalidraw/excalidraw-utils.ts";
 import classes from "../common/toolbar-menu.module.css";
 
-const ExcalidrawComponent = lazy(() =>
-  import("@excalidraw/excalidraw").then((module) => ({
-    default: module.Excalidraw,
-  })),
+// Lazy-load the heavy Excalidraw bundle (and its CSS) so it is fetched only
+// when the user actually opens the editor modal, instead of on app start.
+const ExcalidrawModalContent = lazy(
+  () =>
+    import(
+      "@/features/editor/components/excalidraw/excalidraw-modal-content.tsx"
+    ),
 );
 
 export function ExcalidrawMenu({ editor }: EditorMenuProps) {
@@ -48,10 +48,6 @@ export function ExcalidrawMenu({ editor }: EditorMenuProps) {
   const [opened, { open, close }] = useDisclosure(false);
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI>(null);
-  useHandleLibrary({
-    excalidrawAPI,
-    adapter: localStorageLibraryAdapter,
-  });
   const [excalidrawData, setExcalidrawData] = useState<any>(null);
   const computedColorScheme = useComputedColorScheme();
   const isDirtyRef = useRef(false);
@@ -405,28 +401,31 @@ export function ExcalidrawMenu({ editor }: EditorMenuProps) {
           </Button>
         </Group>
         <div style={{ height: "90vh" }}>
-          <Suspense fallback={null}>
-            <ExcalidrawComponent
-              excalidrawAPI={(api) => setExcalidrawAPI(api)}
-              onChange={(elements, _appState, files) => {
-                const fingerprint = `${elements.length}:${elements.reduce((s, e) => s + (e.version || 0), 0)}:${Object.keys(files).length}`;
-                if (isInitialLoadRef.current) {
-                  lastFingerprintRef.current = fingerprint;
-                  isInitialLoadRef.current = false;
-                  return;
-                }
-                if (fingerprint !== lastFingerprintRef.current) {
-                  lastFingerprintRef.current = fingerprint;
-                  isDirtyRef.current = true;
-                }
-              }}
-              initialData={{
-                ...excalidrawData,
-                scrollToContent: true,
-              }}
-              theme={computedColorScheme}
-            />
-          </Suspense>
+          {opened ? (
+            <Suspense fallback={null}>
+              <ExcalidrawModalContent
+                excalidrawAPI={excalidrawAPI}
+                setExcalidrawAPI={setExcalidrawAPI}
+                onChange={(elements, _appState, files) => {
+                  const fingerprint = `${elements.length}:${elements.reduce((s, e) => s + (e.version || 0), 0)}:${Object.keys(files).length}`;
+                  if (isInitialLoadRef.current) {
+                    lastFingerprintRef.current = fingerprint;
+                    isInitialLoadRef.current = false;
+                    return;
+                  }
+                  if (fingerprint !== lastFingerprintRef.current) {
+                    lastFingerprintRef.current = fingerprint;
+                    isDirtyRef.current = true;
+                  }
+                }}
+                initialData={{
+                  ...excalidrawData,
+                  scrollToContent: true,
+                }}
+                theme={computedColorScheme}
+              />
+            </Suspense>
+          ) : null}
         </div>
       </ReactClearModal>
     </>
