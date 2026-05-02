@@ -309,6 +309,16 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
+    // On coarse-pointer (touch) devices in inline (non-fullscreen) mode at
+    // base scale, do NOT install touch listeners so the browser can handle
+    // page scrolling natively. Users can enter fullscreen for pan/zoom.
+    const isCoarse =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches &&
+      !window.matchMedia("(pointer: fine)").matches;
+    if (isCoarse && !isFullscreen && scale === 1) {
+      return;
+    }
 
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {

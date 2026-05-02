@@ -42,9 +42,14 @@
     user-select: none;
     /* Disable Android long-press context menu and the selection magnifier. */
     -webkit-tap-highlight-color: transparent;
-    touch-action: pan-y;
-    -webkit-user-drag: none;
-    user-drag: none;
+
+    /* Touch-only tweaks. Desktop must keep default touch-action / user-drag
+       so react-dnd HTML5Backend can initiate drag on mousedown. */
+    @media (hover: none) and (pointer: coarse) {
+        touch-action: pan-y;
+        -webkit-user-drag: none;
+        user-drag: none;
+    }
 
     &:hover {
         background-color: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-5));
@@ -87,6 +92,18 @@
 
 .node:global(.willReceiveDrop) {
     background-color: light-dark(var(--mantine-color-blue-1), var(--mantine-color-gray-7));
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: -2px;
+}
+
+.node:global(.isDragging) {
+    opacity: 0.5;
+    background-color: light-dark(var(--mantine-color-blue-1), var(--mantine-color-blue-9));
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+    outline: 2px dashed var(--mantine-primary-color-filled);
+    outline-offset: -2px;
+    transform: scale(0.97);
+    transition: transform 120ms ease, opacity 120ms ease;
 }
 
 .node:global(.isSelected) {

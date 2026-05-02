@@ -15,7 +15,7 @@ import {
   useUpdatePageMutation,
 } from "@/features/page/queries/page-query.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import classes from "@/features/page/tree/styles/tree.module.css";
 import { ActionIcon, Box, Menu, rem, Text } from "@mantine/core";
 import {
@@ -543,6 +543,16 @@ function Node({
   const { t } = useTranslation();
   const [, appendChildren] = useAtom(appendNodeChildrenAtom);
   const { spaceSlug } = useParams();
+  const navigate = useNavigate();
+  // On coarse-pointer (touch) devices, rendering the row as <a href> causes
+  // browsers (especially Android Chrome) to show a long-press system menu
+  // (Open / Copy link / Share). Render as a plain <div> there and navigate
+  // programmatically.
+  const isTouchDevice =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches &&
+    !window.matchMedia("(pointer: fine)").matches;
   const timerRef = useRef(null);
   const [mobileSidebarOpened] = useAtom(mobileSidebarAtom);
   const toggleMobileSidebar = useToggleSidebar(mobileSidebarAtom);
@@ -716,8 +726,9 @@ function Node({
       <Box
         style={style}
         className={clsx(classes.node, node.state)}
-        component={Link}
-        to={pageUrl}
+        {...(isTouchDevice
+          ? { component: "div" as any }
+          : { component: Link as any, to: pageUrl })}
         // @ts-ignore
         ref={dragHandle}
         onClick={(e) => {
@@ -768,6 +779,10 @@ function Node({
           }
           if (mobileSidebarOpened) {
             toggleMobileSidebar();
+          }
+          // On touch devices we render as <div>, so we must navigate manually.
+          if (isTouchDevice) {
+            navigate(pageUrl);
           }
         }}
         onContextMenu={(e) => {
@@ -859,20 +874,21 @@ function Node({
         onMouseLeave={cancelPagePrefetch}
       >
         {selectionMode && (() => {
-          // Determine indeterminate state: node is NOT selected itself but
-          // has at least one selected loaded descendant; OR node IS selected
-          // but at least one loaded descendant is NOT selected.
-          const descendants = collectDescendantIds(node);
-          let selectedCount = 0;
-          for (const id of descendants) {
-            if (tree.isSelected(id)) selectedCount++;
+          // Indeterminate (—) shows ONLY when this node is not itself
+          // selected but at least one of its loaded descendants is. When the
+          // node is selected, always render the filled checkmark — the user
+          // intent is "this whole subtree is selected", regardless of
+          // unloaded / collapsed children.
+          let isIndeterminate = false;
+          if (!node.isSelected) {
+            const descendants = collectDescendantIds(node);
+            for (const id of descendants) {
+              if (tree.isSelected(id)) {
+                isIndeterminate = true;
+                break;
+              }
+            }
           }
-          const allDescSelected =
-            descendants.length === 0 || selectedCount === descendants.length;
-          const someDescSelected = selectedCount > 0;
-          const isIndeterminate = node.isSelected
-            ? !allDescSelected
-            : someDescSelected;
 
           return (
             <span

@@ -96,6 +96,23 @@ export default function GlobalAppShell({
     };
   }, [resize, stopResizing]);
 
+  // Lock background body scroll when a mobile sidebar/aside is open so that
+  // a finger swipe inside the sidebar's empty area does not bleed into the
+  // page content underneath.
+  useEffect(() => {
+    if (!isMobile) return;
+    const shouldLock = mobileOpened || isAsideOpen;
+    if (!shouldLock) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevTouch = document.body.style.touchAction;
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.touchAction = prevTouch;
+    };
+  }, [isMobile, mobileOpened, isAsideOpen]);
+
   const location = useLocation();
   const isSettingsRoute = location.pathname.startsWith("/settings");
   const isSpaceRoute = location.pathname.startsWith("/s/");
