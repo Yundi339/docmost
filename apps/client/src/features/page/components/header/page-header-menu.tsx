@@ -8,7 +8,10 @@ import {
   IconEye,
   IconEyeOff,
   IconFileExport,
+  IconLetterCase,
+  IconMinus,
   IconHistory,
+  IconPlus,
   IconUsers,
   IconLink,
   IconList,
@@ -39,6 +42,10 @@ import { PageWidthToggle } from "@/features/user/components/page-width-pref.tsx"
 import {
   pageMaxWidthAtom,
   pageAlignAtom,
+  pageFontScaleAtom,
+  PAGE_FONT_SCALE_DEFAULT,
+  PAGE_FONT_SCALE_MAX,
+  PAGE_FONT_SCALE_MIN,
   PAGE_WIDTH_MAX,
   PAGE_WIDTH_MIN,
 } from "@/features/user/atoms/page-width-atom.ts";
@@ -178,6 +185,7 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
   ] = useDisclosure(false);
   const [pageEditor] = useAtom(pageEditorAtom);
   const [pageMaxWidth, setPageMaxWidth] = useAtom(pageMaxWidthAtom);
+  const [pageFontScale, setPageFontScale] = useAtom(pageFontScaleAtom);
   const pageUpdatedAt = useTimeAgo(page?.updatedAt);
   const favoriteIds = useFavoriteIds("page", page?.spaceId);
   const addFavoriteMutation = useAddFavoriteMutation();
@@ -226,6 +234,12 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
     } else {
       addFavoriteMutation.mutate(params);
     }
+  };
+
+  const changePageFontScale = (delta: number) => {
+    setPageFontScale((value) =>
+      Math.min(PAGE_FONT_SCALE_MAX, Math.max(PAGE_FONT_SCALE_MIN, value + delta)),
+    );
   };
 
   return (
@@ -311,6 +325,59 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
               onChange={setPageMaxWidth}
               label={(v) => `${v}px`}
             />
+          </Menu.Item>
+
+          <Menu.Item
+            closeMenuOnClick={false}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Group justify="space-between" wrap="nowrap" mb={6}>
+              <Group gap={6} wrap="nowrap">
+                <IconLetterCase size={16} />
+                <Text size="sm">{t("Font size")}</Text>
+              </Group>
+              <Text size="sm" c="dimmed">
+                {pageFontScale}%
+              </Text>
+            </Group>
+            <Group gap="xs" wrap="nowrap">
+              <ActionIcon
+                variant="default"
+                size="sm"
+                onClick={() => changePageFontScale(-5)}
+                disabled={pageFontScale <= PAGE_FONT_SCALE_MIN}
+                aria-label={t("Decrease font size")}
+              >
+                <IconMinus size={14} />
+              </ActionIcon>
+              <Slider
+                min={PAGE_FONT_SCALE_MIN}
+                max={PAGE_FONT_SCALE_MAX}
+                step={5}
+                value={pageFontScale}
+                onChange={setPageFontScale}
+                label={(v) => `${v}%`}
+                style={{ flex: 1 }}
+              />
+              <ActionIcon
+                variant="default"
+                size="sm"
+                onClick={() => changePageFontScale(5)}
+                disabled={pageFontScale >= PAGE_FONT_SCALE_MAX}
+                aria-label={t("Increase font size")}
+              >
+                <IconPlus size={14} />
+              </ActionIcon>
+              <ActionIcon
+                variant="subtle"
+                size="sm"
+                onClick={() => setPageFontScale(PAGE_FONT_SCALE_DEFAULT)}
+                disabled={pageFontScale === PAGE_FONT_SCALE_DEFAULT}
+                aria-label={t("Reset font size")}
+              >
+                <IconLetterCase size={14} />
+              </ActionIcon>
+            </Group>
           </Menu.Item>
 
           <Menu.Item

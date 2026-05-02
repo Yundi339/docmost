@@ -14,6 +14,7 @@ import { IconAlertTriangle, IconFileOff } from "@tabler/icons-react";
 import { Button, Container, Skeleton, Stack } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { ErrorBoundary } from "react-error-boundary";
+import PageScrollControls from "@/features/page/components/page-scroll-controls/page-scroll-controls.tsx";
 const MemoizedFullEditor = React.memo(FullEditor);
 const MemoizedPageHeader = React.memo(PageHeader);
 const MemoizedHistoryModal = React.memo(HistoryModal);
@@ -134,6 +135,7 @@ function PageContent({ pageSlug }: { pageSlug: string | undefined }) {
         />
         <MemoizedHistoryModal pageId={page.id} />
         <MemoizedVisitorsModal pageId={page.id} />
+        <PageScrollControls />
       </div>
     )
   );

@@ -7,7 +7,7 @@
     var(--mantine-color-default-color),
     var(--mantine-color-white)
   );
-  font-size: var(--mantine-font-size-md);
+  font-size: calc(var(--mantine-font-size-md) * var(--page-font-scale, 1));
   line-height: var(--mantine-line-height-xl);
   font-weight: 400;
   width: 100%;
@@ -284,4 +284,9 @@
   font-weight: 700;
   margin-top: 0;
   margin-bottom: 0.75em;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    font-size: 1.875rem;
+    line-height: 1.2;
+  }
 }

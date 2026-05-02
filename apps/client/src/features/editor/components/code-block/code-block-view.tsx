@@ -56,42 +56,65 @@ export default function CodeBlockView(props: NodeViewProps) {
   }
 
   return (
-    <NodeViewWrapper className="codeBlock">
-      <Group
-        justify="flex-end"
-        contentEditable={false}
-        className={classes.menuGroup}
-      >
-        <Select
-          placeholder="auto"
-          checkIconPosition="right"
-          data={extension.options.lowlight.listLanguages().sort()}
-          value={languageValue}
-          onChange={changeLanguage}
-          searchable
-          style={{ maxWidth: "130px" }}
-          classNames={{ input: classes.selectInput }}
-          disabled={!editor.isEditable}
-        />
+    <NodeViewWrapper className={`codeBlock ${classes.wrapper}`}>
+      {editor.isEditable && (
+        <Group
+          justify="flex-end"
+          contentEditable={false}
+          className={classes.menuGroup}
+        >
+          <Select
+            placeholder="auto"
+            checkIconPosition="right"
+            data={extension.options.lowlight.listLanguages().sort()}
+            value={languageValue}
+            onChange={changeLanguage}
+            searchable
+            style={{ maxWidth: "130px" }}
+            classNames={{ input: classes.selectInput }}
+          />
 
+          <CopyButton value={node?.textContent} timeout={2000}>
+            {({ copied, copy }) => (
+              <Tooltip
+                label={copied ? t("Copied") : t("Copy")}
+                withArrow
+                position="right"
+              >
+                <ActionIcon
+                  color={copied ? "teal" : "gray"}
+                  variant="subtle"
+                  onClick={copy}
+                >
+                  {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </CopyButton>
+        </Group>
+      )}
+
+      {!editor.isEditable && (
         <CopyButton value={node?.textContent} timeout={2000}>
           {({ copied, copy }) => (
             <Tooltip
               label={copied ? t("Copied") : t("Copy")}
               withArrow
-              position="right"
+              position="left"
             >
               <ActionIcon
+                className={classes.readOnlyCopyButton}
                 color={copied ? "teal" : "gray"}
                 variant="subtle"
                 onClick={copy}
+                aria-label={copied ? t("Copied") : t("Copy")}
               >
                 {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
               </ActionIcon>
             </Tooltip>
           )}
         </CopyButton>
-      </Group>
+      )}
 
       <pre
         spellCheck="false"

@@ -3,6 +3,10 @@
     min-height: 25px;
 }
 
+.wrapper {
+    position: relative;
+}
+
 .error {
     color: light-dark(var(--mantine-color-red-8), var(--mantine-color-red-7));
     background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-gray-8));
@@ -21,6 +25,30 @@
     @media print {
         display: none;
     }
+}
+
+.readOnlyCopyButton {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1;
+    opacity: 0;
+    background-color: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+    box-shadow: var(--mantine-shadow-xs);
+    transition: opacity 120ms ease;
+
+    @media (hover: none) {
+        opacity: 1;
+    }
+
+    @media print {
+        display: none;
+    }
+}
+
+.wrapper:hover .readOnlyCopyButton,
+.readOnlyCopyButton:focus-visible {
+    opacity: 1;
 }
 
 pre {

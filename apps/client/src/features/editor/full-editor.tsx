@@ -16,6 +16,7 @@ import { userAtom } from "@/features/user/atoms/current-user-atom.ts";
 import {
   pageMaxWidthAtom,
   pageAlignAtom,
+  pageFontScaleAtom,
 } from "@/features/user/atoms/page-width-atom.ts";
 import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms.ts";
 import { PageEditMode } from "@/features/user/types/user.types.ts";
@@ -64,6 +65,7 @@ export function FullEditor({
   const fullPageWidth = user.settings?.preferences?.fullPageWidth;
   const [pageMaxWidth] = useAtom(pageMaxWidthAtom);
   const [pageAlign] = useAtom(pageAlignAtom);
+  const [pageFontScale] = useAtom(pageFontScaleAtom);
   const [, setCurrentPageEditMode] = useAtom(currentPageEditModeAtom);
   const userPageEditMode =
     (user?.settings?.preferences?.pageEditMode as PageEditMode) ??
@@ -84,9 +86,12 @@ export function FullEditor({
       size={!fullPageWidth && pageMaxWidth}
       className={classes.editor}
       style={
-        !fullPageWidth && pageAlign === "left"
-          ? { marginLeft: 0, marginRight: "auto" }
-          : undefined
+        {
+          "--page-font-scale": pageFontScale / 100,
+          ...(!fullPageWidth && pageAlign === "left"
+            ? { marginLeft: 0, marginRight: "auto" }
+            : undefined),
+        } as React.CSSProperties
       }
     >
       <MemoizedTitleEditor
