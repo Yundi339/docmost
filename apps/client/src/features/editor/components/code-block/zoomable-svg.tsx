@@ -6,6 +6,8 @@ import {
   IconMaximize,
   IconMinimize,
   IconFocusCentered,
+  IconArrowBackUp,
+  IconRotateClockwise,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import classes from "./zoomable-svg.module.css";
@@ -29,6 +31,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   const [offsetY, setOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [rotation, setRotation] = useState(0);
   const [showHint, setShowHint] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -56,9 +59,9 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     ) as SVGSVGElement | null;
     if (svg) {
       svg.style.transformOrigin = "0 0";
-      svg.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+      svg.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale}) rotate(${rotation}deg)`;
     }
-  }, [scale, offsetX, offsetY]);
+  }, [scale, offsetX, offsetY, rotation]);
 
   useLayoutEffect(() => {
     applyTransform();
@@ -376,6 +379,11 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     setOffsetY((vpRect.height - svgH * newScale) / 2);
   }, []);
 
+  const rotateView = useCallback(() => {
+    userZoomedRef.current = true;
+    setRotation((value) => (value + 90) % 360);
+  }, []);
+
   // Fullscreen – use CSS-only approach (position:fixed) for reliability on mobile
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev);
@@ -414,6 +422,20 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
           (isHovered || isFullscreen) && classes.toolbarVisible,
         )}
       >
+        {isFullscreen && (
+          <Tooltip label={t("Back")} position="bottom" withArrow>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="sm"
+              onClick={() => setIsFullscreen(false)}
+              aria-label={t("Back")}
+            >
+              <IconArrowBackUp size={14} />
+            </ActionIcon>
+          </Tooltip>
+        )}
+
         <Tooltip label={t("Zoom out")} position="bottom" withArrow>
           <ActionIcon
             variant="subtle"
@@ -446,6 +468,18 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
             onClick={resetView}
           >
             <IconFocusCentered size={14} />
+          </ActionIcon>
+        </Tooltip>
+
+        <Tooltip label={t("Rotate")} position="bottom" withArrow>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="sm"
+            onClick={rotateView}
+            aria-label={t("Rotate")}
+          >
+            <IconRotateClockwise size={14} />
           </ActionIcon>
         </Tooltip>
 

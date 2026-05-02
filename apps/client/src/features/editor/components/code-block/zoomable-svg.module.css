@@ -104,9 +104,9 @@
 
 .fullscreenContainer .toolbar {
     opacity: 1;
-    top: 8px;
+    top: max(8px, env(safe-area-inset-top));
     bottom: auto;
-    right: 8px;
+    right: max(8px, env(safe-area-inset-right));
     left: auto;
     transform: none;
 }

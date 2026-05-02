@@ -77,6 +77,9 @@ export default function PageScrollControls() {
   }, []);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button")) return;
+
     dragStateRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -86,6 +89,10 @@ export default function PageScrollControls() {
       dragged: false,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleButtonPointerDown = (event: React.PointerEvent) => {
+    event.stopPropagation();
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -149,6 +156,7 @@ export default function PageScrollControls() {
         <ActionIcon
           variant="subtle"
           color="dark"
+          onPointerDown={handleButtonPointerDown}
           onClick={(event) => {
             preventClickAfterDrag(event);
             if (!event.defaultPrevented) scrollTo(0);
@@ -163,10 +171,16 @@ export default function PageScrollControls() {
         <ActionIcon
           variant="subtle"
           color="dark"
+          onPointerDown={handleButtonPointerDown}
           onClick={(event) => {
             preventClickAfterDrag(event);
             if (!event.defaultPrevented) {
-              scrollTo(document.documentElement.scrollHeight);
+              scrollTo(
+                Math.max(
+                  document.documentElement.scrollHeight,
+                  document.body.scrollHeight,
+                ),
+              );
             }
           }}
           aria-label={t("Go to bottom")}
