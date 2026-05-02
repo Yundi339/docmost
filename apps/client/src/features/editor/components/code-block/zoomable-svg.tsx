@@ -27,6 +27,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const nativeFullscreenRef = useRef(false);
   const [scale, setScale] = useState(1);
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
@@ -417,31 +418,67 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     event.stopPropagation();
   }, []);
 
-  // Fullscreen – use CSS-only approach (position:fixed) for reliability on mobile
-  const toggleFullscreen = useCallback(() => {
-    setIsFullscreen((prev) => {
-      const next = !prev;
-      if (!next) {
-        setRotation(0);
-        requestAnimationFrame(() => fitToViewport(0));
-      } else {
-        requestAnimationFrame(() => fitToViewport(rotation));
-      }
-      return next;
-    });
+  const exitFullscreen = useCallback(() => {
+    setRotation(0);
+    setIsFullscreen(false);
+    requestAnimationFrame(() => fitToViewport(0));
+
+    if (nativeFullscreenRef.current && document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    nativeFullscreenRef.current = false;
+    (screen.orientation as any)?.unlock?.();
+  }, [fitToViewport]);
+
+  const enterFullscreen = useCallback(() => {
+    const wrapper = wrapperRef.current;
+    setIsFullscreen(true);
+    requestAnimationFrame(() => fitToViewport(rotation));
+
+    if (!wrapper?.requestFullscreen) return;
+
+    wrapper
+      .requestFullscreen()
+      .then(() => {
+        nativeFullscreenRef.current = true;
+        return (screen.orientation as any)?.lock?.("landscape");
+      })
+      .catch(() => {
+        nativeFullscreenRef.current = false;
+      });
   }, [fitToViewport, rotation]);
 
-  // Lock body scroll & request landscape when in CSS fullscreen
+  const toggleFullscreen = useCallback(() => {
+    if (isFullscreen) {
+      exitFullscreen();
+    } else {
+      enterFullscreen();
+    }
+  }, [enterFullscreen, exitFullscreen, isFullscreen]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isNativeFullscreen = document.fullscreenElement === wrapperRef.current;
+      nativeFullscreenRef.current = isNativeFullscreen;
+      if (!isNativeFullscreen && isFullscreen) {
+        setRotation(0);
+        setIsFullscreen(false);
+        requestAnimationFrame(() => fitToViewport(0));
+        (screen.orientation as any)?.unlock?.();
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, [fitToViewport, isFullscreen]);
+
+  // Lock body scroll while either native fullscreen or CSS fallback is active.
   useEffect(() => {
     if (isFullscreen) {
       document.body.style.overflow = "hidden";
-      // Try to lock to landscape on mobile
-      (screen.orientation as any)?.lock?.("landscape").catch(() => {});
       const handleEsc = (e: KeyboardEvent) => {
         if (e.key === "Escape") {
-          setRotation(0);
-          setIsFullscreen(false);
-          requestAnimationFrame(() => fitToViewport(0));
+          exitFullscreen();
         }
       };
       document.addEventListener("keydown", handleEsc);
@@ -453,7 +490,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     } else {
       document.body.style.overflow = "";
     }
-  }, [fitToViewport, isFullscreen]);
+  }, [exitFullscreen, isFullscreen]);
 
   return (
     <div
@@ -479,9 +516,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
               size="sm"
               onClick={(event) => {
                 event.stopPropagation();
-                setRotation(0);
-                setIsFullscreen(false);
-                requestAnimationFrame(() => fitToViewport(0));
+                exitFullscreen();
               }}
               aria-label={t("Back")}
             >
