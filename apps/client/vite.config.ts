@@ -37,8 +37,6 @@ export default defineConfig(({ mode }) => {
           codeSplitting: {
             groups: [
               { name: "vendor-mantine", test: /@mantine/ },
-              { name: "vendor-mermaid", test: /mermaid|cytoscape|elkjs/ },
-              { name: "vendor-excalidraw", test: /excalidraw/ },
               { name: "vendor-katex", test: /katex/ },
             ],
           },
