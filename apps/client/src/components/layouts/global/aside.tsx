@@ -49,7 +49,7 @@ export default function Aside() {
             component
           ) : (
             <ScrollArea
-              style={{ height: "85vh" }}
+              style={{ height: "85vh", overscrollBehavior: "contain" }}
               scrollbarSize={5}
               type="scroll"
             >

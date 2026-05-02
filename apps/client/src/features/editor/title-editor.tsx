@@ -159,6 +159,10 @@ export function TitleEditor({
   }, [pageId, title, titleEditor]);
 
   useEffect(() => {
+    // Only auto-focus the title for newly-created (untitled) pages so we
+    // don't trigger the on-screen keyboard on mobile when opening an
+    // existing page.
+    if (title && title.length > 0) return;
     setTimeout(() => {
       // guard against Cannot access view['hasFocus'] error
       if (!titleEditor?.isInitialized) return;

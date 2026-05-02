@@ -18,9 +18,13 @@
 .treeViewport {
     flex: 1;
     min-height: 0;
+    /* Prevent scroll chaining into the page content when reaching the
+       top/bottom of the sidebar tree. */
+    overscroll-behavior: contain;
 
     > div, > div > .tree {
         height: 100% !important;
+        overscroll-behavior: contain;
     }
 }
 
@@ -36,6 +40,11 @@
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
+    /* Disable Android long-press context menu and the selection magnifier. */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: pan-y;
+    -webkit-user-drag: none;
+    user-drag: none;
 
     &:hover {
         background-color: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-5));

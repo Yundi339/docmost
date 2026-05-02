@@ -46,7 +46,6 @@
     "react": "^18.3.1",
     "react-arborist": "3.4.0",
     "react-clear-modal": "^2.0.18",
-    "react-dnd-multi-backend": "^6.0.2",
     "react-dnd-touch-backend": "14",
     "react-dom": "^18.3.1",
     "react-drawio": "^1.0.7",

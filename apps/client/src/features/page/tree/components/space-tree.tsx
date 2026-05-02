@@ -30,6 +30,7 @@ import {
   IconPointFilled,
   IconSquare,
   IconSquareCheckFilled,
+  IconSquareMinusFilled,
   IconStar,
   IconStarFilled,
   IconTrash,
@@ -310,11 +311,7 @@ export default function SpaceTree({
     const api = treeApiRef.current;
     if (!api) return;
     setSelectionMode(true);
-    api.setSelection({
-      ids: api.visibleNodes.map((node) => node.id),
-      anchor: api.visibleNodes[0]?.id ?? null,
-      mostRecent: api.visibleNodes.at(-1)?.id ?? null,
-    });
+    api.selectAll();
     refreshSelectedIds();
   }, [refreshSelectedIds]);
 
@@ -360,30 +357,56 @@ export default function SpaceTree({
     openBulkMove();
   }, [openBulkMove]);
 
-  useEffect(() => {
-    onSelectionStateChange?.({
-      selectionMode,
-      selectedCount,
-      selectedIds,
-      clearSelection: clearSelectionMode,
-      toggleSelectionMode,
-      selectAllVisible,
-      deleteSelected,
-      exportSelected,
-      openMoveSelected,
-    });
-  }, [
-    selectionMode,
-    selectedCount,
-    selectedIds,
-    onSelectionStateChange,
+  // Keep latest callbacks in a ref so we can push selection changes without
+  // depending on the callback identities (which would re-fire this effect on
+  // every render and risk infinite update loops via the parent's setState).
+  const selectionCallbacksRef = useRef({
     clearSelectionMode,
     toggleSelectionMode,
     selectAllVisible,
     deleteSelected,
     exportSelected,
     openMoveSelected,
-  ]);
+  });
+  selectionCallbacksRef.current = {
+    clearSelectionMode,
+    toggleSelectionMode,
+    selectAllVisible,
+    deleteSelected,
+    exportSelected,
+    openMoveSelected,
+  };
+
+  useEffect(() => {
+    if (!onSelectionStateChange) return;
+    const cb = selectionCallbacksRef.current;
+    onSelectionStateChange({
+      selectionMode,
+      selectedCount,
+      selectedIds,
+      clearSelection: cb.clearSelectionMode,
+      toggleSelectionMode: cb.toggleSelectionMode,
+      selectAllVisible: cb.selectAllVisible,
+      deleteSelected: cb.deleteSelected,
+      exportSelected: cb.exportSelected,
+      openMoveSelected: cb.openMoveSelected,
+    });
+  }, [selectionMode, selectedCount, selectedIds, onSelectionStateChange]);
+
+  // Suppress the native long-press context menu on touch devices at the
+  // capture phase so the browser's anchor menu (Open / Copy link / Share)
+  // never appears for tree links.
+  useEffect(() => {
+    const el = treeElement.current;
+    if (!el) return;
+    const onCtx = (e: Event) => {
+      e.preventDefault();
+    };
+    el.addEventListener("contextmenu", onCtx, { capture: true });
+    return () => {
+      el.removeEventListener("contextmenu", onCtx, { capture: true } as any);
+    };
+  }, [isRootReady]);
 
   // Keyboard shortcuts: Esc clears selection, Ctrl/Meta+A selects all visible,
   // Delete triggers bulk delete (only when selection mode is active).
@@ -591,13 +614,94 @@ function Node({
 
   const pageUrl = buildPageUrl(spaceSlug, node.data.slugId, node.data.name);
 
+  // Walk all loaded descendants of a node (children may be null for leaves
+  // or empty arrays for unloaded subtrees). We can only act on what's loaded.
+  const collectDescendantIds = (
+    n: NodeApi<SpaceTreeNode>,
+    acc: string[] = [],
+  ): string[] => {
+    const kids = n.children;
+    if (kids && kids.length > 0) {
+      for (const c of kids) {
+        acc.push(c.id);
+        collectDescendantIds(c, acc);
+      }
+    }
+    return acc;
+  };
+
+  // Select the node itself plus all of its loaded descendants.
+  // If there are unloaded children (hasChildren but no loaded kids),
+  // we still mark the node selected — bulk operations on the server side
+  // will respect subtrees via includeSubpages where applicable.
+  const selectNodeWithDescendants = () => {
+    const api = tree;
+    const ids = [node.id, ...collectDescendantIds(node)];
+    const current = new Set(api.selectedIds);
+    for (const id of ids) current.add(id);
+    api.setSelection({
+      ids: Array.from(current),
+      anchor: node.id,
+      mostRecent: node.id,
+    });
+  };
+
+  const deselectNodeWithDescendants = () => {
+    const api = tree;
+    const ids = new Set([node.id, ...collectDescendantIds(node)]);
+    const remaining = Array.from(api.selectedIds).filter((id) => !ids.has(id));
+    api.setSelection({
+      ids: remaining,
+      anchor: remaining[remaining.length - 1] ?? null,
+      mostRecent: remaining[remaining.length - 1] ?? null,
+    });
+  };
+
   const toggleNodeSelection = () => {
     if (node.isSelected) {
-      node.deselect();
+      deselectNodeWithDescendants();
     } else {
-      node.selectMulti();
+      selectNodeWithDescendants();
     }
     onSelectionChange?.();
+  };
+
+  // Contiguous range that crosses collapsed levels: walk the underlying
+  // tree (data) in DFS order between anchor and target, collecting every id.
+  const selectRangeAcrossLevels = (targetNode: NodeApi<SpaceTreeNode>) => {
+    const api = tree;
+    const anchorId =
+      (api as any).state?.nodes?.selection?.anchor ?? targetNode.id;
+    if (anchorId === targetNode.id) {
+      // No anchor: just select target + descendants
+      selectNodeWithDescendants();
+      return;
+    }
+    // Build a flat DFS list of ALL loaded nodes in tree order.
+    const flat: string[] = [];
+    const walk = (nodes: NodeApi<SpaceTreeNode>[] | null) => {
+      if (!nodes) return;
+      for (const n of nodes) {
+        flat.push(n.id);
+        walk(n.children);
+      }
+    };
+    walk(api.root.children);
+    const i1 = flat.indexOf(anchorId);
+    const i2 = flat.indexOf(targetNode.id);
+    if (i1 === -1 || i2 === -1) {
+      selectNodeWithDescendants();
+      return;
+    }
+    const [lo, hi] = i1 <= i2 ? [i1, i2] : [i2, i1];
+    const rangeIds = flat.slice(lo, hi + 1);
+    const current = new Set(api.selectedIds);
+    for (const id of rangeIds) current.add(id);
+    api.setSelection({
+      ids: Array.from(current),
+      anchor: anchorId,
+      mostRecent: targetNode.id,
+    });
   };
 
   const clearLongPressTimer = () => {
@@ -625,13 +729,41 @@ function Node({
 
           if (selectionMode) {
             e.preventDefault();
-            toggleNodeSelection();
+            // Stop propagation: react-arborist's row onClick would otherwise
+            // call node.handleClick → node.select() and replace our multi-selection.
+            e.stopPropagation();
+            if (e.shiftKey) {
+              selectRangeAcrossLevels(node);
+              onSelectionChange?.();
+            } else if (e.ctrlKey || e.metaKey) {
+              // Ctrl/Cmd+Click in selection mode: toggle ONLY this node
+              if (node.isSelected) node.deselect();
+              else node.selectMulti();
+              onSelectionChange?.();
+            } else {
+              // Plain click in selection mode: toggle node + descendants
+              toggleNodeSelection();
+            }
             return;
           }
 
-          // Prevent link navigation on multi-select (Ctrl/Meta/Shift+click)
-          if (e.ctrlKey || e.metaKey || e.shiftKey) {
+          // Ctrl/Cmd+Click: enter selection mode, toggle ONLY this node
+          if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
+            e.stopPropagation();
+            onEnterSelectionMode?.();
+            if (node.isSelected) node.deselect();
+            else node.selectMulti();
+            onSelectionChange?.();
+            return;
+          }
+          // Shift+Click: enter selection mode, select contiguous range across levels
+          if (e.shiftKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            onEnterSelectionMode?.();
+            selectRangeAcrossLevels(node);
+            onSelectionChange?.();
             return;
           }
           if (mobileSidebarOpened) {
@@ -641,12 +773,15 @@ function Node({
         onContextMenu={(e) => {
           // Always prevent native context menu (long-press on Android, right-click on desktop)
           e.preventDefault();
+          e.stopPropagation();
           // If a touch long-press already handled selection, don't double-toggle
           if (longPressActivatedRef.current) {
             return;
           }
           if (!selectionMode) {
+            // Just enter selection mode, do NOT auto-select the right-clicked node
             onEnterSelectionMode?.();
+            return;
           }
           toggleNodeSelection();
         }}
@@ -665,11 +800,9 @@ function Node({
             try {
               (navigator as any).vibrate?.(10);
             } catch {}
+            // Long-press: only enter selection mode; do NOT auto-select the
+            // pressed node (user explicitly asked for this behavior).
             onEnterSelectionMode?.();
-            if (!node.isSelected) {
-              node.selectMulti();
-              onSelectionChange?.();
-            }
           }, 500);
         }}
         onTouchMove={(e) => {
@@ -691,7 +824,10 @@ function Node({
         }}
         onTouchEnd={(e) => {
           clearLongPressTimer();
-          if ((selectionMode || longPressActivatedRef.current) && !touchMovedRef.current) {
+          // Only prevent the synthesized click after a long-press (to suppress
+          // accidental navigation). In selection mode we WANT click to fire so
+          // taps can toggle selection.
+          if (longPressActivatedRef.current && !touchMovedRef.current) {
             e.preventDefault();
           }
         }}
@@ -699,26 +835,48 @@ function Node({
         onMouseEnter={prefetchPage}
         onMouseLeave={cancelPagePrefetch}
       >
-        {selectionMode && (
-          <span
-            className={classes.selectionCheckbox}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              toggleNodeSelection();
-            }}
-            aria-hidden
-          >
-            {node.isSelected ? (
-              <IconSquareCheckFilled
-                size={16}
-                style={{ color: "var(--mantine-primary-color-filled)" }}
-              />
-            ) : (
-              <IconSquare size={16} style={{ opacity: 0.5 }} />
-            )}
-          </span>
-        )}
+        {selectionMode && (() => {
+          // Determine indeterminate state: node is NOT selected itself but
+          // has at least one selected loaded descendant; OR node IS selected
+          // but at least one loaded descendant is NOT selected.
+          const descendants = collectDescendantIds(node);
+          let selectedCount = 0;
+          for (const id of descendants) {
+            if (tree.isSelected(id)) selectedCount++;
+          }
+          const allDescSelected =
+            descendants.length === 0 || selectedCount === descendants.length;
+          const someDescSelected = selectedCount > 0;
+          const isIndeterminate = node.isSelected
+            ? !allDescSelected
+            : someDescSelected;
+
+          return (
+            <span
+              className={classes.selectionCheckbox}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleNodeSelection();
+              }}
+              aria-hidden
+            >
+              {isIndeterminate ? (
+                <IconSquareMinusFilled
+                  size={16}
+                  style={{ color: "var(--mantine-primary-color-filled)" }}
+                />
+              ) : node.isSelected ? (
+                <IconSquareCheckFilled
+                  size={16}
+                  style={{ color: "var(--mantine-primary-color-filled)" }}
+                />
+              ) : (
+                <IconSquare size={16} style={{ opacity: 0.5 }} />
+              )}
+            </span>
+          );
+        })()}
 
         <PageArrow node={node} onExpandTree={() => handleLoadChildren(node)} />
 
