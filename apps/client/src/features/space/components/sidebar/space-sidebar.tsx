@@ -8,6 +8,8 @@ import {
 } from "@mantine/core";
 import {
   IconArrowDown,
+  IconCheckbox,
+  IconCopyCheck,
   IconDots,
   IconEye,
   IconEyeOff,
@@ -19,6 +21,7 @@ import {
   IconStar,
   IconStarFilled,
   IconTrash,
+  IconX,
 } from "@tabler/icons-react";
 import {
   useSpaceWatchStatusQuery,
@@ -54,6 +57,14 @@ import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sideb
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import { searchSpotlight } from "@/features/search/constants";
 
+type MobileSelectionState = {
+  selectionMode: boolean;
+  selectedCount: number;
+  clearSelection: () => void;
+  toggleSelectionMode: () => void;
+  selectAllVisible: () => void;
+};
+
 export function SpaceSidebar() {
   const { t } = useTranslation();
   const [tree] = useAtom(treeApiAtom);
@@ -62,6 +73,8 @@ export function SpaceSidebar() {
     useDisclosure(false);
   const [mobileSidebarOpened] = useAtom(mobileSidebarAtom);
   const toggleMobileSidebar = useToggleSidebar(mobileSidebarAtom);
+  const [mobileSelection, setMobileSelection] =
+    React.useState<MobileSelectionState | null>(null);
 
   const { spaceSlug } = useParams();
   const { data: space } = useGetSpaceBySlugQuery(spaceSlug);
@@ -176,12 +189,53 @@ export function SpaceSidebar() {
         </div>
 
         <div className={clsx(classes.section, classes.sectionPages)}>
-          <Group className={classes.pagesHeader} justify="space-between">
-            <Text size="xs" fw={500} c="dimmed">
-              {t("Pages")}
-            </Text>
+          <Group className={classes.pagesHeader} justify="space-between" wrap="nowrap">
+            <Group gap="xs" wrap="nowrap" className={classes.pagesTitleGroup}>
+              {mobileSelection?.selectionMode && (
+                <ActionIcon
+                  variant="subtle"
+                  color="dark"
+                  size="sm"
+                  onClick={mobileSelection.clearSelection}
+                  aria-label={t("Cancel selection")}
+                  className={classes.mobileSelectionAction}
+                >
+                  <IconX size={18} />
+                </ActionIcon>
+              )}
+              <Text size="xs" fw={500} c="dimmed" truncate="end">
+                {mobileSelection?.selectionMode
+                  ? t("{{count}} selected", {
+                      count: mobileSelection.selectedCount,
+                    })
+                  : t("Pages")}
+              </Text>
+            </Group>
 
             <Group gap="xs">
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size={18}
+                onClick={() =>
+                  mobileSelection?.selectionMode
+                    ? mobileSelection.selectAllVisible()
+                    : mobileSelection?.toggleSelectionMode()
+                }
+                aria-label={
+                  mobileSelection?.selectionMode
+                    ? t("Select all")
+                    : t("Select pages")
+                }
+                className={classes.mobileSelectionAction}
+              >
+                {mobileSelection?.selectionMode ? (
+                  <IconCopyCheck />
+                ) : (
+                  <IconCheckbox />
+                )}
+              </ActionIcon>
+
               <SpaceMenu
                 spaceId={space.id}
                 canManagePages={spaceAbility.can(
@@ -212,6 +266,7 @@ export function SpaceSidebar() {
           <div className={classes.pages}>
             <SpaceTree
               spaceId={space.id}
+              onMobileSelectionStateChange={setMobileSelection}
               readOnly={spaceAbility.cannot(
                 SpaceCaslAction.Manage,
                 SpaceCaslSubject.Page,

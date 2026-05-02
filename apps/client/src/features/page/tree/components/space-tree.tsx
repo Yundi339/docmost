@@ -19,11 +19,9 @@ import classes from "@/features/page/tree/styles/tree.module.css";
 import { ActionIcon, Box, Menu, rem, Text } from "@mantine/core";
 import {
   IconArrowRight,
-  IconCheckbox,
   IconChevronDown,
   IconChevronRight,
   IconCopy,
-  IconCopyCheck,
   IconDotsVertical,
   IconFileExport,
   IconLink,
@@ -32,7 +30,6 @@ import {
   IconStar,
   IconStarFilled,
   IconTrash,
-  IconX,
 } from "@tabler/icons-react";
 import {
   appendNodeChildrenAtom,
@@ -73,6 +70,13 @@ import { useFavoriteIds, useAddFavoriteMutation, useRemoveFavoriteMutation } fro
 interface SpaceTreeProps {
   spaceId: string;
   readOnly: boolean;
+  onMobileSelectionStateChange?: (state: {
+    selectionMode: boolean;
+    selectedCount: number;
+    clearSelection: () => void;
+    toggleSelectionMode: () => void;
+    selectAllVisible: () => void;
+  }) => void;
 }
 
 const STORAGE_KEY_PREFIX = "docmost:tree-open:";
@@ -100,7 +104,11 @@ function saveOpenState(spaceId: string, openState: OpenMap | undefined): void {
 
 const openTreeNodesAtom = atom<OpenMap>({});
 
-export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
+export default function SpaceTree({
+  spaceId,
+  readOnly,
+  onMobileSelectionStateChange,
+}: SpaceTreeProps) {
   const { t } = useTranslation();
   const { pageSlug } = useParams();
   const { data, setData, controllers } =
@@ -129,6 +137,8 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedCount, setSelectedCount] = useState(0);
+  const selectionModeRef = useRef(selectionMode);
+  selectionModeRef.current = selectionMode;
   const spaceIdRef = useRef(spaceId);
   spaceIdRef.current = spaceId;
   const { data: currentPage } = usePageQuery({
@@ -279,43 +289,18 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
     setSelectedCount(api.selectedIds.size);
   };
 
+  useEffect(() => {
+    onMobileSelectionStateChange?.({
+      selectionMode,
+      selectedCount,
+      clearSelection: clearSelectionMode,
+      toggleSelectionMode,
+      selectAllVisible,
+    });
+  }, [selectionMode, selectedCount, onMobileSelectionStateChange]);
+
   return (
     <div className={classes.treeContainer}>
-      <div className={classes.mobileSelectionBar}>
-        {selectionMode ? (
-          <>
-            <ActionIcon
-              variant="subtle"
-              color="dark"
-              onClick={clearSelectionMode}
-              aria-label={t("Cancel selection")}
-            >
-              <IconX size={18} />
-            </ActionIcon>
-            <Text size="xs" fw={500} className={classes.selectionText}>
-              {t("{{count}} selected", { count: selectedCount })}
-            </Text>
-            <ActionIcon
-              variant="subtle"
-              color="dark"
-              onClick={selectAllVisible}
-              aria-label={t("Select all")}
-            >
-              <IconCopyCheck size={18} />
-            </ActionIcon>
-          </>
-        ) : (
-          <ActionIcon
-            variant="subtle"
-            color="dark"
-            onClick={toggleSelectionMode}
-            aria-label={t("Select pages")}
-          >
-            <IconCheckbox size={18} />
-          </ActionIcon>
-        )}
-      </div>
-
       {isDataLoaded && filteredData.length === 0 && (
         <Text size="xs" c="dimmed" py="xs" px="sm">
           {t("No pages yet")}
@@ -367,6 +352,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
               <Node
                 {...props}
                 selectionMode={selectionMode}
+                onEnterSelectionMode={() => setSelectionMode(true)}
                 onSelectionChange={() =>
                   setSelectedCount(treeApiRef.current?.selectedIds.size ?? 0)
                 }
@@ -388,6 +374,7 @@ function Node({
   onSelectionChange,
 }: NodeRendererProps<any> & {
   selectionMode?: boolean;
+  onEnterSelectionMode?: () => void;
   onSelectionChange?: () => void;
 }) {
   const { t } = useTranslation();
@@ -396,6 +383,8 @@ function Node({
   const timerRef = useRef(null);
   const [mobileSidebarOpened] = useAtom(mobileSidebarAtom);
   const toggleMobileSidebar = useToggleSidebar(mobileSidebarAtom);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchMovedRef = useRef(false);
 
   const prefetchPage = () => {
     timerRef.current = setTimeout(async () => {
@@ -460,6 +449,22 @@ function Node({
 
   const pageUrl = buildPageUrl(spaceSlug, node.data.slugId, node.data.name);
 
+  const toggleNodeSelection = () => {
+    if (node.isSelected) {
+      node.deselect();
+    } else {
+      node.selectMulti();
+    }
+    onSelectionChange?.();
+  };
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
   return (
     <>
       <Box
@@ -472,12 +477,7 @@ function Node({
         onClick={(e) => {
           if (selectionMode) {
             e.preventDefault();
-            if (node.isSelected) {
-              node.deselect();
-            } else {
-              node.selectMulti();
-            }
-            onSelectionChange?.();
+            toggleNodeSelection();
             return;
           }
 
@@ -491,11 +491,32 @@ function Node({
           }
         }}
         onContextMenu={(e) => {
-          if (!selectionMode) return;
           e.preventDefault();
-          node.isSelected ? node.deselect() : node.selectMulti();
-          onSelectionChange?.();
+          if (!selectionMode) return;
+          toggleNodeSelection();
         }}
+        onTouchStart={() => {
+          touchMovedRef.current = false;
+          clearLongPressTimer();
+          longPressTimerRef.current = setTimeout(() => {
+            onEnterSelectionMode?.();
+            if (!node.isSelected) {
+              node.selectMulti();
+              onSelectionChange?.();
+            }
+          }, 450);
+        }}
+        onTouchMove={() => {
+          touchMovedRef.current = true;
+          clearLongPressTimer();
+        }}
+        onTouchEnd={(e) => {
+          clearLongPressTimer();
+          if (selectionMode && !touchMovedRef.current) {
+            e.preventDefault();
+          }
+        }}
+        onTouchCancel={clearLongPressTimer}
         onMouseEnter={prefetchPage}
         onMouseLeave={cancelPagePrefetch}
       >

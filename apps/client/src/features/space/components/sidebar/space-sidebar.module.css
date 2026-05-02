@@ -80,6 +80,19 @@
     margin-bottom: rem(5px);
 }
 
+.pagesTitleGroup {
+    min-width: 0;
+    flex: 1;
+}
+
+.mobileSelectionAction {
+    display: none;
+
+    @media (max-width: $mantine-breakpoint-sm) {
+        display: inline-flex;
+    }
+}
+
 .pageLink {
     display: block;
     padding: rem(8px) var(--mantine-spacing-xs);
