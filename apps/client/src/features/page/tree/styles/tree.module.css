@@ -3,12 +3,29 @@
 }
 
 .treeContainer {
+    position: relative;
     height: 100%;
     min-width: 0;
 
     > div, > div > .tree {
         height: 100% !important;
     }
+}
+
+.mobileSelectionBar {
+    display: none;
+
+    @media (max-width: $mantine-breakpoint-sm) {
+        display: flex;
+        align-items: center;
+        gap: var(--mantine-spacing-xs);
+        min-height: 34px;
+        padding: 0 var(--mantine-spacing-xs) var(--mantine-spacing-xs);
+    }
+}
+
+.selectionText {
+    flex: 1;
 }
 
 .node {
@@ -40,6 +57,15 @@
 
       &:hover .actions {
        visibility: visible;
+    }
+
+    @media (hover: none) {
+        width: 100%;
+
+        .actions {
+            visibility: visible;
+            background-color: transparent;
+        }
     }
 
 }

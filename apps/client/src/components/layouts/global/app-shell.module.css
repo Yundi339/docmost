@@ -4,7 +4,19 @@
 
 .navbar, .aside {
   @media (max-width: $mantine-breakpoint-sm) {
-    width: 350px;
+    width: min(82vw, 300px);
+  }
+}
+
+.mobileOverlay {
+  position: fixed;
+  top: var(--app-shell-header-offset, 45px);
+  right: 0;
+  bottom: 0;
+  left: 0;
+
+  @media (min-width: $mantine-breakpoint-sm) {
+    display: none;
   }
 }
 

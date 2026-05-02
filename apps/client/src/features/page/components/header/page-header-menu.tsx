@@ -1,4 +1,4 @@
-import { ActionIcon, Group, Menu, Slider, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Box, Group, Menu, Slider, Text, Tooltip } from "@mantine/core";
 import {
   IconArrowRight,
   IconArrowsHorizontal,
@@ -310,10 +310,7 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
             </Group>
           </Menu.Item>
 
-          <Menu.Item
-            closeMenuOnClick={false}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <Box px="sm" py={6} onClick={(e) => e.stopPropagation()}>
             <Text size="sm" mb={4}>
               {t("Page width")}: {pageMaxWidth}px
             </Text>
@@ -325,12 +322,9 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
               onChange={setPageMaxWidth}
               label={(v) => `${v}px`}
             />
-          </Menu.Item>
+          </Box>
 
-          <Menu.Item
-            closeMenuOnClick={false}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <Box px="sm" py={6} onClick={(e) => e.stopPropagation()}>
             <Group justify="space-between" wrap="nowrap" mb={6}>
               <Group gap={6} wrap="nowrap">
                 <IconLetterCase size={16} />
@@ -378,7 +372,7 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
                 <IconLetterCase size={14} />
               </ActionIcon>
             </Group>
-          </Menu.Item>
+          </Box>
 
           <Menu.Item
             leftSection={<IconHistory size={16} />}

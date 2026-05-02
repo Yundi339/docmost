@@ -1,4 +1,4 @@
-import { AppShell, Container } from "@mantine/core";
+import { AppShell, Container, Overlay } from "@mantine/core";
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import SettingsSidebar from "@/components/settings/settings-sidebar.tsx";
@@ -98,6 +98,16 @@ export default function GlobalAppShell({
       }
       padding="md"
     >
+      {mobileOpened && (
+        <Overlay
+          className={classes.mobileOverlay}
+          opacity={0.35}
+          color="black"
+          zIndex={98}
+          onClick={toggleMobile}
+        />
+      )}
+
       <AppShell.Header px="md" className={classes.header}>
         <AppHeader />
       </AppShell.Header>

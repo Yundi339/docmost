@@ -19,9 +19,11 @@ import classes from "@/features/page/tree/styles/tree.module.css";
 import { ActionIcon, Box, Menu, rem, Text } from "@mantine/core";
 import {
   IconArrowRight,
+  IconCheckbox,
   IconChevronDown,
   IconChevronRight,
   IconCopy,
+  IconCopyCheck,
   IconDotsVertical,
   IconFileExport,
   IconLink,
@@ -30,6 +32,7 @@ import {
   IconStar,
   IconStarFilled,
   IconTrash,
+  IconX,
 } from "@tabler/icons-react";
 import {
   appendNodeChildrenAtom,
@@ -101,7 +104,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
   const { t } = useTranslation();
   const { pageSlug } = useParams();
   const { data, setData, controllers } =
-    useTreeMutation<TreeApi<SpaceTreeNode>>(spaceId);
+    useTreeMutation<SpaceTreeNode>(spaceId);
   const {
     data: pagesData,
     hasNextPage,
@@ -124,6 +127,8 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
     }
   }, sizeRef);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedCount, setSelectedCount] = useState(0);
   const spaceIdRef = useRef(spaceId);
   spaceIdRef.current = spaceId;
   const { data: currentPage } = usePageQuery({
@@ -249,8 +254,68 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
 
   const filteredData = data.filter((node) => node?.spaceId === spaceId);
 
+  const clearSelectionMode = () => {
+    treeApiRef.current?.deselectAll();
+    setSelectedCount(0);
+    setSelectionMode(false);
+  };
+
+  const toggleSelectionMode = () => {
+    if (selectionMode) {
+      clearSelectionMode();
+    } else {
+      setSelectionMode(true);
+    }
+  };
+
+  const selectAllVisible = () => {
+    const api = treeApiRef.current;
+    if (!api) return;
+    api.setSelection({
+      ids: api.visibleNodes.map((node) => node.id),
+      anchor: api.visibleNodes[0]?.id ?? null,
+      mostRecent: api.visibleNodes.at(-1)?.id ?? null,
+    });
+    setSelectedCount(api.selectedIds.size);
+  };
+
   return (
     <div ref={mergedRef} className={classes.treeContainer}>
+      <div className={classes.mobileSelectionBar}>
+        {selectionMode ? (
+          <>
+            <ActionIcon
+              variant="subtle"
+              color="dark"
+              onClick={clearSelectionMode}
+              aria-label={t("Cancel selection")}
+            >
+              <IconX size={18} />
+            </ActionIcon>
+            <Text size="xs" fw={500} className={classes.selectionText}>
+              {t("{{count}} selected", { count: selectedCount })}
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              color="dark"
+              onClick={selectAllVisible}
+              aria-label={t("Select all")}
+            >
+              <IconCopyCheck size={18} />
+            </ActionIcon>
+          </>
+        ) : (
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            onClick={toggleSelectionMode}
+            aria-label={t("Select pages")}
+          >
+            <IconCheckbox size={18} />
+          </ActionIcon>
+        )}
+      </div>
+
       {isDataLoaded && filteredData.length === 0 && (
         <Text size="xs" c="dimmed" py="xs" px="sm">
           {t("No pages yet")}
@@ -297,14 +362,32 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
           }}
           initialOpenState={openTreeNodes}
         >
-          {Node}
+          {(props) => (
+            <Node
+              {...props}
+              selectionMode={selectionMode}
+              onSelectionChange={() =>
+                setSelectedCount(treeApiRef.current?.selectedIds.size ?? 0)
+              }
+            />
+          )}
         </Tree>
       )}
     </div>
   );
 }
 
-function Node({ node, style, dragHandle, tree }: NodeRendererProps<any>) {
+function Node({
+  node,
+  style,
+  dragHandle,
+  tree,
+  selectionMode,
+  onSelectionChange,
+}: NodeRendererProps<any> & {
+  selectionMode?: boolean;
+  onSelectionChange?: () => void;
+}) {
   const { t } = useTranslation();
   const [, appendChildren] = useAtom(appendNodeChildrenAtom);
   const { spaceSlug } = useParams();
@@ -385,6 +468,17 @@ function Node({ node, style, dragHandle, tree }: NodeRendererProps<any>) {
         // @ts-ignore
         ref={dragHandle}
         onClick={(e) => {
+          if (selectionMode) {
+            e.preventDefault();
+            if (node.isSelected) {
+              node.deselect();
+            } else {
+              node.selectMulti();
+            }
+            onSelectionChange?.();
+            return;
+          }
+
           // Prevent link navigation on multi-select (Ctrl/Meta/Shift+click)
           if (e.ctrlKey || e.metaKey || e.shiftKey) {
             e.preventDefault();
@@ -393,6 +487,12 @@ function Node({ node, style, dragHandle, tree }: NodeRendererProps<any>) {
           if (mobileSidebarOpened) {
             toggleMobileSidebar();
           }
+        }}
+        onContextMenu={(e) => {
+          if (!selectionMode) return;
+          e.preventDefault();
+          node.isSelected ? node.deselect() : node.selectMulti();
+          onSelectionChange?.();
         }}
         onMouseEnter={prefetchPage}
         onMouseLeave={cancelPagePrefetch}
