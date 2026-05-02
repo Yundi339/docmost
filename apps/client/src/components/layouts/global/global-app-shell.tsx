@@ -1,4 +1,5 @@
 import { AppShell, Container, Overlay } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import SettingsSidebar from "@/components/settings/settings-sidebar.tsx";
@@ -27,10 +28,34 @@ export default function GlobalAppShell({
   const [mobileOpened] = useAtom(mobileSidebarAtom);
   const toggleMobile = useToggleSidebar(mobileSidebarAtom);
   const [desktopOpened] = useAtom(desktopSidebarAtom);
-  const [{ isAsideOpen }] = useAtom(asideStateAtom);
+  const [asideState, setAsideState] = useAtom(asideStateAtom);
+  const { isAsideOpen } = asideState;
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef(null);
+  const isMobile = useMediaQuery("(max-width: 48em)");
+
+  // On mobile, ensure sidebar and aside are mutually exclusive
+  useEffect(() => {
+    if (!isMobile) return;
+    if (mobileOpened && isAsideOpen) {
+      setAsideState({ ...asideState, isAsideOpen: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, mobileOpened]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    if (isAsideOpen && mobileOpened) {
+      // close mobile sidebar by toggling
+      toggleMobile();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, isAsideOpen]);
+
+  const closeMobileAside = React.useCallback(() => {
+    setAsideState({ ...asideState, isAsideOpen: false });
+  }, [asideState, setAsideState]);
 
   const startResizing = React.useCallback((mouseDownEvent) => {
     mouseDownEvent.preventDefault();
@@ -105,6 +130,16 @@ export default function GlobalAppShell({
           color="black"
           zIndex={98}
           onClick={toggleMobile}
+        />
+      )}
+
+      {isPageRoute && isMobile && isAsideOpen && (
+        <Overlay
+          className={classes.mobileOverlay}
+          opacity={0.35}
+          color="black"
+          zIndex={98}
+          onClick={closeMobileAside}
         />
       )}
 

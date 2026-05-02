@@ -11,6 +11,7 @@ import {
   fetchAllAncestorChildren,
   useGetRootSidebarPagesQuery,
   usePageQuery,
+  useRemovePageMutation,
   useUpdatePageMutation,
 } from "@/features/page/queries/page-query.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,6 +28,8 @@ import {
   IconLink,
   IconPlus,
   IconPointFilled,
+  IconSquare,
+  IconSquareCheckFilled,
   IconStar,
   IconStarFilled,
   IconTrash,
@@ -45,8 +48,10 @@ import {
 } from "@/features/page/tree/utils/utils.ts";
 import { SpaceTreeNode } from "@/features/page/tree/types.ts";
 import {
+  exportPage,
   getPageById,
 } from "@/features/page/services/page-service.ts";
+import { ExportFormat } from "@/features/page/types/page.types.ts";
 import { SidebarPagesParams } from "@/features/page/types/page.types.ts";
 import { queryClient } from "@/main.tsx";
 import { OpenMap } from "react-arborist/dist/main/state/open-slice";
@@ -59,7 +64,10 @@ import { getAppUrl } from "@/lib/config.ts";
 import { extractPageSlugId } from "@/lib";
 import { useDeletePageModal } from "@/features/page/hooks/use-delete-page-modal.tsx";
 import { useTranslation } from "react-i18next";
+import { modals } from "@mantine/modals";
 import ExportModal from "@/components/common/export-modal";
+import BulkExportModal from "@/components/common/bulk-export-modal";
+import BulkMovePageModal from "../../components/bulk-move-page-modal.tsx";
 import MovePageModal from "../../components/move-page-modal.tsx";
 import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
@@ -70,12 +78,16 @@ import { useFavoriteIds, useAddFavoriteMutation, useRemoveFavoriteMutation } fro
 interface SpaceTreeProps {
   spaceId: string;
   readOnly: boolean;
-  onMobileSelectionStateChange?: (state: {
+  onSelectionStateChange?: (state: {
     selectionMode: boolean;
     selectedCount: number;
+    selectedIds: string[];
     clearSelection: () => void;
     toggleSelectionMode: () => void;
     selectAllVisible: () => void;
+    deleteSelected: () => void;
+    exportSelected: () => void;
+    openMoveSelected: () => void;
   }) => void;
 }
 
@@ -107,10 +119,10 @@ const openTreeNodesAtom = atom<OpenMap>({});
 export default function SpaceTree({
   spaceId,
   readOnly,
-  onMobileSelectionStateChange,
+  onSelectionStateChange,
 }: SpaceTreeProps) {
   const { t } = useTranslation();
-  const { pageSlug } = useParams();
+  const { pageSlug, spaceSlug } = useParams();
   const { data, setData, controllers } =
     useTreeMutation<SpaceTreeNode>(spaceId);
   const {
@@ -137,10 +149,17 @@ export default function SpaceTree({
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedCount, setSelectedCount] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectionModeRef = useRef(selectionMode);
   selectionModeRef.current = selectionMode;
   const spaceIdRef = useRef(spaceId);
   spaceIdRef.current = spaceId;
+  const removePageMutation = useRemovePageMutation();
+  const { openDeleteModal: openBulkDeleteModal } = useDeletePageModal();
+  const [bulkExportOpened, { open: openBulkExport, close: closeBulkExport }] =
+    useDisclosure(false);
+  const [bulkMoveOpened, { open: openBulkMove, close: closeBulkMove }] =
+    useDisclosure(false);
   const { data: currentPage } = usePageQuery({
     pageId: extractPageSlugId(pageSlug),
   });
@@ -264,8 +283,17 @@ export default function SpaceTree({
 
   const filteredData = data.filter((node) => node?.spaceId === spaceId);
 
+  const refreshSelectedIds = useCallback(() => {
+    const api = treeApiRef.current;
+    if (!api) return;
+    const ids = Array.from(api.selectedIds);
+    setSelectedIds(ids);
+    setSelectedCount(ids.length);
+  }, []);
+
   const clearSelectionMode = useCallback(() => {
     treeApiRef.current?.deselectAll();
+    setSelectedIds([]);
     setSelectedCount(0);
     setSelectionMode(false);
   }, []);
@@ -281,23 +309,122 @@ export default function SpaceTree({
   const selectAllVisible = useCallback(() => {
     const api = treeApiRef.current;
     if (!api) return;
+    setSelectionMode(true);
     api.setSelection({
       ids: api.visibleNodes.map((node) => node.id),
       anchor: api.visibleNodes[0]?.id ?? null,
       mostRecent: api.visibleNodes.at(-1)?.id ?? null,
     });
-    setSelectedCount(api.selectedIds.size);
-  }, []);
+    refreshSelectedIds();
+  }, [refreshSelectedIds]);
+
+  const deleteSelected = useCallback(() => {
+    const ids = Array.from(treeApiRef.current?.selectedIds ?? []);
+    if (ids.length === 0) return;
+    openBulkDeleteModal({
+      onConfirm: async () => {
+        let failed = 0;
+        for (const id of ids) {
+          try {
+            await removePageMutation.mutateAsync(id);
+          } catch (err) {
+            failed++;
+            console.error("Bulk delete failed for", id, err);
+          }
+        }
+        if (failed > 0) {
+          notifications.show({
+            message: t("{{ok}} deleted, {{failed}} failed", {
+              ok: ids.length - failed,
+              failed,
+            }),
+            color: "orange",
+          });
+        } else {
+          notifications.show({
+            message: t("Pages moved to trash"),
+          });
+        }
+        clearSelectionMode();
+      },
+    });
+  }, [clearSelectionMode, openBulkDeleteModal, removePageMutation, t]);
+
+  const exportSelected = useCallback(() => {
+    if (treeApiRef.current?.selectedIds.size === 0) return;
+    openBulkExport();
+  }, [openBulkExport]);
+
+  const openMoveSelected = useCallback(() => {
+    if (treeApiRef.current?.selectedIds.size === 0) return;
+    openBulkMove();
+  }, [openBulkMove]);
 
   useEffect(() => {
-    onMobileSelectionStateChange?.({
+    onSelectionStateChange?.({
       selectionMode,
       selectedCount,
+      selectedIds,
       clearSelection: clearSelectionMode,
       toggleSelectionMode,
       selectAllVisible,
+      deleteSelected,
+      exportSelected,
+      openMoveSelected,
     });
-  }, [selectionMode, selectedCount, onMobileSelectionStateChange]);
+  }, [
+    selectionMode,
+    selectedCount,
+    selectedIds,
+    onSelectionStateChange,
+    clearSelectionMode,
+    toggleSelectionMode,
+    selectAllVisible,
+    deleteSelected,
+    exportSelected,
+    openMoveSelected,
+  ]);
+
+  // Keyboard shortcuts: Esc clears selection, Ctrl/Meta+A selects all visible,
+  // Delete triggers bulk delete (only when selection mode is active).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Skip if focus is in an input/textarea/contenteditable
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === "Escape" && selectionModeRef.current) {
+        e.preventDefault();
+        clearSelectionMode();
+        return;
+      }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === "a" &&
+        selectionModeRef.current
+      ) {
+        e.preventDefault();
+        selectAllVisible();
+        return;
+      }
+      if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        selectionModeRef.current &&
+        (treeApiRef.current?.selectedIds.size ?? 0) > 0
+      ) {
+        e.preventDefault();
+        deleteSelected();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [clearSelectionMode, selectAllVisible, deleteSelected]);
 
   return (
     <div className={classes.treeContainer}>
@@ -353,14 +480,26 @@ export default function SpaceTree({
                 {...props}
                 selectionMode={selectionMode}
                 onEnterSelectionMode={() => setSelectionMode(true)}
-                onSelectionChange={() =>
-                  setSelectedCount(treeApiRef.current?.selectedIds.size ?? 0)
-                }
+                onSelectionChange={refreshSelectedIds}
               />
             )}
           </Tree>
         )}
       </div>
+
+      <BulkExportModal
+        pageIds={selectedIds}
+        open={bulkExportOpened}
+        onClose={closeBulkExport}
+      />
+
+      <BulkMovePageModal
+        pageIds={selectedIds}
+        currentSpaceSlug={spaceSlug}
+        open={bulkMoveOpened}
+        onClose={closeBulkMove}
+        onMoved={clearSelectionMode}
+      />
     </div>
   );
 }
@@ -387,6 +526,7 @@ function Node({
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchMovedRef = useRef(false);
   const longPressActivatedRef = useRef(false);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const prefetchPage = () => {
     timerRef.current = setTimeout(async () => {
@@ -499,26 +639,55 @@ function Node({
           }
         }}
         onContextMenu={(e) => {
+          // Always prevent native context menu (long-press on Android, right-click on desktop)
           e.preventDefault();
-          if (!selectionMode) return;
+          // If a touch long-press already handled selection, don't double-toggle
+          if (longPressActivatedRef.current) {
+            return;
+          }
+          if (!selectionMode) {
+            onEnterSelectionMode?.();
+          }
           toggleNodeSelection();
         }}
-        onTouchStart={() => {
+        onTouchStart={(e) => {
           touchMovedRef.current = false;
           longPressActivatedRef.current = false;
           clearLongPressTimer();
+          // Track initial touch position to differentiate scroll from press
+          const touch = e.touches[0];
+          touchStartPosRef.current = touch
+            ? { x: touch.clientX, y: touch.clientY }
+            : null;
           longPressTimerRef.current = setTimeout(() => {
             longPressActivatedRef.current = true;
+            // Provide haptic feedback if available
+            try {
+              (navigator as any).vibrate?.(10);
+            } catch {}
             onEnterSelectionMode?.();
             if (!node.isSelected) {
               node.selectMulti();
               onSelectionChange?.();
             }
-          }, 450);
+          }, 500);
         }}
-        onTouchMove={() => {
-          touchMovedRef.current = true;
-          clearLongPressTimer();
+        onTouchMove={(e) => {
+          // Only cancel long-press if the finger moves beyond a small threshold,
+          // to avoid accidental cancellations from minor jitter.
+          const start = touchStartPosRef.current;
+          const touch = e.touches[0];
+          if (!start || !touch) {
+            touchMovedRef.current = true;
+            clearLongPressTimer();
+            return;
+          }
+          const dx = touch.clientX - start.x;
+          const dy = touch.clientY - start.y;
+          if (dx * dx + dy * dy > 100 /* 10px */) {
+            touchMovedRef.current = true;
+            clearLongPressTimer();
+          }
         }}
         onTouchEnd={(e) => {
           clearLongPressTimer();
@@ -530,6 +699,27 @@ function Node({
         onMouseEnter={prefetchPage}
         onMouseLeave={cancelPagePrefetch}
       >
+        {selectionMode && (
+          <span
+            className={classes.selectionCheckbox}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleNodeSelection();
+            }}
+            aria-hidden
+          >
+            {node.isSelected ? (
+              <IconSquareCheckFilled
+                size={16}
+                style={{ color: "var(--mantine-primary-color-filled)" }}
+              />
+            ) : (
+              <IconSquare size={16} style={{ opacity: 0.5 }} />
+            )}
+          </span>
+        )}
+
         <PageArrow node={node} onExpandTree={() => handleLoadChildren(node)} />
 
         <span className={classes.text}>{node.data.name || t("untitled")}</span>

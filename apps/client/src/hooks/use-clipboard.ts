@@ -28,7 +28,7 @@ export function useClipboard(
   };
 
   const copy = (value: string) => {
-    if ("clipboard" in navigator) {
+    if ("clipboard" in navigator && window.isSecureContext) {
       navigator.clipboard
         .writeText(value)
         .then(() => handleCopyResult(true))

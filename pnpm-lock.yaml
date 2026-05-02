@@ -354,6 +354,12 @@ importers:
       react-clear-modal:
         specifier: ^2.0.18
         version: 2.0.18(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react-dnd-multi-backend:
+        specifier: ^6.0.2
+        version: 6.0.2(react-dnd-html5-backend@14.1.0)(react-dnd-touch-backend@14.1.1)(react-dnd@14.0.5(@types/node@22.19.1)(@types/react@18.3.12)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react-dnd-touch-backend:
+        specifier: '14'
+        version: 14.1.1
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
@@ -6551,6 +6557,9 @@ packages:
   dnd-core@14.0.1:
     resolution: {integrity: sha512-+PVS2VPTgKFPYWo3vAFEA8WPbTf7/xo43TifH9G8S1KqnrQu0o77A3unrF5yOugy4mIz7K5wAVFHUcha7wsz6A==}
 
+  dnd-multi-backend@6.0.0:
+    resolution: {integrity: sha512-qfUO4V0IACs24xfE9m9OUnwIzoL+SWzSiFbKVIHE0pFddJeZ93BZOdHS1XEYr8X3HNh+CfnfjezXgOMgjvh74g==}
+
   doctrine@2.1.0:
     resolution: {integrity: sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw==}
     engines: {node: '>=0.10.0'}
@@ -9255,6 +9264,23 @@ packages:
 
   react-dnd-html5-backend@14.1.0:
     resolution: {integrity: sha512-6ONeqEC3XKVf4eVmMTe0oPds+c5B9Foyj8p/ZKLb7kL2qh9COYxiBHv3szd6gztqi/efkmriywLUVlPotqoJyw==}
+
+  react-dnd-multi-backend@6.0.2:
+    resolution: {integrity: sha512-SwpqRv0HkJYu244FbHf9NbvGzGy14Ir9wIAhm909uvOVaHgsOq6I1THMSWSgpwUI31J3Bo5uS19tuvGpVPjzZw==}
+    peerDependencies:
+      react: ^16.13
+      react-dnd-html5-backend: ^11.1.3
+      react-dnd-touch-backend: ^11.1.3
+      react-dom: ^16.13
+
+  react-dnd-preview@6.0.2:
+    resolution: {integrity: sha512-F2+uK4Be+q+7mZfNh9kaZols7wp1hX6G7UBTVaTpDsBpMhjFvY7/v7odxYSerSFBShh23MJl33a4XOVRFj1zoQ==}
+    peerDependencies:
+      react: ^16.13.1
+      react-dnd: ^11.1.3
+
+  react-dnd-touch-backend@14.1.1:
+    resolution: {integrity: sha512-ITmfzn3fJrkUBiVLO6aJZcnu7T8C+GfwZitFryGsXKn5wYcUv+oQBeh9FYcMychmVbDdeUCfvEtTk9O+DKmAaw==}
 
   react-dnd@14.0.5:
     resolution: {integrity: sha512-9i1jSgbyVw0ELlEVt/NkCUkxy1hmhJOkePoCH713u75vzHGyXhPDm28oLfc2NMSBjZRM1Y+wRjHXJT3sPrTy+A==}
@@ -17235,6 +17261,8 @@ snapshots:
       '@react-dnd/invariant': 2.0.0
       redux: 4.2.1
 
+  dnd-multi-backend@6.0.0: {}
+
   doctrine@2.1.0:
     dependencies:
       esutils: 2.0.3
@@ -20539,6 +20567,29 @@ snapshots:
 
   react-dnd-html5-backend@14.1.0:
     dependencies:
+      dnd-core: 14.0.1
+
+  react-dnd-multi-backend@6.0.2(react-dnd-html5-backend@14.1.0)(react-dnd-touch-backend@14.1.1)(react-dnd@14.0.5(@types/node@22.19.1)(@types/react@18.3.12)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+    dependencies:
+      dnd-multi-backend: 6.0.0
+      prop-types: 15.8.1
+      react: 18.3.1
+      react-dnd-html5-backend: 14.1.0
+      react-dnd-preview: 6.0.2(react-dnd@14.0.5(@types/node@22.19.1)(@types/react@18.3.12)(react@18.3.1))(react@18.3.1)
+      react-dnd-touch-backend: 14.1.1
+      react-dom: 18.3.1(react@18.3.1)
+    transitivePeerDependencies:
+      - react-dnd
+
+  react-dnd-preview@6.0.2(react-dnd@14.0.5(@types/node@22.19.1)(@types/react@18.3.12)(react@18.3.1))(react@18.3.1):
+    dependencies:
+      prop-types: 15.8.1
+      react: 18.3.1
+      react-dnd: 14.0.5(@types/node@22.19.1)(@types/react@18.3.12)(react@18.3.1)
+
+  react-dnd-touch-backend@14.1.1:
+    dependencies:
+      '@react-dnd/invariant': 2.0.0
       dnd-core: 14.0.1
 
   react-dnd@14.0.5(@types/node@22.19.1)(@types/react@18.3.12)(react@18.3.1):

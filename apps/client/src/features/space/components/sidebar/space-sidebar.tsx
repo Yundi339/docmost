@@ -8,6 +8,7 @@ import {
 } from "@mantine/core";
 import {
   IconArrowDown,
+  IconArrowRight,
   IconCheckbox,
   IconCopyCheck,
   IconDots,
@@ -57,12 +58,16 @@ import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sideb
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import { searchSpotlight } from "@/features/search/constants";
 
-type MobileSelectionState = {
+type SpaceSelectionState = {
   selectionMode: boolean;
   selectedCount: number;
+  selectedIds: string[];
   clearSelection: () => void;
   toggleSelectionMode: () => void;
   selectAllVisible: () => void;
+  deleteSelected: () => void;
+  exportSelected: () => void;
+  openMoveSelected: () => void;
 };
 
 export function SpaceSidebar() {
@@ -73,8 +78,8 @@ export function SpaceSidebar() {
     useDisclosure(false);
   const [mobileSidebarOpened] = useAtom(mobileSidebarAtom);
   const toggleMobileSidebar = useToggleSidebar(mobileSidebarAtom);
-  const [mobileSelection, setMobileSelection] =
-    React.useState<MobileSelectionState | null>(null);
+  const [selection, setSelection] =
+    React.useState<SpaceSelectionState | null>(null);
 
   const { spaceSlug } = useParams();
   const { data: space } = useGetSpaceBySlugQuery(spaceSlug);
@@ -189,84 +194,149 @@ export function SpaceSidebar() {
         </div>
 
         <div className={clsx(classes.section, classes.sectionPages)}>
-          <Group className={classes.pagesHeader} justify="space-between" wrap="nowrap">
-            <Group gap="xs" wrap="nowrap" className={classes.pagesTitleGroup}>
-              {mobileSelection?.selectionMode && (
+          {selection?.selectionMode ? (
+            <Group
+              className={classes.pagesHeader}
+              justify="space-between"
+              wrap="nowrap"
+            >
+              <Group gap="xs" wrap="nowrap" className={classes.pagesTitleGroup}>
                 <ActionIcon
                   variant="subtle"
-                  color="dark"
+                  color="gray"
                   size="sm"
-                  onClick={mobileSelection.clearSelection}
+                  onClick={selection.clearSelection}
                   aria-label={t("Cancel selection")}
-                  className={classes.mobileSelectionAction}
                 >
-                  <IconX size={18} />
+                  <IconX size={16} />
                 </ActionIcon>
-              )}
-              <Text size="xs" fw={500} c="dimmed" truncate="end">
-                {mobileSelection?.selectionMode
-                  ? t("{{count}} selected", {
-                      count: mobileSelection.selectedCount,
-                    })
-                  : t("Pages")}
-              </Text>
-            </Group>
+                <Text size="xs" fw={500} c="dimmed" truncate="end">
+                  {t("{{count}} selected", {
+                    count: selection.selectedCount,
+                  })}
+                </Text>
+              </Group>
 
-            <Group gap="xs">
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                size={18}
-                onClick={() =>
-                  mobileSelection?.selectionMode
-                    ? mobileSelection.selectAllVisible()
-                    : mobileSelection?.toggleSelectionMode()
-                }
-                aria-label={
-                  mobileSelection?.selectionMode
-                    ? t("Select all")
-                    : t("Select pages")
-                }
-                className={classes.mobileSelectionAction}
-              >
-                {mobileSelection?.selectionMode ? (
-                  <IconCopyCheck />
-                ) : (
-                  <IconCheckbox />
-                )}
-              </ActionIcon>
-
-              <SpaceMenu
-                spaceId={space.id}
-                canManagePages={spaceAbility.can(
-                  SpaceCaslAction.Manage,
-                  SpaceCaslSubject.Page,
-                )}
-                onSpaceSettings={openSettings}
-              />
-
-              {spaceAbility.can(
-                SpaceCaslAction.Manage,
-                SpaceCaslSubject.Page,
-              ) && (
-                <Tooltip label={t("Create page")} withArrow position="right">
+              <Group gap={4} wrap="nowrap">
+                <Tooltip label={t("Select all")} withArrow>
                   <ActionIcon
-                    variant="default"
-                    size={18}
-                    onClick={handleCreatePage}
-                    aria-label={t("Create page")}
+                    variant="subtle"
+                    color="gray"
+                    size="sm"
+                    onClick={selection.selectAllVisible}
+                    aria-label={t("Select all")}
                   >
-                    <IconPlus />
+                    <IconCopyCheck size={16} />
                   </ActionIcon>
                 </Tooltip>
-              )}
+
+                {spaceAbility.can(
+                  SpaceCaslAction.Manage,
+                  SpaceCaslSubject.Page,
+                ) && (
+                  <Tooltip label={t("Move to space")} withArrow>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      size="sm"
+                      onClick={selection.openMoveSelected}
+                      disabled={selection.selectedCount === 0}
+                      aria-label={t("Move to space")}
+                    >
+                      <IconArrowRight size={16} />
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+
+                <Tooltip label={t("Export")} withArrow>
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="sm"
+                    onClick={selection.exportSelected}
+                    disabled={selection.selectedCount === 0}
+                    aria-label={t("Export")}
+                  >
+                    <IconFileExport size={16} />
+                  </ActionIcon>
+                </Tooltip>
+
+                {spaceAbility.can(
+                  SpaceCaslAction.Manage,
+                  SpaceCaslSubject.Page,
+                ) && (
+                  <Tooltip label={t("Delete")} withArrow>
+                    <ActionIcon
+                      variant="subtle"
+                      color="red"
+                      size="sm"
+                      onClick={selection.deleteSelected}
+                      disabled={selection.selectedCount === 0}
+                      aria-label={t("Delete")}
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+              </Group>
             </Group>
-          </Group>
+          ) : (
+            <Group
+              className={classes.pagesHeader}
+              justify="space-between"
+              wrap="nowrap"
+            >
+              <Group gap="xs" wrap="nowrap" className={classes.pagesTitleGroup}>
+                <Text size="xs" fw={500} c="dimmed" truncate="end">
+                  {t("Pages")}
+                </Text>
+              </Group>
+
+              <Group gap="xs">
+                <Tooltip label={t("Select pages")} withArrow>
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size={18}
+                    onClick={() => selection?.toggleSelectionMode()}
+                    aria-label={t("Select pages")}
+                  >
+                    <IconCheckbox />
+                  </ActionIcon>
+                </Tooltip>
+
+                <SpaceMenu
+                  spaceId={space.id}
+                  canManagePages={spaceAbility.can(
+                    SpaceCaslAction.Manage,
+                    SpaceCaslSubject.Page,
+                  )}
+                  onSpaceSettings={openSettings}
+                />
+
+                {spaceAbility.can(
+                  SpaceCaslAction.Manage,
+                  SpaceCaslSubject.Page,
+                ) && (
+                  <Tooltip label={t("Create page")} withArrow position="right">
+                    <ActionIcon
+                      variant="default"
+                      size={18}
+                      onClick={handleCreatePage}
+                      aria-label={t("Create page")}
+                    >
+                      <IconPlus />
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+              </Group>
+            </Group>
+          )}
 
           <div className={classes.pages}>
             <SpaceTree
               spaceId={space.id}
-              onMobileSelectionStateChange={setMobileSelection}
+              onSelectionStateChange={setSelection}
               readOnly={spaceAbility.cannot(
                 SpaceCaslAction.Manage,
                 SpaceCaslSubject.Page,

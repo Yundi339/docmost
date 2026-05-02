@@ -208,7 +208,7 @@ export function ColumnsMenu({ editor }: EditorMenuProps) {
       copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
     };
 
-    if (navigator.clipboard?.write) {
+    if (navigator.clipboard?.write && window.isSecureContext) {
       navigator.clipboard
         .write([
           new ClipboardItem({
