@@ -117,11 +117,11 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
   const treeApiRef = useRef<TreeApi<SpaceTreeNode>>();
   const [openTreeNodes, setOpenTreeNodes] = useAtom<OpenMap>(openTreeNodesAtom);
   const [, appendChildren] = useAtom(appendNodeChildrenAtom);
-  const rootElement = useRef<HTMLDivElement>();
+  const treeElement = useRef<HTMLDivElement>();
   const [isRootReady, setIsRootReady] = useState(false);
   const { ref: sizeRef, width, height } = useElementSize();
   const mergedRef = useMergedRef((element) => {
-    rootElement.current = element;
+    treeElement.current = element;
     if (element && !isRootReady) {
       setIsRootReady(true);
     }
@@ -280,7 +280,7 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
   };
 
   return (
-    <div ref={mergedRef} className={classes.treeContainer}>
+    <div className={classes.treeContainer}>
       <div className={classes.mobileSelectionBar}>
         {selectionMode ? (
           <>
@@ -321,58 +321,60 @@ export default function SpaceTree({ spaceId, readOnly }: SpaceTreeProps) {
           {t("No pages yet")}
         </Text>
       )}
-      {isRootReady && rootElement.current && (
-        <Tree
-          data={filteredData}
-          disableDrag={
-            readOnly
-              ? true
-              : (data) => {
-                  return data.canEdit === false;
-                }
-          }
-          disableDrop={
-            readOnly
-              ? true
-              : ({ parentNode }) => parentNode?.data?.canEdit === false
-          }
-          disableEdit={readOnly ? true : (data) => data.canEdit === false}
-          {...controllers}
-          width={width}
-          height={rootElement.current.clientHeight}
-          ref={(ref) => {
-            treeApiRef.current = ref;
-            if (ref) {
-              //@ts-ignore
-              setTreeApi(ref);
+      <div ref={mergedRef} className={classes.treeViewport}>
+        {isRootReady && treeElement.current && height > 0 && (
+          <Tree
+            data={filteredData}
+            disableDrag={
+              readOnly
+                ? true
+                : (data) => {
+                    return data.canEdit === false;
+                  }
             }
-          }}
-          openByDefault={false}
-          disableMultiSelection={false}
-          className={classes.tree}
-          rowClassName={classes.row}
-          rowHeight={30}
-          paddingBottom={80}
-          overscanCount={10}
-          dndRootElement={rootElement.current}
-          onToggle={() => {
-            const openState = treeApiRef.current?.openState;
-            setOpenTreeNodes(openState);
-            saveOpenState(spaceId, openState);
-          }}
-          initialOpenState={openTreeNodes}
-        >
-          {(props) => (
-            <Node
-              {...props}
-              selectionMode={selectionMode}
-              onSelectionChange={() =>
-                setSelectedCount(treeApiRef.current?.selectedIds.size ?? 0)
+            disableDrop={
+              readOnly
+                ? true
+                : ({ parentNode }) => parentNode?.data?.canEdit === false
+            }
+            disableEdit={readOnly ? true : (data) => data.canEdit === false}
+            {...controllers}
+            width={width}
+            height={height}
+            ref={(ref) => {
+              treeApiRef.current = ref;
+              if (ref) {
+                //@ts-ignore
+                setTreeApi(ref);
               }
-            />
-          )}
-        </Tree>
-      )}
+            }}
+            openByDefault={false}
+            disableMultiSelection={false}
+            className={classes.tree}
+            rowClassName={classes.row}
+            rowHeight={30}
+            paddingBottom={80}
+            overscanCount={10}
+            dndRootElement={treeElement.current}
+            onToggle={() => {
+              const openState = treeApiRef.current?.openState;
+              setOpenTreeNodes(openState);
+              saveOpenState(spaceId, openState);
+            }}
+            initialOpenState={openTreeNodes}
+          >
+            {(props) => (
+              <Node
+                {...props}
+                selectionMode={selectionMode}
+                onSelectionChange={() =>
+                  setSelectedCount(treeApiRef.current?.selectedIds.size ?? 0)
+                }
+              />
+            )}
+          </Tree>
+        )}
+      </div>
     </div>
   );
 }
