@@ -30,7 +30,7 @@ index 29a3853464185d6970a4d5f4beb3c0b9ff7f448e..d0b9f9410bd999d9be4d9d749b17fd43
  const SERVER_STATE = (0, initial_1.initialState)();
 +const _isTouchDevice = (typeof window !== "undefined") && ("ontouchstart" in window || (navigator && navigator.maxTouchPoints > 0));
 +const _SelectedBackend = _isTouchDevice ? react_dnd_touch_backend_1.TouchBackend : react_dnd_html5_backend_1.HTML5Backend;
-+const _SelectedBackendOptions = _isTouchDevice ? { delayTouchStart: 600, ignoreContextMenu: true, enableMouseEvents: false } : undefined;
++const _SelectedBackendOptions = _isTouchDevice ? { delayTouchStart: 200, ignoreContextMenu: true, enableMouseEvents: false } : undefined;
  function TreeProvider({ treeProps, imperativeHandle, children, }) {
      const list = (0, react_1.useRef)(null);
      const listEl = (0, react_1.useRef)(null);
@@ -119,7 +119,7 @@ index 454aac47f63f8ea9c6648095ef6ffd74271e66ad..2f04757a47d72807d7b8c08f1ab0bd9e
 +const isTouchDevice = (typeof window !== "undefined") && ("ontouchstart" in window || (navigator && navigator.maxTouchPoints > 0));
 +const SelectedBackend = isTouchDevice ? TouchBackend : HTML5Backend;
 +const SelectedBackendOptions = isTouchDevice
-+    ? { delayTouchStart: 600, ignoreContextMenu: true, enableMouseEvents: false }
++    ? { delayTouchStart: 200, ignoreContextMenu: true, enableMouseEvents: false }
 +    : undefined;
  const SERVER_STATE = initialState();
  export function TreeProvider({ treeProps, imperativeHandle, children, }) {

@@ -67,7 +67,7 @@ export default function GlobalSidebar() {
 
   return (
     <div className={classes.navbar}>
-      <ScrollArea w="100%" style={{ flex: 1 }}>
+      <ScrollArea w="100%" style={{ flex: 1, overscrollBehavior: "contain" }}>
         <div className={classes.section}>
           {mainNavItems.map((item) => (
             <Link

@@ -188,7 +188,11 @@ export default function ShareShell({
         withBorder={mobileTocOpened}
         className={classes.aside}
       >
-        <ScrollArea style={{ height: "80vh" }} scrollbarSize={5} type="scroll">
+        <ScrollArea
+          style={{ height: "80vh", overscrollBehavior: "contain" }}
+          scrollbarSize={5}
+          type="scroll"
+        >
           <div style={{ paddingBottom: "50px" }}>
             {readOnlyEditor && (
               <TableOfContents isShare={true} editor={readOnlyEditor} />

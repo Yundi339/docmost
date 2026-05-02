@@ -269,7 +269,9 @@ export default function SettingsSidebar() {
         <Text fw={500}>{t("Settings")}</Text>
       </Group>
 
-      <ScrollArea w="100%">{menuItems}</ScrollArea>
+      <ScrollArea w="100%" style={{ overscrollBehavior: "contain" }}>
+        {menuItems}
+      </ScrollArea>
 
       {!isCloud() && <AppVersion />}
     </div>

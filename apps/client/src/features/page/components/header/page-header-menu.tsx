@@ -18,6 +18,7 @@ import {
   IconMarkdown,
   IconMessage,
   IconPrinter,
+  IconSearch,
   IconStar,
   IconStarFilled,
   IconTrash,
@@ -259,6 +260,16 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
         </Menu.Target>
 
         <Menu.Dropdown>
+          <Menu.Item
+            leftSection={<IconSearch size={16} />}
+            onClick={() => {
+              const event = new CustomEvent("openFindDialogFromEditor", {});
+              document.dispatchEvent(event);
+            }}
+          >
+            {t("Find in page")}
+          </Menu.Item>
+
           <Menu.Item
             leftSection={<IconLink size={16} />}
             onClick={handleCopyLink}

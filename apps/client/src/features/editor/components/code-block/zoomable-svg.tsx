@@ -329,7 +329,14 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
           startY: 0,
         };
       } else if (e.touches.length === 1) {
-        // Always allow single-finger pan (touch-action: none prevents browser scroll)
+        // When inline (not fullscreen) at base scale, let the browser handle
+        // single-finger panning so the page can scroll. Pinch-to-zoom (2 fingers)
+        // and panning when zoomed in will still be intercepted.
+        if (!isFullscreen && scaleRef.current === 1) {
+          touchRef.current = null;
+          return;
+        }
+        // Single-finger pan (touch-action: none in fullscreen / zoomed state)
         e.preventDefault();
         touchRef.current = {
           startDist: 0,

@@ -794,6 +794,29 @@ function Node({
           touchStartPosRef.current = touch
             ? { x: touch.clientX, y: touch.clientY }
             : null;
+          // Pre-emptively suppress the next contextmenu event on the document
+          // so the browser's long-press menu (Android: link/text callout) is
+          // never shown for this touch sequence. The handler self-removes on
+          // touchend/touchcancel/contextmenu.
+          const suppressCtx = (ev: Event) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+          };
+          document.addEventListener("contextmenu", suppressCtx, {
+            capture: true,
+            once: true,
+          });
+          const cleanup = () => {
+            document.removeEventListener(
+              "contextmenu",
+              suppressCtx,
+              { capture: true } as any,
+            );
+            window.removeEventListener("touchend", cleanup);
+            window.removeEventListener("touchcancel", cleanup);
+          };
+          window.addEventListener("touchend", cleanup, { once: true });
+          window.addEventListener("touchcancel", cleanup, { once: true });
           longPressTimerRef.current = setTimeout(() => {
             longPressActivatedRef.current = true;
             // Provide haptic feedback if available

@@ -74,6 +74,17 @@
         left: 50%;
         transform: translateX(-50%);
     }
+
+    /* On touch devices in inline mode, allow page to scroll vertically when
+       the user swipes over a mermaid diagram. Use the toolbar / fullscreen
+       to interact with the diagram itself. */
+    .viewport {
+        touch-action: pan-y;
+    }
+
+    .fullscreenContainer .viewport {
+        touch-action: none;
+    }
 }
 
 .zoomLabel {

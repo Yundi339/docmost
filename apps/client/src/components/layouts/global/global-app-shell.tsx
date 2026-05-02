@@ -159,7 +159,13 @@ export default function GlobalAppShell({
         {isAiRoute && <AiChatSidebar />}
         {showGlobalSidebar && <GlobalSidebar />}
       </AppShell.Navbar>
-      <AppShell.Main>
+      <AppShell.Main
+        style={
+          isMobile && (mobileOpened || isAsideOpen)
+            ? { pointerEvents: "none" }
+            : undefined
+        }
+      >
         {isSettingsRoute ? (
           <Container size={900}>{children}</Container>
         ) : (
