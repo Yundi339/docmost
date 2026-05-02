@@ -28,7 +28,7 @@ export function getBackendUrl(): string {
 export function getCollaborationUrl(): string {
   const baseUrl =
     getConfigValue("COLLAB_URL") ||
-    (import.meta.env.DEV ? process.env.APP_URL : getAppUrl());
+    (import.meta.env.DEV ? getAppUrl() : getAppUrl());
 
   const collabUrl = new URL("/collab", baseUrl);
   collabUrl.protocol = collabUrl.protocol === "https:" ? "wss:" : "ws:";

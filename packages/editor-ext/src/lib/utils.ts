@@ -394,7 +394,7 @@ const alphabet = "abcdefghijklmnopqrstuvwxyz";
 export const generateNodeId = customAlphabet(alphabet, 12);
 
 export function copyToClipboard(text: string): void {
-  if ("clipboard" in navigator) {
+  if ("clipboard" in navigator && window.isSecureContext) {
     navigator.clipboard.writeText(text).catch(() => {
       execCommandCopy(text);
     });
