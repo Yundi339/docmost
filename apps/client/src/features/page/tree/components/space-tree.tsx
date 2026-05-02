@@ -13,7 +13,7 @@ import {
   usePageQuery,
   useUpdatePageMutation,
 } from "@/features/page/queries/page-query.ts";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import classes from "@/features/page/tree/styles/tree.module.css";
 import { ActionIcon, Box, Menu, rem, Text } from "@mantine/core";
@@ -264,21 +264,21 @@ export default function SpaceTree({
 
   const filteredData = data.filter((node) => node?.spaceId === spaceId);
 
-  const clearSelectionMode = () => {
+  const clearSelectionMode = useCallback(() => {
     treeApiRef.current?.deselectAll();
     setSelectedCount(0);
     setSelectionMode(false);
-  };
+  }, []);
 
-  const toggleSelectionMode = () => {
+  const toggleSelectionMode = useCallback(() => {
     if (selectionMode) {
       clearSelectionMode();
     } else {
       setSelectionMode(true);
     }
-  };
+  }, [clearSelectionMode, selectionMode]);
 
-  const selectAllVisible = () => {
+  const selectAllVisible = useCallback(() => {
     const api = treeApiRef.current;
     if (!api) return;
     api.setSelection({
@@ -287,7 +287,7 @@ export default function SpaceTree({
       mostRecent: api.visibleNodes.at(-1)?.id ?? null,
     });
     setSelectedCount(api.selectedIds.size);
-  };
+  }, []);
 
   useEffect(() => {
     onMobileSelectionStateChange?.({
@@ -371,6 +371,7 @@ function Node({
   dragHandle,
   tree,
   selectionMode,
+  onEnterSelectionMode,
   onSelectionChange,
 }: NodeRendererProps<any> & {
   selectionMode?: boolean;
@@ -385,6 +386,7 @@ function Node({
   const toggleMobileSidebar = useToggleSidebar(mobileSidebarAtom);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchMovedRef = useRef(false);
+  const longPressActivatedRef = useRef(false);
 
   const prefetchPage = () => {
     timerRef.current = setTimeout(async () => {
@@ -475,6 +477,12 @@ function Node({
         // @ts-ignore
         ref={dragHandle}
         onClick={(e) => {
+          if (longPressActivatedRef.current) {
+            e.preventDefault();
+            longPressActivatedRef.current = false;
+            return;
+          }
+
           if (selectionMode) {
             e.preventDefault();
             toggleNodeSelection();
@@ -497,8 +505,10 @@ function Node({
         }}
         onTouchStart={() => {
           touchMovedRef.current = false;
+          longPressActivatedRef.current = false;
           clearLongPressTimer();
           longPressTimerRef.current = setTimeout(() => {
+            longPressActivatedRef.current = true;
             onEnterSelectionMode?.();
             if (!node.isSelected) {
               node.selectMulti();
@@ -512,7 +522,7 @@ function Node({
         }}
         onTouchEnd={(e) => {
           clearLongPressTimer();
-          if (selectionMode && !touchMovedRef.current) {
+          if ((selectionMode || longPressActivatedRef.current) && !touchMovedRef.current) {
             e.preventDefault();
           }
         }}
@@ -524,17 +534,19 @@ function Node({
 
         <span className={classes.text}>{node.data.name || t("untitled")}</span>
 
-        <div className={classes.actions}>
-          <NodeMenu node={node} treeApi={tree} spaceId={node.data.spaceId} />
+        {!selectionMode && (
+          <div className={classes.actions}>
+            <NodeMenu node={node} treeApi={tree} spaceId={node.data.spaceId} />
 
-          {tree.props.disableEdit !== true && node.data.canEdit !== false && (
-            <CreateNode
-              node={node}
-              treeApi={tree}
-              onExpandTree={() => handleLoadChildren(node)}
-            />
-          )}
-        </div>
+            {tree.props.disableEdit !== true && node.data.canEdit !== false && (
+              <CreateNode
+                node={node}
+                treeApi={tree}
+                onExpandTree={() => handleLoadChildren(node)}
+              />
+            )}
+          </div>
+        )}
       </Box>
     </>
   );

@@ -20,6 +20,7 @@ interface ZoomableSvgProps {
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 5;
 const ZOOM_STEP = 0.15;
+type Rotation = 0 | 90 | 180 | 270;
 
 export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   const { t } = useTranslation();
@@ -31,7 +32,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   const [offsetY, setOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [rotation, setRotation] = useState(0);
+  const [rotation, setRotation] = useState<Rotation>(0);
   const [showHint, setShowHint] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -50,6 +51,82 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   } | null>(null);
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+
+  const getRotatedBounds = useCallback(
+    (width: number, height: number, value: Rotation) => {
+      switch (value) {
+        case 90:
+          return { width: height, height: width, minX: -height, minY: 0 };
+        case 180:
+          return { width, height, minX: -width, minY: -height };
+        case 270:
+          return { width: height, height: width, minX: 0, minY: -width };
+        default:
+          return { width, height, minX: 0, minY: 0 };
+      }
+    },
+    [],
+  );
+
+  const measureSvg = useCallback(() => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    const svg = content?.querySelector("svg") as SVGSVGElement | null;
+    if (!viewport || !svg) return null;
+
+    svg.style.maxWidth = "none";
+    svg.style.height = "auto";
+    const prevTransform = svg.style.transform;
+    svg.style.transform = "none";
+    const viewportRect = viewport.getBoundingClientRect();
+    const svgRect = svg.getBoundingClientRect();
+    svg.style.transform = prevTransform;
+
+    if (!svgRect.width || !svgRect.height || !viewportRect.width || !viewportRect.height) {
+      return null;
+    }
+
+    return {
+      viewportWidth: viewportRect.width,
+      viewportHeight: viewportRect.height,
+      svgWidth: svgRect.width,
+      svgHeight: svgRect.height,
+    };
+  }, []);
+
+  const fitToViewport = useCallback(
+    (nextRotation: Rotation) => {
+      const measurement = measureSvg();
+      if (!measurement) {
+        setScale(1);
+        setOffsetX(0);
+        setOffsetY(0);
+        return false;
+      }
+
+      const bounds = getRotatedBounds(
+        measurement.svgWidth,
+        measurement.svgHeight,
+        nextRotation,
+      );
+      const fit = Math.min(
+        measurement.viewportWidth / bounds.width,
+        measurement.viewportHeight / bounds.height,
+      );
+      const nextScale = clampScale(fit);
+      setScale(nextScale);
+      setOffsetX(
+        (measurement.viewportWidth - bounds.width * nextScale) / 2 -
+          bounds.minX * nextScale,
+      );
+      setOffsetY(
+        (measurement.viewportHeight - bounds.height * nextScale) / 2 -
+          bounds.minY * nextScale,
+      );
+      return true;
+    },
+    [getRotatedBounds, measureSvg],
+  );
 
   const applyTransform = useCallback(() => {
     // Apply transform directly to the SVG element (not the wrapper), so its
@@ -84,32 +161,12 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
         if (attempt < 20) setTimeout(() => tryFit(attempt + 1), 50);
         return;
       }
-      // Strip mermaid's inline max-width/height so the SVG renders at its
-      // natural (viewBox) size. Transform is applied directly on the SVG.
-      svg.style.maxWidth = "none";
-      svg.style.height = "auto";
-      // Clear any existing transform for clean measurement
-      const prevTransform = svg.style.transform;
-      svg.style.transform = "none";
-      const vpRect = viewport.getBoundingClientRect();
-      const svgRect = svg.getBoundingClientRect();
-      const svgW = svgRect.width;
-      const svgH = svgRect.height;
-      if (!svgW || !svgH || !vpRect.width || !vpRect.height) {
-        svg.style.transform = prevTransform;
+      const measurement = measureSvg();
+      if (!measurement) {
         if (attempt < 20) setTimeout(() => tryFit(attempt + 1), 50);
         return;
       }
-      const fit = Math.min(vpRect.width / svgW, vpRect.height / svgH);
-      const newScale = clampScale(fit);
-      const newOx = (vpRect.width - svgW * newScale) / 2;
-      const newOy = (vpRect.height - svgH * newScale) / 2;
-      // Apply transform synchronously so the user never sees the unscaled SVG
-      svg.style.transformOrigin = "0 0";
-      svg.style.transform = `translate(${newOx}px, ${newOy}px) scale(${newScale})`;
-      setScale(newScale);
-      setOffsetX(newOx);
-      setOffsetY(newOy);
+      fitToViewport(0);
       didAutoFitRef.current = true;
     };
     tryFit();
@@ -158,7 +215,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
       mo.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fitToViewport, measureSvg]);
 
   // Show "Click to zoom with scroll" hint when user scrolls without focus or Ctrl
   const flashHint = useCallback(() => {
@@ -196,16 +253,14 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
       const rect = viewport.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-      const worldX = (mouseX - offsetX) / scale;
-      const worldY = (mouseY - offsetY) / scale;
-
       const direction = e.deltaY < 0 ? 1 : -1;
       const newScale = clampScale(scale * (1 + direction * ZOOM_STEP));
+      const scaleRatio = newScale / scale;
 
       userZoomedRef.current = true;
       setScale(newScale);
-      setOffsetX(mouseX - worldX * newScale);
-      setOffsetY(mouseY - worldY * newScale);
+      setOffsetX(mouseX - (mouseX - offsetX) * scaleRatio);
+      setOffsetY(mouseY - (mouseY - offsetY) * scaleRatio);
     };
 
     viewport.addEventListener("wheel", handleWheel, { passive: false });
@@ -299,12 +354,11 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
         const newScale = clampScale(touchRef.current.startScale * ratio);
         const { centerX, centerY, startOffsetX, startOffsetY, startScale } =
           touchRef.current;
-        const worldX = (centerX - startOffsetX) / startScale;
-        const worldY = (centerY - startOffsetY) / startScale;
+        const scaleRatio = newScale / startScale;
         userZoomedRef.current = true;
         setScale(newScale);
-        setOffsetX(centerX - worldX * newScale);
-        setOffsetY(centerY - worldY * newScale);
+        setOffsetX(centerX - (centerX - startOffsetX) * scaleRatio);
+        setOffsetY(centerY - (centerY - startOffsetY) * scaleRatio);
       } else if (e.touches.length === 1 && touchRef.current.isSingleFinger) {
         const dx = e.touches[0].clientX - touchRef.current.startX;
         const dy = e.touches[0].clientY - touchRef.current.startY;
@@ -335,54 +389,29 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
       if (!rect) return;
       const cx = rect.width / 2;
       const cy = rect.height / 2;
-      const worldX = (cx - offsetX) / scale;
-      const worldY = (cy - offsetY) / scale;
       const newScale = clampScale(scale * (1 + direction * ZOOM_STEP));
+      const scaleRatio = newScale / scale;
       userZoomedRef.current = true;
       setScale(newScale);
-      setOffsetX(cx - worldX * newScale);
-      setOffsetY(cy - worldY * newScale);
+      setOffsetX(cx - (cx - offsetX) * scaleRatio);
+      setOffsetY(cy - (cy - offsetY) * scaleRatio);
     },
     [scale, offsetX, offsetY],
   );
 
   const resetView = useCallback(() => {
     userZoomedRef.current = false;
-    const viewport = viewportRef.current;
-    const content = contentRef.current;
-    if (!viewport || !content) {
-      setScale(1);
-      setOffsetX(0);
-      setOffsetY(0);
-      return;
-    }
-    const svg = content.querySelector("svg") as SVGSVGElement | null;
-    if (!svg) {
-      setScale(1);
-      setOffsetX(0);
-      setOffsetY(0);
-      return;
-    }
-    svg.style.maxWidth = "none";
-    svg.style.height = "auto";
-    const prev = svg.style.transform;
-    svg.style.transform = "none";
-    const vpRect = viewport.getBoundingClientRect();
-    const svgRect = svg.getBoundingClientRect();
-    svg.style.transform = prev;
-    const svgW = svgRect.width;
-    const svgH = svgRect.height;
-    const fit = Math.min(vpRect.width / svgW, vpRect.height / svgH);
-    const newScale = clampScale(fit);
-    setScale(newScale);
-    setOffsetX((vpRect.width - svgW * newScale) / 2);
-    setOffsetY((vpRect.height - svgH * newScale) / 2);
-  }, []);
+    fitToViewport(rotation);
+  }, [fitToViewport, rotation]);
 
   const rotateView = useCallback(() => {
     userZoomedRef.current = true;
-    setRotation((value) => (value + 90) % 360);
-  }, []);
+    setRotation((value) => {
+      const nextRotation = ((value + 90) % 360) as Rotation;
+      requestAnimationFrame(() => fitToViewport(nextRotation));
+      return nextRotation;
+    });
+  }, [fitToViewport]);
 
   const stopToolbarPointer = useCallback((event: React.PointerEvent) => {
     event.stopPropagation();
@@ -390,8 +419,17 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
 
   // Fullscreen – use CSS-only approach (position:fixed) for reliability on mobile
   const toggleFullscreen = useCallback(() => {
-    setIsFullscreen((prev) => !prev);
-  }, []);
+    setIsFullscreen((prev) => {
+      const next = !prev;
+      if (!next) {
+        setRotation(0);
+        requestAnimationFrame(() => fitToViewport(0));
+      } else {
+        requestAnimationFrame(() => fitToViewport(rotation));
+      }
+      return next;
+    });
+  }, [fitToViewport, rotation]);
 
   // Lock body scroll & request landscape when in CSS fullscreen
   useEffect(() => {
@@ -400,7 +438,11 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
       // Try to lock to landscape on mobile
       (screen.orientation as any)?.lock?.("landscape").catch(() => {});
       const handleEsc = (e: KeyboardEvent) => {
-        if (e.key === "Escape") setIsFullscreen(false);
+        if (e.key === "Escape") {
+          setRotation(0);
+          setIsFullscreen(false);
+          requestAnimationFrame(() => fitToViewport(0));
+        }
       };
       document.addEventListener("keydown", handleEsc);
       return () => {
@@ -411,7 +453,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     } else {
       document.body.style.overflow = "";
     }
-  }, [isFullscreen]);
+  }, [fitToViewport, isFullscreen]);
 
   return (
     <div
@@ -437,7 +479,9 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
               size="sm"
               onClick={(event) => {
                 event.stopPropagation();
+                setRotation(0);
                 setIsFullscreen(false);
+                requestAnimationFrame(() => fitToViewport(0));
               }}
               aria-label={t("Back")}
             >
@@ -490,20 +534,22 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
           </ActionIcon>
         </Tooltip>
 
-        <Tooltip label={t("Rotate")} position="bottom" withArrow>
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            size="sm"
-            onClick={(event) => {
-              event.stopPropagation();
-              rotateView();
-            }}
-            aria-label={t("Rotate")}
-          >
-            <IconRotateClockwise size={14} />
-          </ActionIcon>
-        </Tooltip>
+        {isFullscreen && (
+          <Tooltip label={t("Rotate")} position="bottom" withArrow>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                rotateView();
+              }}
+              aria-label={t("Rotate")}
+            >
+              <IconRotateClockwise size={14} />
+            </ActionIcon>
+          </Tooltip>
+        )}
 
         <Tooltip
           label={isFullscreen ? t("Exit fullscreen") : t("Fullscreen")}

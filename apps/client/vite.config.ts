@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
     COLLAB_URL,
     BILLING_TRIAL_DAYS,
   } = loadEnv(mode, envPath, "");
+  const proxyTarget = APP_URL?.replace("localhost", "127.0.0.1");
 
   return {
     define: {
@@ -51,16 +52,16 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         "/api": {
-          target: APP_URL,
+          target: proxyTarget,
           changeOrigin: false,
         },
         "/socket.io": {
-          target: APP_URL,
+          target: proxyTarget,
           ws: true,
           rewriteWsOrigin: true,
         },
         "/collab": {
-          target: APP_URL,
+          target: proxyTarget,
           ws: true,
           rewriteWsOrigin: true,
         },
