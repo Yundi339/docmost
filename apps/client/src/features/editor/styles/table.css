@@ -33,6 +33,13 @@
 
 @media (hover: none) {
   .tableWrapper > .table-fullscreen-control-host {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .tableWrapperTouched > .table-fullscreen-control-host,
+  .tableWrapper:focus-within > .table-fullscreen-control-host,
+  .tableWrapperFullscreen > .table-fullscreen-control-host {
     opacity: 1;
     pointer-events: auto;
   }
@@ -50,6 +57,7 @@
   background: var(--mantine-color-body);
   overflow: auto;
   border: none;
+  touch-action: pan-x pan-y;
 }
 
 .tableWrapperFullscreen > .table-fullscreen-control-host {

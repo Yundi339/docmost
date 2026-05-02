@@ -384,6 +384,10 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     setRotation((value) => (value + 90) % 360);
   }, []);
 
+  const stopToolbarPointer = useCallback((event: React.PointerEvent) => {
+    event.stopPropagation();
+  }, []);
+
   // Fullscreen – use CSS-only approach (position:fixed) for reliability on mobile
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev);
@@ -421,6 +425,9 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
           classes.toolbar,
           (isHovered || isFullscreen) && classes.toolbarVisible,
         )}
+        onPointerDown={stopToolbarPointer}
+        onMouseDown={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
       >
         {isFullscreen && (
           <Tooltip label={t("Back")} position="bottom" withArrow>
@@ -428,7 +435,10 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
               variant="subtle"
               color="gray"
               size="sm"
-              onClick={() => setIsFullscreen(false)}
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsFullscreen(false);
+              }}
               aria-label={t("Back")}
             >
               <IconArrowBackUp size={14} />
@@ -441,7 +451,10 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
             variant="subtle"
             color="gray"
             size="sm"
-            onClick={() => zoomFromCenter(-1)}
+            onClick={(event) => {
+              event.stopPropagation();
+              zoomFromCenter(-1);
+            }}
           >
             <IconMinus size={14} />
           </ActionIcon>
@@ -454,7 +467,10 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
             variant="subtle"
             color="gray"
             size="sm"
-            onClick={() => zoomFromCenter(1)}
+            onClick={(event) => {
+              event.stopPropagation();
+              zoomFromCenter(1);
+            }}
           >
             <IconPlus size={14} />
           </ActionIcon>
@@ -465,7 +481,10 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
             variant="subtle"
             color="gray"
             size="sm"
-            onClick={resetView}
+            onClick={(event) => {
+              event.stopPropagation();
+              resetView();
+            }}
           >
             <IconFocusCentered size={14} />
           </ActionIcon>
@@ -476,7 +495,10 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
             variant="subtle"
             color="gray"
             size="sm"
-            onClick={rotateView}
+            onClick={(event) => {
+              event.stopPropagation();
+              rotateView();
+            }}
             aria-label={t("Rotate")}
           >
             <IconRotateClockwise size={14} />
@@ -492,7 +514,10 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
             variant="subtle"
             color="gray"
             size="sm"
-            onClick={toggleFullscreen}
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleFullscreen();
+            }}
           >
             {isFullscreen ? (
               <IconMinimize size={14} />

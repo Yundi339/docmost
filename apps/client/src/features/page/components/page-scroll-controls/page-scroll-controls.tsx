@@ -14,6 +14,25 @@ const DEFAULT_POSITION: Position = { x: 24, y: 24 };
 const EDGE_PADDING = 8;
 const CLICK_DRAG_THRESHOLD = 5;
 
+function getScrollableElement() {
+  const scrollingElement = document.scrollingElement as HTMLElement | null;
+  if (
+    scrollingElement &&
+    scrollingElement.scrollHeight > scrollingElement.clientHeight
+  ) {
+    return scrollingElement;
+  }
+
+  const candidates = Array.from(document.body.querySelectorAll<HTMLElement>("*"));
+  return candidates.find((candidate) => {
+    const style = window.getComputedStyle(candidate);
+    return (
+      /(auto|scroll|overlay)/.test(style.overflowY) &&
+      candidate.scrollHeight > candidate.clientHeight
+    );
+  }) ?? scrollingElement;
+}
+
 function clampPosition(position: Position, element?: HTMLElement | null) {
   if (typeof window === "undefined") return position;
 
@@ -73,6 +92,13 @@ export default function PageScrollControls() {
   }, [position]);
 
   const scrollTo = useCallback((top: number) => {
+    const scrollParent = getScrollableElement();
+
+    if (scrollParent && scrollParent !== document.documentElement) {
+      scrollParent.scrollTo({ top, behavior: "smooth" });
+      return;
+    }
+
     window.scrollTo({ top, behavior: "smooth" });
   }, []);
 
@@ -175,12 +201,8 @@ export default function PageScrollControls() {
           onClick={(event) => {
             preventClickAfterDrag(event);
             if (!event.defaultPrevented) {
-              scrollTo(
-                Math.max(
-                  document.documentElement.scrollHeight,
-                  document.body.scrollHeight,
-                ),
-              );
+              const scrollParent = getScrollableElement();
+              scrollTo(scrollParent?.scrollHeight ?? document.body.scrollHeight);
             }
           }}
           aria-label={t("Go to bottom")}
