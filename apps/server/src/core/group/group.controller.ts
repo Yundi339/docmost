@@ -46,7 +46,7 @@ export class GroupController {
       throw new ForbiddenException();
     }
 
-    return this.groupService.getWorkspaceGroups(workspace.id, pagination);
+    return this.groupService.getWorkspaceGroups(workspace.id, pagination, user);
   }
 
   @HttpCode(HttpStatus.OK)
@@ -60,7 +60,11 @@ export class GroupController {
     if (ability.cannot(WorkspaceCaslAction.Read, WorkspaceCaslSubject.Group)) {
       throw new ForbiddenException();
     }
-    return this.groupService.getGroupInfo(groupIdDto.groupId, workspace.id);
+    return this.groupService.getGroupInfo(
+      groupIdDto.groupId,
+      workspace.id,
+      user,
+    );
   }
 
   @HttpCode(HttpStatus.OK)
@@ -113,6 +117,7 @@ export class GroupController {
       groupIdDto.groupId,
       workspace.id,
       pagination,
+      user,
     );
   }
 

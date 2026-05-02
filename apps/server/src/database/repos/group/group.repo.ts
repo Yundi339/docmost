@@ -146,6 +146,60 @@ export class GroupRepo {
     });
   }
 
+  async getUserGroupsPaginated(
+    workspaceId: string,
+    userId: string,
+    pagination: PaginationOptions,
+    opts?: { excludeDefault?: boolean },
+  ) {
+    let baseQuery = this.db
+      .selectFrom('groups')
+      .innerJoin('groupUsers', 'groupUsers.groupId', 'groups.id')
+      .selectAll('groups')
+      .select((eb) => this.withMemberCount(eb))
+      .where('groups.workspaceId', '=', workspaceId)
+      .where('groupUsers.userId', '=', userId);
+
+    if (opts?.excludeDefault) {
+      baseQuery = baseQuery.where('groups.isDefault', '=', false);
+    }
+
+    if (pagination.query) {
+      baseQuery = baseQuery.where((eb) =>
+        eb(
+          sql`f_unaccent(groups.name)`,
+          'ilike',
+          sql`f_unaccent(${'%' + pagination.query + '%'})`,
+        ).or(
+          sql`f_unaccent(groups.description)`,
+          'ilike',
+          sql`f_unaccent(${'%' + pagination.query + '%'})`,
+        ),
+      );
+    }
+
+    const query = this.db.selectFrom(baseQuery.as('sub')).selectAll('sub');
+    return executeWithCursorPagination(query, {
+      perPage: pagination.limit,
+      cursor: pagination.cursor,
+      beforeCursor: pagination.beforeCursor,
+      fields: [
+        {
+          expression: 'sub.memberCount',
+          direction: 'desc',
+          key: 'memberCount',
+        },
+        { expression: 'sub.name', direction: 'asc', key: 'name' },
+        { expression: 'sub.id', direction: 'asc', key: 'id' },
+      ],
+      parseCursor: (cursor) => ({
+        memberCount: parseInt(cursor.memberCount, 10),
+        name: cursor.name,
+        id: cursor.id,
+      }),
+    });
+  }
+
   withMemberCount(eb: ExpressionBuilder<DB, 'groups'>) {
     return eb
       .selectFrom('groupUsers')

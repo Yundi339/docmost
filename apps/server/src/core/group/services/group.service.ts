@@ -25,6 +25,7 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../../integrations/audit/audit.service';
+import { UserRole } from '../../../common/helpers/types/permission';
 
 @Injectable()
 export class GroupService {
@@ -40,12 +41,16 @@ export class GroupService {
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
-  async getGroupInfo(groupId: string, workspaceId: string): Promise<Group> {
+  async getGroupInfo(
+    groupId: string,
+    workspaceId: string,
+    authUser?: User,
+  ): Promise<Group> {
     const group = await this.groupRepo.findById(groupId, workspaceId, {
       includeMemberCount: true,
     });
 
-    if (!group) {
+    if (!group || !(await this.canUserAccessGroup(group, authUser))) {
       throw new NotFoundException('Group not found');
     }
 
@@ -166,7 +171,17 @@ export class GroupService {
   async getWorkspaceGroups(
     workspaceId: string,
     paginationOptions: PaginationOptions,
+    authUser?: User,
   ): Promise<CursorPaginationResult<Group>> {
+    if (authUser?.role === UserRole.MEMBER) {
+      return this.groupRepo.getUserGroupsPaginated(
+        workspaceId,
+        authUser.id,
+        paginationOptions,
+        { excludeDefault: true },
+      );
+    }
+
     return this.groupRepo.getGroupsPaginated(workspaceId, paginationOptions);
   }
 
@@ -216,12 +231,33 @@ export class GroupService {
   async findAndValidateGroup(
     groupId: string,
     workspaceId: string,
+    authUser?: User,
   ): Promise<Group> {
     const group = await this.groupRepo.findById(groupId, workspaceId);
-    if (!group) {
+    if (!group || !(await this.canUserAccessGroup(group, authUser))) {
       throw new NotFoundException('Group not found');
     }
 
     return group;
+  }
+
+  private async canUserAccessGroup(
+    group: Group,
+    authUser?: User,
+  ): Promise<boolean> {
+    if (!authUser || authUser.role !== UserRole.MEMBER) {
+      return true;
+    }
+
+    if (group.isDefault) {
+      return false;
+    }
+
+    const groupUser = await this.groupUserRepo.getGroupUserById(
+      authUser.id,
+      group.id,
+    );
+
+    return Boolean(groupUser);
   }
 }

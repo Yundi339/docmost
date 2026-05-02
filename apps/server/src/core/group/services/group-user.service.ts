@@ -20,6 +20,7 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../../integrations/audit/audit.service';
+import { User } from '@docmost/db/types/entity.types';
 
 @Injectable()
 export class GroupUserService {
@@ -39,8 +40,13 @@ export class GroupUserService {
     groupId: string,
     workspaceId: string,
     pagination: PaginationOptions,
+    authUser?: User,
   ) {
-    await this.groupService.findAndValidateGroup(groupId, workspaceId);
+    await this.groupService.findAndValidateGroup(
+      groupId,
+      workspaceId,
+      authUser,
+    );
 
     const groupUsers = await this.groupUserRepo.getGroupUsersPaginated(
       groupId,
