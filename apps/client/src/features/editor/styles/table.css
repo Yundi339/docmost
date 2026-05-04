@@ -21,7 +21,7 @@
   background: light-dark(rgba(255, 255, 255, 0.85), rgba(37, 38, 43, 0.85));
   border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
   backdrop-filter: blur(4px);
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s ease, transform 0s;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -35,24 +35,11 @@
   pointer-events: auto;
 }
 
-/* Touch devices: always visible, bottom-center like mermaid toolbar */
+/* Touch devices: always visible at top-right */
 @media (hover: none) {
   .tableWrapper > .table-fullscreen-control-host {
     opacity: 1;
     pointer-events: auto;
-    top: auto;
-    bottom: 8px;
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-
-  .tableWrapperFullscreen > .table-fullscreen-control-host {
-    top: max(8px, env(safe-area-inset-top));
-    right: max(8px, env(safe-area-inset-right));
-    bottom: auto;
-    left: auto;
-    transform: none;
   }
 }
 
@@ -89,6 +76,9 @@
   position: fixed;
   top: max(8px, env(safe-area-inset-top));
   right: max(8px, env(safe-area-inset-right));
+  bottom: auto;
+  left: auto;
+  transform: none;
 }
 
 .tableWrapperFullscreen table,

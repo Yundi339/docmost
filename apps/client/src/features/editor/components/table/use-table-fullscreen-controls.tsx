@@ -22,11 +22,24 @@ function TableFullscreenButton({ table }: { table: HTMLElement }) {
   // or rejected). Native fullscreen relies on browser :fullscreen styling.
   const [cssFullscreen, setCssFullscreen] = useState(false);
   const nativeFullscreenRef = useRef(false);
+  const savedScrollYRef = useRef(0);
 
   // Toggle CSS-fallback class on the wrapper when needed.
   useEffect(() => {
     table.classList.toggle(TABLE_FULLSCREEN_CLASS, cssFullscreen);
-    document.body.classList.toggle(BODY_OPEN_CLASS, cssFullscreen);
+    if (cssFullscreen) {
+      savedScrollYRef.current = window.scrollY;
+      document.body.classList.add(BODY_OPEN_CLASS);
+    } else {
+      document.body.classList.remove(BODY_OPEN_CLASS);
+      // Restore scroll position lost due to body overflow:hidden on mobile.
+      const saved = savedScrollYRef.current;
+      if (saved > 0) {
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior });
+        });
+      }
+    }
   }, [cssFullscreen, table]);
 
   const cleanupFullscreen = useCallback(() => {
@@ -151,7 +164,7 @@ export function useTableFullscreenControls(root: HTMLElement | null) {
       const tables = root.querySelectorAll<HTMLElement>(".tableWrapper");
 
       tables.forEach((table) => {
-        if (table.querySelector(`.${TABLE_CONTROL_CLASS}`)) return;
+        if (table.querySelector(`:scope > .${TABLE_CONTROL_CLASS}`)) return;
 
         const host = document.createElement("div");
         host.className = TABLE_CONTROL_CLASS;
@@ -160,6 +173,27 @@ export function useTableFullscreenControls(root: HTMLElement | null) {
         host.addEventListener("mousedown", stopEvent);
         host.addEventListener("touchstart", stopEvent);
         table.appendChild(host);
+
+        // Compensate for horizontal scroll so the absolute-positioned host
+        // (anchored to top-right of the scrollable .tableWrapper) appears
+        // visually fixed at the right edge of the visible viewport area.
+        const updateScrollOffset = () => {
+          if (
+            table.classList.contains(TABLE_FULLSCREEN_CLASS) ||
+            document.fullscreenElement === table
+          ) {
+            // Fullscreen modes use position: fixed for the host —
+            // no scroll compensation needed.
+            host.style.transform = "";
+            return;
+          }
+          const offset = table.scrollLeft;
+          host.style.transform = offset
+            ? `translateX(${offset}px)`
+            : "";
+        };
+        table.addEventListener("scroll", updateScrollOffset, { passive: true });
+        updateScrollOffset();
 
         let touchTimer: ReturnType<typeof setTimeout> | null = null;
         const showTouchControl = () => {
@@ -185,6 +219,7 @@ export function useTableFullscreenControls(root: HTMLElement | null) {
           host.removeEventListener("mousedown", stopEvent);
           host.removeEventListener("touchstart", stopEvent);
           table.removeEventListener("touchstart", showTouchControl);
+          table.removeEventListener("scroll", updateScrollOffset);
         });
       });
     };
