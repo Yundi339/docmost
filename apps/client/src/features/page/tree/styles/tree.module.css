@@ -43,12 +43,11 @@
     /* Disable Android long-press context menu and the selection magnifier. */
     -webkit-tap-highlight-color: transparent;
 
-    /* Touch-only tweaks. Desktop must keep default touch-action / user-drag
-       so react-dnd HTML5Backend can initiate drag on mousedown. */
     @media (hover: none) and (pointer: coarse) {
+        /* Mobile: native browser scrolling on the row, no drag (sidebar
+           drag is intentionally disabled on touch devices; users move pages
+           via the row "..." menu -> "Move to..."). */
         touch-action: pan-y;
-        -webkit-user-drag: none;
-        user-drag: none;
     }
 
     &:hover {
@@ -104,6 +103,19 @@
     outline-offset: -2px;
     transform: scale(0.97);
     transition: transform 120ms ease, opacity 120ms ease;
+}
+
+/* react-arborist's DefaultDragPreview wraps the previewed row in
+   ".row.preview" (global classes). Constrain its width so the preview never
+   overflows the sidebar. */
+:global(.row.preview) {
+    max-width: 280px;
+    width: max-content;
+    overflow: hidden;
+}
+:global(.row.preview) .node {
+    width: 100% !important;
+    max-width: 280px;
 }
 
 .node:global(.isSelected) {

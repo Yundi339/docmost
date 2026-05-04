@@ -159,15 +159,9 @@ export function TitleEditor({
   }, [pageId, title, titleEditor]);
 
   useEffect(() => {
-    // Only auto-focus the title for newly-created (untitled) pages so we
-    // don't trigger the on-screen keyboard on mobile when opening an
-    // existing page.
-    if (title && title.length > 0) return;
-    setTimeout(() => {
-      // guard against Cannot access view['hasFocus'] error
-      if (!titleEditor?.isInitialized) return;
-      titleEditor?.commands?.focus("end");
-    }, 300);
+    // Never auto-focus the title editor on mount. Auto-focus would steal the
+    // viewport on every page open and pop up the on-screen keyboard on
+    // mobile. The user can tap the title to start editing manually.
   }, [titleEditor]);
 
   useEffect(() => {

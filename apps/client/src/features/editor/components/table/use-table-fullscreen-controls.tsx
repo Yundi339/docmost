@@ -1,51 +1,146 @@
-import { MouseEvent, RefObject, useEffect } from "react";
+import { MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { ActionIcon, Tooltip } from "@mantine/core";
-import { IconArrowBackUp, IconMaximize } from "@tabler/icons-react";
+import {
+  IconArrowBackUp,
+  IconMaximize,
+  IconMinimize,
+} from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 
 const TABLE_CONTROL_CLASS = "table-fullscreen-control-host";
 const TABLE_FULLSCREEN_CLASS = "tableWrapperFullscreen";
 const TABLE_TOUCHED_CLASS = "tableWrapperTouched";
+const BODY_OPEN_CLASS = "table-fullscreen-open";
 
 function TableFullscreenButton({ table }: { table: HTMLElement }) {
   const { t } = useTranslation();
-  const isFullscreen = table.classList.contains(TABLE_FULLSCREEN_CLASS);
+  // UI-level state (toolbar appearance: maximize ↔ back/minimize).
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  // True only when CSS fallback is in use (native fullscreen unsupported
+  // or rejected). Native fullscreen relies on browser :fullscreen styling.
+  const [cssFullscreen, setCssFullscreen] = useState(false);
+  const nativeFullscreenRef = useRef(false);
 
-  const toggleFullscreen = (event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    table.classList.toggle(TABLE_FULLSCREEN_CLASS);
-    document.body.classList.toggle(
-      "table-fullscreen-open",
-      table.classList.contains(TABLE_FULLSCREEN_CLASS),
-    );
-    table.dispatchEvent(new CustomEvent("table-fullscreen-toggle"));
-  };
+  // Toggle CSS-fallback class on the wrapper when needed.
+  useEffect(() => {
+    table.classList.toggle(TABLE_FULLSCREEN_CLASS, cssFullscreen);
+    document.body.classList.toggle(BODY_OPEN_CLASS, cssFullscreen);
+  }, [cssFullscreen, table]);
+
+  const cleanupFullscreen = useCallback(() => {
+    setIsFullscreen(false);
+    setCssFullscreen(false);
+    nativeFullscreenRef.current = false;
+    (screen.orientation as any)?.unlock?.();
+  }, []);
+
+  const exitFullscreen = useCallback(() => {
+    if (nativeFullscreenRef.current && document.fullscreenElement) {
+      // The fullscreenchange handler runs cleanup once exit completes.
+      document.exitFullscreen().catch(() => {
+        cleanupFullscreen();
+      });
+      return;
+    }
+    cleanupFullscreen();
+  }, [cleanupFullscreen]);
+
+  const enterFullscreen = useCallback(async () => {
+    // Priority path: native fullscreen + lock orientation to landscape.
+    if (table.requestFullscreen) {
+      try {
+        await table.requestFullscreen();
+        nativeFullscreenRef.current = true;
+        setIsFullscreen(true);
+        try {
+          await (screen.orientation as any)?.lock?.("landscape");
+        } catch {
+          // Orientation lock unsupported (iOS Safari, desktop) — leave
+          // current orientation. User can rotate device manually.
+        }
+        return;
+      } catch {
+        nativeFullscreenRef.current = false;
+      }
+    }
+
+    // CSS fallback (no Fullscreen API support).
+    setIsFullscreen(true);
+    setCssFullscreen(true);
+  }, [table]);
+
+  const toggleFullscreen = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (isFullscreen) exitFullscreen();
+      else void enterFullscreen();
+    },
+    [enterFullscreen, exitFullscreen, isFullscreen],
+  );
+
+  // Sync state when user exits native fullscreen via Esc / browser UI.
+  useEffect(() => {
+    const onChange = () => {
+      const stillNative = document.fullscreenElement === table;
+      if (!stillNative && nativeFullscreenRef.current) {
+        cleanupFullscreen();
+      }
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, [cleanupFullscreen, table]);
+
+  // Esc to exit (CSS fallback path only — native handles its own Esc).
+  useEffect(() => {
+    if (!cssFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") exitFullscreen();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [cssFullscreen, exitFullscreen]);
 
   return (
-    <Tooltip
-      label={isFullscreen ? t("Back") : t("Fullscreen")}
-      position="left"
-      withArrow
-    >
-      <ActionIcon
-        variant="subtle"
-        color="gray"
-        size="sm"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={toggleFullscreen}
-        aria-label={isFullscreen ? t("Back") : t("Fullscreen")}
+    <>
+      {isFullscreen && (
+        <Tooltip label={t("Back")} position="bottom" withArrow>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="sm"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={toggleFullscreen}
+            aria-label={t("Back")}
+          >
+            <IconArrowBackUp size={14} />
+          </ActionIcon>
+        </Tooltip>
+      )}
+
+      <Tooltip
+        label={isFullscreen ? t("Exit fullscreen") : t("Fullscreen")}
+        position={isFullscreen ? "bottom" : "left"}
+        withArrow
       >
-        {isFullscreen ? <IconArrowBackUp size={14} /> : <IconMaximize size={14} />}
-      </ActionIcon>
-    </Tooltip>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          size="sm"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? t("Exit fullscreen") : t("Fullscreen")}
+        >
+          {isFullscreen ? <IconMinimize size={14} /> : <IconMaximize size={14} />}
+        </ActionIcon>
+      </Tooltip>
+    </>
   );
 }
 
-export function useTableFullscreenControls(rootRef: RefObject<HTMLElement>) {
+export function useTableFullscreenControls(root: HTMLElement | null) {
   useEffect(() => {
-    const root = rootRef.current;
     if (!root) return;
 
     const roots = new Map<HTMLElement, Root>();
@@ -78,16 +173,13 @@ export function useTableFullscreenControls(rootRef: RefObject<HTMLElement>) {
         table.addEventListener("touchstart", showTouchControl, { passive: true });
 
         const reactRoot = createRoot(host);
-        const render = () => reactRoot.render(<TableFullscreenButton table={table} />);
-        render();
-        table.addEventListener("table-fullscreen-toggle", render);
+        reactRoot.render(<TableFullscreenButton table={table} />);
         roots.set(table, reactRoot);
         cleanupCallbacks.push(() => {
           if (touchTimer) clearTimeout(touchTimer);
           host.removeEventListener("mousedown", stopEvent);
           host.removeEventListener("touchstart", stopEvent);
           table.removeEventListener("touchstart", showTouchControl);
-          table.removeEventListener("table-fullscreen-toggle", render);
         });
       });
     };
@@ -102,10 +194,10 @@ export function useTableFullscreenControls(rootRef: RefObject<HTMLElement>) {
       roots.forEach((reactRoot, table) => {
         table.classList.remove(TABLE_FULLSCREEN_CLASS);
         table.classList.remove(TABLE_TOUCHED_CLASS);
-        document.body.classList.remove("table-fullscreen-open");
+        document.body.classList.remove(BODY_OPEN_CLASS);
         reactRoot.unmount();
       });
       roots.clear();
     };
-  }, [rootRef]);
+  }, [root]);
 }

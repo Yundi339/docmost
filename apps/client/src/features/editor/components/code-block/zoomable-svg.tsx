@@ -306,6 +306,22 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   const offsetRef = useRef({ x: offsetX, y: offsetY });
   offsetRef.current = { x: offsetX, y: offsetY };
 
+  // Tracks the last time the user scrolled the page (or any ancestor scroller).
+  // Used to briefly disable mermaid touch capture right after a scroll so
+  // fast finger swipes that land on the diagram do not get hijacked.
+  const lastPageScrollAtRef = useRef(0);
+  const SCROLL_COOLDOWN_MS = 300;
+  useEffect(() => {
+    const onScroll = () => {
+      lastPageScrollAtRef.current = Date.now();
+    };
+    // capture=true so we observe scrolls from any ancestor scroll container
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll, { capture: true } as any);
+    };
+  }, []);
+
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
@@ -321,6 +337,17 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     }
 
     const handleTouchStart = (e: TouchEvent) => {
+      // Suppress mermaid touch handling for a short cooldown right after the
+      // page has been scrolled. This prevents accidental pinch/pan capture
+      // when a fast finger swipe happens to land on the diagram while the
+      // page is still scrolling.
+      if (
+        !isFullscreen &&
+        Date.now() - lastPageScrollAtRef.current < SCROLL_COOLDOWN_MS
+      ) {
+        touchRef.current = null;
+        return;
+      }
       if (e.touches.length === 2) {
         e.preventDefault();
         const d = getTouchDistance(e.touches[0], e.touches[1]);

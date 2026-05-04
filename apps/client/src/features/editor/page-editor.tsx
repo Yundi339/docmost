@@ -107,8 +107,13 @@ export default function PageEditor({
   const [yjsConnectionStatus, setYjsConnectionStatus] = useAtom(
     yjsConnectionStatusAtom,
   );
-  const menuContainerRef = useRef(null);
-  useTableFullscreenControls(menuContainerRef);
+  const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
+  const setMenuContainerRef = useCallback((node: HTMLDivElement | null) => {
+    menuContainerRef.current = node;
+    setMenuContainer(node);
+  }, []);
+  useTableFullscreenControls(menuContainer);
   const { data: collabQuery, refetch: refetchCollabToken } = useCollabToken();
   const { isIdle, resetIdle } = useIdle(FIVE_MINUTES, { initialState: false });
   const documentState = useDocumentVisibility();
@@ -406,7 +411,7 @@ export default function PageEditor({
 
   return (
     <div className="editor-container" style={{ position: "relative" }}>
-      <div ref={menuContainerRef}>
+      <div ref={setMenuContainerRef}>
         <EditorContent editor={editor} translate="yes" spellCheck={userSpellcheckPref} />
 
         {editor && (

@@ -13,15 +13,19 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  z-index: 3;
+  z-index: 10;
   opacity: 0;
   pointer-events: none;
   padding: 4px;
   border-radius: 6px;
-  background: light-dark(rgba(255, 255, 255, 0.88), rgba(37, 38, 43, 0.88));
+  background: light-dark(rgba(255, 255, 255, 0.85), rgba(37, 38, 43, 0.85));
   border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
   backdrop-filter: blur(4px);
   transition: opacity 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
 .tableWrapper:hover > .table-fullscreen-control-host,
@@ -31,17 +35,24 @@
   pointer-events: auto;
 }
 
+/* Touch devices: always visible, bottom-center like mermaid toolbar */
 @media (hover: none) {
   .tableWrapper > .table-fullscreen-control-host {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .tableWrapperTouched > .table-fullscreen-control-host,
-  .tableWrapper:focus-within > .table-fullscreen-control-host,
-  .tableWrapperFullscreen > .table-fullscreen-control-host {
     opacity: 1;
     pointer-events: auto;
+    top: auto;
+    bottom: 8px;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .tableWrapperFullscreen > .table-fullscreen-control-host {
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    bottom: auto;
+    left: auto;
+    transform: none;
   }
 }
 
@@ -60,13 +71,28 @@
   touch-action: pan-x pan-y;
 }
 
-.tableWrapperFullscreen > .table-fullscreen-control-host {
+/* Native fullscreen pseudo-class — when requestFullscreen() succeeds the
+   element is the top-layer element. Apply the same visual rules. */
+.tableWrapper:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0;
+  padding: max(48px, env(safe-area-inset-top)) 12px 12px;
+  background: var(--mantine-color-body);
+  overflow: auto;
+  border: none;
+}
+
+.tableWrapperFullscreen > .table-fullscreen-control-host,
+.tableWrapper:fullscreen > .table-fullscreen-control-host {
   position: fixed;
   top: max(8px, env(safe-area-inset-top));
   right: max(8px, env(safe-area-inset-right));
 }
 
-.tableWrapperFullscreen table {
+.tableWrapperFullscreen table,
+.tableWrapper:fullscreen table {
   min-width: max-content !important;
 }
 
