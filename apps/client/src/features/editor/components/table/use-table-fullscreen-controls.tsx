@@ -1,6 +1,7 @@
 import { MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { ActionIcon, Tooltip } from "@mantine/core";
+import { ActionIcon, MantineProvider, Tooltip } from "@mantine/core";
+import { mantineCssResolver, theme } from "@/theme";
 import {
   IconArrowBackUp,
   IconMaximize,
@@ -173,7 +174,11 @@ export function useTableFullscreenControls(root: HTMLElement | null) {
         table.addEventListener("touchstart", showTouchControl, { passive: true });
 
         const reactRoot = createRoot(host);
-        reactRoot.render(<TableFullscreenButton table={table} />);
+        reactRoot.render(
+          <MantineProvider theme={theme} cssVariablesResolver={mantineCssResolver}>
+            <TableFullscreenButton table={table} />
+          </MantineProvider>,
+        );
         roots.set(table, reactRoot);
         cleanupCallbacks.push(() => {
           if (touchTimer) clearTimeout(touchTimer);
