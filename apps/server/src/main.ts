@@ -53,6 +53,14 @@ async function bootstrap() {
   app
     .getHttpAdapter()
     .getInstance()
+    .addHook('onRequest', (request, _reply, done) => {
+      (request.raw as any).ip = request.ip;
+      done();
+    });
+
+  app
+    .getHttpAdapter()
+    .getInstance()
     .decorateReply('setHeader', function (name: string, value: unknown) {
       this.header(name, value);
     })
