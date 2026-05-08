@@ -16,17 +16,23 @@ interface CustomAvatarProps {
   mt?: string | number;
 }
 
+function sanitizeInitialsSource(name: string) {
+  const sanitized = name.replace(/[^\p{L}\p{N}\s]/gu, " ").trim();
+  return sanitized || name;
+}
+
 export const CustomAvatar = React.forwardRef<
   HTMLInputElement,
   CustomAvatarProps
 >(({ avatarUrl, name, type, ...props }: CustomAvatarProps, ref) => {
   const avatarLink = getAvatarUrl(avatarUrl, type);
+  const initialsSource = sanitizeInitialsSource(name ?? "");
 
   return (
     <Avatar
       ref={ref}
       src={avatarLink}
-      name={name}
+      name={initialsSource}
       alt={name}
       color="initials"
       {...props}
