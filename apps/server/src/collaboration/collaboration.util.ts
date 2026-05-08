@@ -34,6 +34,7 @@ import {
   Mention,
   Subpages,
   Highlight,
+  Indent,
   UniqueID,
   Columns,
   Column,
@@ -64,6 +65,7 @@ export const tiptapExtensions = [
   }),
   Comment,
   TextAlign.configure({ types: ['heading', 'paragraph'] }),
+  Indent,
   TaskList,
   TaskItem.configure({
     nested: true,
