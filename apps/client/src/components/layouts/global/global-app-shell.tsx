@@ -2,6 +2,7 @@ import { AppShell, Container, Overlay } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import SettingsSidebar from "@/components/settings/settings-sidebar.tsx";
 import { useAtom } from "jotai";
 import {
@@ -24,12 +25,13 @@ export default function GlobalAppShell({
 }: {
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   useTrialEndAction();
   const [mobileOpened] = useAtom(mobileSidebarAtom);
   const toggleMobile = useToggleSidebar(mobileSidebarAtom);
   const [desktopOpened] = useAtom(desktopSidebarAtom);
   const [asideState, setAsideState] = useAtom(asideStateAtom);
-  const { isAsideOpen } = asideState;
+  const { isAsideOpen, tab: asideTab } = asideState;
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef(null);
@@ -164,6 +166,15 @@ export default function GlobalAppShell({
         className={classes.navbar}
         withBorder={false}
         ref={sidebarRef}
+        aria-label={
+          isSpaceRoute
+            ? t("Space navigation")
+            : isSettingsRoute
+              ? t("Settings navigation")
+              : isAiRoute
+                ? t("AI navigation")
+                : t("Main navigation")
+        }
       >
         {isSpaceRoute && (
           <div className={classes.resizeHandle} onMouseDown={startResizing} />
@@ -174,6 +185,7 @@ export default function GlobalAppShell({
         {showGlobalSidebar && <GlobalSidebar />}
       </AppShell.Navbar>
       <AppShell.Main
+        id="main-content"
         style={
           isMobile && (mobileOpened || isAsideOpen)
             ? { pointerEvents: "none" }
@@ -181,14 +193,31 @@ export default function GlobalAppShell({
         }
       >
         {isSettingsRoute ? (
-          <Container size={900}>{children}</Container>
+          <Container size={900} pb={80}>
+            {children}
+          </Container>
         ) : (
           children
         )}
       </AppShell.Main>
 
       {isPageRoute && (
-        <AppShell.Aside className={classes.aside} p="md" withBorder={false}>
+        <AppShell.Aside
+          className={classes.aside}
+          p="md"
+          withBorder={false}
+          aria-label={
+            asideTab === "comments"
+              ? t("Comments")
+              : asideTab === "toc"
+                ? t("Table of contents")
+                : asideTab === "chat"
+                  ? t("AI Chat")
+                  : asideTab === "details"
+                    ? t("Details")
+                    : undefined
+          }
+        >
           <Aside />
         </AppShell.Aside>
       )}
