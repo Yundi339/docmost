@@ -17,6 +17,7 @@ import { CustomAvatar } from "@/components/ui/custom-avatar.tsx";
 import { PageVerificationBadge } from "@/ee/page-verification";
 import { useTranslation } from "react-i18next";
 import { IContributor } from "@/features/page/types/page.types.ts";
+import { FixedToolbar } from "@/features/editor/components/fixed-toolbar/fixed-toolbar";
 import { PageEditMode } from "@/features/user/types/user.types.ts";
 import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms.ts";
 
@@ -56,9 +57,14 @@ export function FullEditor({
 }: FullEditorProps) {
   const [user] = useAtom(userAtom);
   const fullPageWidth = user.settings?.preferences?.fullPageWidth;
-  const [, setCurrentPageEditMode] = useAtom(currentPageEditModeAtom);
+  const editorToolbarEnabled =
+    user.settings?.preferences?.editorToolbar ?? false;
+  const [currentPageEditMode, setCurrentPageEditMode] = useAtom(
+    currentPageEditModeAtom,
+  );
   const userPageEditMode =
     user.settings?.preferences?.pageEditMode ?? PageEditMode.Edit;
+  const isEditMode = currentPageEditMode === PageEditMode.Edit;
 
   useEffect(() => {
     if (!defaultEditModeApplied) {
@@ -73,6 +79,7 @@ export function FullEditor({
       size={!fullPageWidth && 900}
       className={classes.editor}
     >
+      {editorToolbarEnabled && editable && isEditMode && <FixedToolbar />}
       <MemoizedTitleEditor
         pageId={pageId}
         slugId={slugId}
