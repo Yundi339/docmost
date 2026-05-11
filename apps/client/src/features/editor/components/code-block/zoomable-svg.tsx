@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ActionIcon, Tooltip, Text } from "@mantine/core";
 import {
   IconMinus,
@@ -18,7 +19,7 @@ interface ZoomableSvgProps {
 }
 
 const MIN_SCALE = 0.3;
-const MAX_SCALE = 5;
+const MAX_SCALE = 20;
 const ZOOM_STEP = 0.15;
 type Rotation = 0 | 90 | 180 | 270;
 
@@ -475,21 +476,8 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   }, [fitToViewport]);
 
   const enterFullscreen = useCallback(() => {
-    const wrapper = wrapperRef.current;
     setIsFullscreen(true);
     requestAnimationFrame(() => fitToViewport(rotation));
-
-    if (!wrapper?.requestFullscreen) return;
-
-    wrapper
-      .requestFullscreen()
-      .then(() => {
-        nativeFullscreenRef.current = true;
-        return (screen.orientation as any)?.lock?.("landscape");
-      })
-      .catch(() => {
-        nativeFullscreenRef.current = false;
-      });
   }, [fitToViewport, rotation]);
 
   const toggleFullscreen = useCallback(() => {
@@ -536,7 +524,7 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     }
   }, [exitFullscreen, isFullscreen]);
 
-  return (
+  const tree = (
     <div
       ref={wrapperRef}
       className={clsx(classes.wrapper, isFullscreen && classes.fullscreenContainer)}
@@ -672,4 +660,13 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
       </div>
     </div>
   );
+
+  // When in fullscreen we portal the wrapper into <body> so it is not
+  // constrained by any ancestor with transform/filter/overflow that would
+  // otherwise turn `position: fixed` into a contained box (i.e. not really
+  // fullscreen). The portal keeps the same DOM node + refs working.
+  if (isFullscreen && typeof document !== "undefined") {
+    return createPortal(tree, document.body);
+  }
+  return tree;
 }
