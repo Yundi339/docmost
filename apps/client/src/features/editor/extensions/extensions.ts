@@ -43,6 +43,7 @@ import {
   Excalidraw,
   Embed,
   TiptapPdf,
+  PageBreak,
   SearchAndReplace,
   Mention,
   TableDndExtension,
@@ -352,6 +353,7 @@ export const mainExtensions = [
   TiptapPdf.configure({
     view: PdfView,
   }),
+  PageBreak,
   Subpages.configure({
     view: SubpagesView,
   }),
