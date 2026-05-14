@@ -65,6 +65,11 @@ interface PageHeaderMenuProps {
 export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
   const { t } = useTranslation();
   const toggleAside = useToggleAside();
+  const { pageSlug } = useParams();
+  const { data: page } = usePageQuery({
+    pageId: extractPageSlugId(pageSlug),
+  });
+  const isDeleted = !!page?.deletedAt;
 
   useHotkeys(
     [
@@ -86,6 +91,10 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
     ],
     [],
   );
+
+  if (isDeleted) {
+    return null;
+  }
 
   return (
     <>

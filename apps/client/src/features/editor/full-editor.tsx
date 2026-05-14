@@ -19,12 +19,15 @@ import { useTranslation } from "react-i18next";
 import { IContributor } from "@/features/page/types/page.types.ts";
 import { FixedToolbar } from "@/features/editor/components/fixed-toolbar/fixed-toolbar";
 import { PageEditMode } from "@/features/user/types/user.types.ts";
+import { DeletedPageBanner } from "@/features/page/trash/components/deleted-page-banner.tsx";
 import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms.ts";
 
 const MemoizedTitleEditor = React.memo(TitleEditor);
 const MemoizedPageEditor = React.memo(PageEditor);
+const MemoizedFixedToolbar = React.memo(FixedToolbar);
+const MemoizedDeletedPageBanner = React.memo(DeletedPageBanner);
 
-type PageCreator = {
+type PageUser = {
   id: string;
   name: string;
   avatarUrl: string;
@@ -39,7 +42,7 @@ export interface FullEditorProps {
   content: string;
   spaceSlug: string;
   editable: boolean;
-  creator?: PageCreator;
+  creator?: PageUser;
   contributors?: IContributor[];
   canComment?: boolean;
 }
@@ -79,7 +82,10 @@ export function FullEditor({
       size={!fullPageWidth && 900}
       className={classes.editor}
     >
-      {editorToolbarEnabled && editable && isEditMode && <FixedToolbar />}
+      {editorToolbarEnabled && editable && isEditMode && (
+        <MemoizedFixedToolbar />
+      )}
+      <MemoizedDeletedPageBanner slugId={slugId} />
       <MemoizedTitleEditor
         pageId={pageId}
         slugId={slugId}
@@ -103,7 +109,7 @@ export function FullEditor({
 }
 
 type PageBylineProps = {
-  creator?: PageCreator;
+  creator?: PageUser;
   contributors?: IContributor[];
   readOnly?: boolean;
 };
