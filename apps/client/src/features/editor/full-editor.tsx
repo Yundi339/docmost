@@ -1,5 +1,5 @@
 import classes from "@/features/editor/styles/editor.module.css";
-import React from "react";
+import React, { useEffect } from "react";
 import { TitleEditor } from "@/features/editor/title-editor";
 import PageEditor from "@/features/editor/page-editor";
 import {
@@ -17,6 +17,8 @@ import { CustomAvatar } from "@/components/ui/custom-avatar.tsx";
 import { PageVerificationBadge } from "@/ee/page-verification";
 import { useTranslation } from "react-i18next";
 import { IContributor } from "@/features/page/types/page.types.ts";
+import { PageEditMode } from "@/features/user/types/user.types.ts";
+import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms.ts";
 
 const MemoizedTitleEditor = React.memo(TitleEditor);
 const MemoizedPageEditor = React.memo(PageEditor);
@@ -26,6 +28,8 @@ type PageCreator = {
   name: string;
   avatarUrl: string;
 };
+
+let defaultEditModeApplied = false;
 
 export interface FullEditorProps {
   pageId: string;
@@ -52,6 +56,16 @@ export function FullEditor({
 }: FullEditorProps) {
   const [user] = useAtom(userAtom);
   const fullPageWidth = user.settings?.preferences?.fullPageWidth;
+  const [, setCurrentPageEditMode] = useAtom(currentPageEditModeAtom);
+  const userPageEditMode =
+    user.settings?.preferences?.pageEditMode ?? PageEditMode.Edit;
+
+  useEffect(() => {
+    if (!defaultEditModeApplied) {
+      setCurrentPageEditMode(userPageEditMode as PageEditMode);
+      defaultEditModeApplied = true;
+    }
+  }, [userPageEditMode, setCurrentPageEditMode]);
 
   return (
     <Container
