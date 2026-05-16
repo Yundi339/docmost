@@ -13,6 +13,10 @@ import {
 import { useTranslation } from "react-i18next";
 import { sortPositionKeys } from "@/features/page/tree/utils/utils";
 import { useSharedPageSubpages } from "@/features/share/hooks/use-shared-page-subpages";
+import {
+  clearDocmostDragPayloads,
+  setDocmostPageDragData,
+} from "@/features/database/utils/database-drag";
 
 export default function SubpagesView(props: NodeViewProps) {
   const { editor } = props;
@@ -93,7 +97,34 @@ export default function SubpagesView(props: NodeViewProps) {
               }
               underline="never"
               className={styles.pageMentionLink}
-              draggable={false}
+              draggable={!shareId}
+              onDragStartCapture={(event) => {
+                if (shareId) return;
+                setDocmostPageDragData(
+                  event.dataTransfer,
+                  {
+                    pageId: page.id,
+                    slugId: page.slugId,
+                    title: page.title || t("untitled"),
+                    icon: page.icon ?? null,
+                  },
+                  buildPageUrl(spaceSlug, page.slugId, page.title),
+                );
+              }}
+              onDragStart={(event) => {
+                if (shareId) return;
+                setDocmostPageDragData(
+                  event.dataTransfer,
+                  {
+                    pageId: page.id,
+                    slugId: page.slugId,
+                    title: page.title || t("untitled"),
+                    icon: page.icon ?? null,
+                  },
+                  buildPageUrl(spaceSlug, page.slugId, page.title),
+                );
+              }}
+              onDragEnd={clearDocmostDragPayloads}
             >
               {page?.icon ? (
                 <span style={{ marginRight: "4px" }}>{page.icon}</span>

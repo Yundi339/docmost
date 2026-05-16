@@ -175,6 +175,54 @@ export interface Comments {
   workspaceId: string;
 }
 
+
+export interface DatabaseBlocks {
+  id: Generated<string>;
+  blockId: string;
+  pageId: string;
+  spaceId: string;
+  workspaceId: string;
+  createdById: string | null;
+  updatedById: string | null;
+  title: string;
+  template: string;
+  activeViewId: string;
+  apitableDatasheetId: string | null;
+  apitableViewId: string | null;
+  fields: Json;
+  views: Json;
+  metadata: Json;
+  createdAt: Generated<Timestamp>;
+  updatedAt: Generated<Timestamp>;
+  deletedAt: Timestamp | null;
+}
+
+export interface DatabaseRecords {
+  id: Generated<string>;
+  databaseId: string;
+  pageId: string;
+  spaceId: string;
+  workspaceId: string;
+  createdById: string | null;
+  updatedById: string | null;
+  apitableRecordId: string | null;
+  fields: Json;
+  sortOrder: string | null;
+  createdAt: Generated<Timestamp>;
+  updatedAt: Generated<Timestamp>;
+  deletedAt: Timestamp | null;
+}
+
+export interface DatabaseUserMappings {
+  id: Generated<string>;
+  workspaceId: string;
+  docmostUserId: string;
+  apitableUnitId: string | null;
+  metadata: Json;
+  createdAt: Generated<Timestamp>;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface Favorites {
   id: Generated<string>;
   userId: string;
@@ -557,6 +605,9 @@ export interface DB {
   backlinks: Backlinks;
   billing: Billing;
   comments: Comments;
+  databaseBlocks: DatabaseBlocks;
+  databaseRecords: DatabaseRecords;
+  databaseUserMappings: DatabaseUserMappings;
   favorites: Favorites;
   fileTasks: FileTasks;
   groups: Groups;

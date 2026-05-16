@@ -10,6 +10,10 @@ import {
 } from "@/features/page/page.utils.ts";
 import { extractPageSlugId } from "@/lib";
 import classes from "./mention.module.css";
+import {
+  clearDocmostDragPayloads,
+  setDocmostPageDragData,
+} from "@/features/database/utils/database-drag";
 
 export default function MentionView(props: NodeViewProps) {
   const { node } = props;
@@ -55,8 +59,34 @@ export default function MentionView(props: NodeViewProps) {
     anchorId,
   });
 
+  const handlePageDragStart = (event: React.DragEvent<HTMLElement>) => {
+    if (!isPageMention || isShareRoute || !slugId) return;
+
+    const title = page?.title || label || "Untitled";
+    const pageId = page?.id || entityId;
+    if (!pageId) return;
+
+    setDocmostPageDragData(
+      event.dataTransfer,
+      {
+        pageId,
+        slugId,
+        title,
+        icon: page?.icon ?? null,
+      },
+      buildPageUrl(page?.space?.slug || spaceSlug, slugId, title, anchorId),
+    );
+  };
+
   return (
-    <NodeViewWrapper style={{ display: "inline" }} data-drag-handle>
+    <NodeViewWrapper
+      style={{ display: "inline" }}
+      data-drag-handle
+      draggable={isPageMention && !isShareRoute}
+      onDragStartCapture={handlePageDragStart}
+      onDragStart={handlePageDragStart}
+      onDragEnd={clearDocmostDragPayloads}
+    >
       {entityType === "user" && (
         <Text className={classes.userMention} component="span">
           @{label}

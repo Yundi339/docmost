@@ -156,6 +156,31 @@ export class EnvironmentVariables {
   OLLAMA_API_URL: string;
 
   @IsOptional()
+  @IsIn(['true', 'false'])
+  @IsString()
+  APITABLE_ENABLED: string;
+
+  @IsOptional()
+  @ValidateIf((obj) => obj.APITABLE_ENABLED === 'true')
+  @IsUrl({ protocols: ['http', 'https'], require_tld: false, allow_underscores: true })
+  APITABLE_INTERNAL_URL: string;
+
+  @IsOptional()
+  @ValidateIf((obj) => obj.APITABLE_ENABLED === 'true')
+  @IsUrl({ protocols: ['http', 'https'], require_tld: false, allow_underscores: true })
+  APITABLE_PUBLIC_URL: string;
+
+  @IsOptional()
+  @ValidateIf((obj) => obj.APITABLE_ENABLED === 'true')
+  @IsString()
+  @IsNotEmpty()
+  APITABLE_API_TOKEN: string;
+
+  @IsOptional()
+  @IsString()
+  APITABLE_SPACE_ID: string;
+
+  @IsOptional()
   @IsIn(['postgres', 'clickhouse'])
   @IsString()
   EVENT_STORE_DRIVER: string;

@@ -32,3 +32,5 @@ export * from "./lib/pdf";
 export * from "./lib/resizable-nodeview";
 export * from "./lib/move-block";
 
+
+export * from "./lib/database-block";

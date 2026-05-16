@@ -8,13 +8,19 @@ on:
     inputs:
       version:
         description: 'Version tag (e.g. v0.25.3)'
-        required: true
+        required: false
+        default: 'branch-build'
+      source_ref:
+        description: 'Git ref/branch to build (for example feat_fastopt or feat/apitable-fusion-db)'
+        required: false
+        default: 'feat_fastopt'
 
 permissions:
   contents: write
 
 env:
   VERSION: ${{ inputs.version || github.ref_name }}
+  SOURCE_REF: ${{ inputs.source_ref || github.ref_name }}
 
 jobs:
   build:
@@ -53,13 +59,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Strip v prefix
-        id: strip-v
-        run: echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+      - name: Build metadata
+        id: metadata
+        shell: bash
+        run: |
+          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          ref_slug=$(echo "${SOURCE_REF}" | tr '/:@' '-' | tr -cd '[:alnum:]._-')
+          echo "ref_slug=${ref_slug:-manual}" >> "$GITHUB_OUTPUT"
 
       - name: Build Docker image
         uses: docker/build-push-action@v6
@@ -70,29 +83,26 @@ jobs:
           push: false
           tags: |
             ${{ matrix.image }}:latest
-            ${{ matrix.image }}:${{ steps.strip-v.outputs.version }}
-          outputs: type=docker,dest=${{ matrix.artifact_prefix }}-${{ steps.strip-v.outputs.version }}-${{ matrix.suffix }}.docker.tar
+            ${{ matrix.image }}:${{ steps.metadata.outputs.version }}
+            ${{ matrix.image }}:${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.ref_slug }}-${{ steps.metadata.outputs.sha_short }}
+          outputs: type=docker,dest=${{ matrix.artifact_prefix }}-${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.ref_slug }}-${{ steps.metadata.outputs.sha_short }}-${{ matrix.suffix }}.docker.tar
           cache-from: type=gha,scope=${{ matrix.variant }}-${{ matrix.suffix }}
           cache-to: type=gha,scope=${{ matrix.variant }}-${{ matrix.suffix }},mode=max
 
       - name: Compress image
-        run: gzip ${{ matrix.artifact_prefix }}-${{ steps.strip-v.outputs.version }}-${{ matrix.suffix }}.docker.tar
+        run: gzip ${{ matrix.artifact_prefix }}-${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.ref_slug }}-${{ steps.metadata.outputs.sha_short }}-${{ matrix.suffix }}.docker.tar
 
       - name: Upload image archive
         uses: actions/upload-artifact@v4
         with:
           name: docker-image-${{ matrix.variant }}-${{ matrix.suffix }}
-          path: ${{ matrix.artifact_prefix }}-${{ steps.strip-v.outputs.version }}-${{ matrix.suffix }}.docker.tar.gz
+          path: ${{ matrix.artifact_prefix }}-${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.ref_slug }}-${{ steps.metadata.outputs.sha_short }}-${{ matrix.suffix }}.docker.tar.gz
           if-no-files-found: error
 
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Strip v prefix
-        id: strip-v
-        run: echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
-
       - name: Download image archives
         uses: actions/download-artifact@v4
         with:
@@ -104,9 +114,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
-          files: |
-            /tmp/images/docmost-${{ steps.strip-v.outputs.version }}-amd64.docker.tar.gz
-            /tmp/images/docmost-${{ steps.strip-v.outputs.version }}-arm64.docker.tar.gz
-            /tmp/images/docmost-aio-${{ steps.strip-v.outputs.version }}-amd64.docker.tar.gz
-            /tmp/images/docmost-aio-${{ steps.strip-v.outputs.version }}-arm64.docker.tar.gz
+          files: /tmp/images/*.docker.tar.gz
           draft: true

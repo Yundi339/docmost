@@ -75,6 +75,10 @@ import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-to
 import CopyPageModal from "../../components/copy-page-modal.tsx";
 import { duplicatePage } from "../../services/page-service.ts";
 import { useFavoriteIds, useAddFavoriteMutation, useRemoveFavoriteMutation } from "@/features/favorite/queries/favorite-query";
+import {
+  clearDocmostDragPayloads,
+  setDocmostPageDragData,
+} from "@/features/database/utils/database-drag";
 
 interface SpaceTreeProps {
   spaceId: string;
@@ -731,6 +735,31 @@ function Node({
           : { component: Link as any, to: pageUrl })}
         // @ts-ignore
         ref={dragHandle}
+        onDragStartCapture={(e) => {
+          setDocmostPageDragData(
+            e.dataTransfer,
+            {
+              pageId: node.data.id,
+              slugId: node.data.slugId,
+              title: node.data.name || t("untitled"),
+              icon: node.data.icon ?? null,
+            },
+            pageUrl,
+          );
+        }}
+        onDragStart={(e) => {
+          setDocmostPageDragData(
+            e.dataTransfer,
+            {
+              pageId: node.data.id,
+              slugId: node.data.slugId,
+              title: node.data.name || t("untitled"),
+              icon: node.data.icon ?? null,
+            },
+            pageUrl,
+          );
+        }}
+        onDragEnd={clearDocmostDragPayloads}
         onClick={(e) => {
           if (longPressActivatedRef.current) {
             e.preventDefault();

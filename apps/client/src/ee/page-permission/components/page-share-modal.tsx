@@ -27,12 +27,14 @@ import { useSpaceQuery } from "@/features/space/queries/space-query";
 
 type PageShareModalProps = {
   readOnly?: boolean;
+  pageId?: string;
+  spaceSlug?: string;
 };
 
-export function PageShareModal({ readOnly }: PageShareModalProps) {
+export function PageShareModal({ readOnly, pageId: pageIdProp, spaceSlug: spaceSlugProp }: PageShareModalProps) {
   const { t } = useTranslation();
   const { pageSlug, spaceSlug } = useParams();
-  const pageSlugId = extractPageSlugId(pageSlug);
+  const pageSlugId = pageIdProp ?? extractPageSlugId(pageSlug);
   const [opened, { open, close }] = useDisclosure(false);
   const hasPagePermissions = useHasFeature(Feature.PAGE_PERMISSIONS);
   const [activeTab, setActiveTab] = useState<string | null>(
@@ -40,7 +42,7 @@ export function PageShareModal({ readOnly }: PageShareModalProps) {
   );
 
   const [workspace] = useAtom(workspaceAtom);
-  const { data: space } = useSpaceQuery(spaceSlug);
+  const { data: space } = useSpaceQuery(spaceSlugProp ?? spaceSlug);
   const workspaceSharingDisabled = workspace?.settings?.sharing?.disabled === true;
   const spaceSharingDisabled = space?.settings?.sharing?.disabled === true;
 
@@ -79,7 +81,7 @@ export function PageShareModal({ readOnly }: PageShareModalProps) {
         {t("Share")}
       </Button>
 
-      <Modal opened={opened} onClose={close} title={t("Share")} size={600}>
+      <Modal opened={opened} onClose={close} title={t("Share")} size={600} zIndex={500}>
         <Tabs value={activeTab} color="dark" onChange={setActiveTab}>
           <Tabs.List mb="md">
             <Tabs.Tab value="access">{t("Access")}</Tabs.Tab>

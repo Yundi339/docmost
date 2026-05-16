@@ -1,0 +1,26 @@
+# Optional APITable fusion overlay.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.apitable.yml up -d
+# APITable all-in-one is convenient for local validation; for production, follow
+# the upstream multi-service APITable compose installer and point Docmost to it.
+services:
+  docmost:
+    depends_on:
+      - apitable
+    environment:
+      APITABLE_ENABLED: 'true'
+      APITABLE_PUBLIC_URL: '${APITABLE_PUBLIC_URL:-http://localhost:8081}'
+      APITABLE_INTERNAL_URL: '${APITABLE_INTERNAL_URL:-http://apitable}'
+      APITABLE_API_TOKEN: '${APITABLE_API_TOKEN:-}'
+      APITABLE_SPACE_ID: '${APITABLE_SPACE_ID:-}'
+
+  apitable:
+    image: apitable/all-in-one:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      - '${APITABLE_PORT:-8081}:80'
+    volumes:
+      - apitable_data:/apitable
+
+volumes:
+  apitable_data:

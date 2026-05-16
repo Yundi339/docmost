@@ -283,6 +283,28 @@ export class EnvironmentService {
     );
   }
 
+  isApitableEnabled(): boolean {
+    return this.configService
+      .get<string>('APITABLE_ENABLED', 'false')
+      .toLowerCase() === 'true';
+  }
+
+  getApitableInternalUrl(): string {
+    return this.configService.get<string>('APITABLE_INTERNAL_URL');
+  }
+
+  getApitablePublicUrl(): string {
+    return this.configService.get<string>('APITABLE_PUBLIC_URL');
+  }
+
+  getApitableApiToken(): string {
+    return this.configService.get<string>('APITABLE_API_TOKEN');
+  }
+
+  getApitableSpaceId(): string {
+    return this.configService.get<string>('APITABLE_SPACE_ID');
+  }
+
   getEventStoreDriver(): string {
     return this.configService
       .get<string>('EVENT_STORE_DRIVER', 'postgres')

@@ -52,6 +52,7 @@ import {
   Columns,
   Column,
   Status,
+  DatabaseBlock,
   MoveBlock,
 } from "@docmost/editor-ext";
 import {
@@ -72,6 +73,7 @@ import MathBlockView from "@/features/editor/components/math/math-block.tsx";
 import ImageView from "@/features/editor/components/image/image-view.tsx";
 import CalloutView from "@/features/editor/components/callout/callout-view.tsx";
 import StatusView from "@/features/editor/components/status/status-view.tsx";
+import DatabaseBlockView from "@/features/database/components/database-block-view";
 import VideoView from "@/features/editor/components/video/video-view.tsx";
 import AudioView from "@/features/editor/components/audio/audio-view.tsx";
 import AttachmentView from "@/features/editor/components/attachment/attachment-view.tsx";
@@ -352,6 +354,9 @@ export const mainExtensions = [
   }),
   Status.configure({
     view: StatusView,
+  }),
+  DatabaseBlock.configure({
+    view: DatabaseBlockView,
   }),
   MarkdownClipboard.configure({
     transformPastedText: true,

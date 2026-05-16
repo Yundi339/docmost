@@ -17,6 +17,7 @@ import {
   IconFileTypePdf,
   IconPhoto,
   IconTable,
+  IconTimeline,
   IconTypography,
   IconMenu4,
   IconCalendar,
@@ -35,6 +36,9 @@ import { uploadVideoAction } from "@/features/editor/components/video/upload-vid
 import { uploadAudioAction } from "@/features/editor/components/audio/upload-audio-action.tsx";
 import { uploadAttachmentAction } from "@/features/editor/components/attachment/upload-attachment-action.tsx";
 import { uploadPdfAction } from "@/features/editor/components/pdf/upload-pdf-action.tsx";
+import { createDatabase } from "@/features/database/services/database-service";
+import { DatabaseTemplate, DatabaseViewType } from "@/features/database/types/database.types";
+import { notifications } from "@mantine/notifications";
 import IconExcalidraw from "@/components/icons/icon-excalidraw";
 import IconMermaid from "@/components/icons/icon-mermaid";
 import IconDrawio from "@/components/icons/icon-drawio";
@@ -54,6 +58,56 @@ import {
   YoutubeIcon,
 } from "@/components/icons";
 import i18n from "@/i18n.ts";
+
+function createBlockId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `database-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function insertDatabaseCommand(options: {
+  template: DatabaseTemplate;
+  viewType: DatabaseViewType;
+  title: string;
+}) {
+  return ({ editor, range }: CommandProps) => {
+    void (async () => {
+      // @ts-ignore
+      const pageId = editor.storage?.pageId;
+      if (!pageId) return;
+
+      const blockId = createBlockId();
+      try {
+        const database = await createDatabase({
+          pageId,
+          blockId,
+          title: options.title,
+          template: options.template,
+          viewType: options.viewType,
+        });
+
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertDatabaseBlock({
+            databaseId: database.id,
+            blockId,
+            title: database.title,
+            template: options.template,
+            viewType: options.viewType,
+          })
+          .run();
+      } catch (error) {
+        notifications.show({
+          message: i18n.t("Failed to create database"),
+          color: "red",
+        });
+      }
+    })();
+  };
+}
 
 const CommandGroups: SlashMenuGroupedItemsType = {
   basic: [
@@ -79,6 +133,83 @@ const CommandGroups: SlashMenuGroupedItemsType = {
       command: ({ editor, range }: CommandProps) => {
         editor.chain().focus().deleteRange(range).toggleTaskList().run();
       },
+    },
+    {
+      title: "Database",
+      description: "Create a Notion-like database with table and board views.",
+      searchTerms: ["database", "data", "apitable", "notion"],
+      icon: IconTable,
+      command: insertDatabaseCommand({
+        template: "database",
+        viewType: "table",
+        title: "New database",
+      }),
+    },
+    {
+      title: "Tasks",
+      description: "Create a task database with assignees, status, and due dates.",
+      searchTerms: ["tasks", "todo", "project", "assignee"],
+      icon: IconCheckbox,
+      command: insertDatabaseCommand({
+        template: "tasks",
+        viewType: "kanban",
+        title: "New database",
+      }),
+    },
+    {
+      title: "Kanban board",
+      description: "Create a board grouped by status.",
+      searchTerms: ["kanban", "board", "status"],
+      icon: IconColumns3,
+      command: insertDatabaseCommand({
+        template: "kanban",
+        viewType: "kanban",
+        title: "New database",
+      }),
+    },
+    {
+      title: "Database table",
+      description: "Create a database table view.",
+      searchTerms: ["table", "grid", "database"],
+      icon: IconTable,
+      command: insertDatabaseCommand({
+        template: "table",
+        viewType: "table",
+        title: "New database",
+      }),
+    },
+    {
+      title: "Database calendar",
+      description: "Create a database calendar view based on due dates.",
+      searchTerms: ["calendar", "date", "schedule"],
+      icon: IconCalendar,
+      command: insertDatabaseCommand({
+        template: "calendar",
+        viewType: "calendar",
+        title: "New database",
+      }),
+    },
+    {
+      title: "Database timeline",
+      description: "Create a database timeline view based on due dates.",
+      searchTerms: ["timeline", "gantt", "date", "schedule"],
+      icon: IconTimeline,
+      command: insertDatabaseCommand({
+        template: "timeline",
+        viewType: "timeline",
+        title: "New database",
+      }),
+    },
+    {
+      title: "Database gallery",
+      description: "Create a database gallery view.",
+      searchTerms: ["gallery", "cards", "database"],
+      icon: IconTag,
+      command: insertDatabaseCommand({
+        template: "gallery",
+        viewType: "gallery",
+        title: "New database",
+      }),
     },
     {
       title: "Heading 1",
@@ -328,7 +459,7 @@ const CommandGroups: SlashMenuGroupedItemsType = {
       },
     },
     {
-      title: "Table",
+      title: "New database",
       description: "Insert a table.",
       searchTerms: ["table", "rows", "columns"],
       icon: IconTable,

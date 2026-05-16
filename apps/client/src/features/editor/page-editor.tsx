@@ -293,7 +293,13 @@ export default function PageEditor({
         handleDrop: (_view, event, _slice, moved) => {
           if (!editorRef.current) return false;
 
-          return handleFileDrop(editorRef.current, event, moved, pageId);
+          return handleFileDrop(
+            editorRef.current,
+            event,
+            moved,
+            pageId,
+            currentUser?.user.id,
+          );
         },
       },
       onCreate({ editor }) {

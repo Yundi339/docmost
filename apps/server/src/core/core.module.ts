@@ -25,6 +25,7 @@ import { SessionModule } from './session/session.module';
 import { TemplateModule } from './template/template.module';
 import { ApiKeyModule } from './api-key/api-key.module';
 import { SystemStatusModule } from './system-status/system-status.module';
+import { DatabaseFeatureModule } from './database/database.module';
 import { ClsMiddleware } from 'nestjs-cls';
 
 @Module({
@@ -48,6 +49,7 @@ import { ClsMiddleware } from 'nestjs-cls';
     TemplateModule,
     ApiKeyModule,
     SystemStatusModule,
+    DatabaseFeatureModule,
   ],
 })
 export class CoreModule implements NestModule {

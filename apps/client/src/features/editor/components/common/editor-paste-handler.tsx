@@ -9,6 +9,10 @@ import {
   getAttachmentInfo,
   uploadFile,
 } from "@/features/page/services/page-service.ts";
+import { v7 as uuid7 } from "uuid";
+import { detachDatabaseRecord } from "@/features/database/services/database-service.ts";
+import { parseDocmostPageDragPayload } from "@/features/database/utils/database-drag";
+import { queryClient } from "@/main.tsx";
 
 const ATTACHMENT_NODE_TYPES = [
   "image",
@@ -221,7 +225,59 @@ export const handleFileDrop = (
   event: DragEvent,
   moved: boolean,
   pageId: string,
+  creatorId?: string,
 ) => {
+  const target = event.target as HTMLElement | null;
+  const isInsideDatabaseBlock = target?.closest?.('[data-docmost-database-block]');
+  const isInsideRecordSidePage = target?.closest?.('[data-record-side-page]');
+  if (isInsideDatabaseBlock && !isInsideRecordSidePage) {
+    return false;
+  }
+
+  const docmostPagePayload = parseDocmostPageDragPayload(event.dataTransfer);
+
+  if (docmostPagePayload) {
+    try {
+      const payload = docmostPagePayload;
+      if (!payload.pageId || !payload.slugId) return false;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const coordinates = editor.view.posAtCoords({
+        left: event.clientX,
+        top: event.clientY,
+      });
+      const pos = coordinates?.pos ?? editor.state.selection.from;
+      const node = editor.state.schema.nodes.mention.create({
+        id: uuid7(),
+        label: payload.title || "Untitled",
+        entityType: "page",
+        entityId: payload.pageId,
+        slugId: payload.slugId,
+        creatorId,
+      });
+
+      editor.view.dispatch(editor.state.tr.replaceWith(pos, pos, node));
+
+      if (payload.sourceDatabaseId && payload.sourceRecordId) {
+        void detachDatabaseRecord({
+          databaseId: payload.sourceDatabaseId,
+          recordId: payload.sourceRecordId,
+          targetPageId: pageId,
+        }).then(() => {
+          void queryClient.invalidateQueries({
+            queryKey: ["database-records", payload.sourceDatabaseId],
+          });
+        });
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   if (!moved && event.dataTransfer?.files.length) {
     event.preventDefault();
 

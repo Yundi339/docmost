@@ -71,6 +71,7 @@ import {
   useAddFavoriteMutation,
   useRemoveFavoriteMutation,
 } from "@/features/favorite/queries/favorite-query";
+import { useRemovePageMutation } from "@/features/page/queries/page-query";
 import {
   useWatchStatusQuery,
   useWatchPageMutation,
@@ -162,15 +163,26 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
 
 interface PageActionMenuProps {
   readOnly?: boolean;
+  pageId?: string;
+  spaceSlug?: string;
+  getEditorHTML?: () => string | null | undefined;
+  onDeleted?: () => void;
 }
-function PageActionMenu({ readOnly }: PageActionMenuProps) {
+export function PageActionMenu({
+  readOnly,
+  pageId: pageIdProp,
+  spaceSlug: spaceSlugProp,
+  getEditorHTML,
+  onDeleted,
+}: PageActionMenuProps) {
   const { t } = useTranslation();
   const [, setHistoryModalOpen] = useAtom(historyAtoms);
   const [, setVisitorsModalOpen] = useAtom(visitorsModalAtom);
   const clipboard = useClipboard({ timeout: 500 });
   const { pageSlug, spaceSlug } = useParams();
+  const resolvedSpaceSlug = spaceSlugProp ?? spaceSlug;
   const { data: page, isLoading } = usePageQuery({
-    pageId: extractPageSlugId(pageSlug),
+    pageId: pageIdProp ?? extractPageSlugId(pageSlug),
   });
   const { openDeleteModal } = useDeletePageModal();
   const [tree] = useAtom(treeApiAtom);
@@ -195,18 +207,23 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
   const { data: watchStatus } = useWatchStatusQuery(page?.id);
   const watchPage = useWatchPageMutation();
   const unwatchPage = useUnwatchPageMutation();
+  const removePageMutation = useRemovePageMutation();
 
   const handleCopyLink = () => {
+    if (!page) return;
     const pageUrl =
-      getAppUrl() + buildPageUrl(spaceSlug, page.slugId, page.title);
+      getAppUrl() + buildPageUrl(resolvedSpaceSlug, page.slugId, page.title);
 
     clipboard.copy(pageUrl);
     notifications.show({ message: t("Link copied") });
   };
 
   const handleCopyAsMarkdown = () => {
-    if (!pageEditor) return;
-    const html = pageEditor.getHTML();
+    const html = getEditorHTML?.() ?? pageEditor?.getHTML();
+    if (!html) {
+      notifications.show({ message: t("Page content is not ready") });
+      return;
+    }
     const markdown = htmlToMarkdown(html);
     const title = page?.title ? `# ${page.title}\n\n` : "";
     clipboard.copy(`${title}${markdown}`);
@@ -224,7 +241,20 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
   };
 
   const handleDeletePage = () => {
-    openDeleteModal({ onConfirm: () => tree?.delete(page.id) });
+    if (!page?.id) return;
+
+    openDeleteModal({
+      onConfirm: () => {
+        if (pageIdProp) {
+          removePageMutation.mutate(page.id, {
+            onSuccess: () => onDeleted?.(),
+          });
+          return;
+        }
+
+        tree?.delete(page.id);
+      },
+    });
   };
 
   const handleToggleFavorite = () => {
@@ -254,196 +284,169 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
         arrowPosition="center"
       >
         <Menu.Target>
-          <ActionIcon variant="subtle" color="dark">
+          <ActionIcon variant="subtle" color="dark" disabled={isLoading || !page}>
             <IconDots size={20} />
           </ActionIcon>
         </Menu.Target>
 
-        <Menu.Dropdown>
-          <Menu.Item
-            leftSection={<IconSearch size={16} />}
-            onClick={() => {
-              const event = new CustomEvent("openFindDialogFromEditor", {});
-              document.dispatchEvent(event);
-            }}
-          >
-            {t("Find in page")}
-          </Menu.Item>
-
-          <Menu.Item
-            leftSection={<IconLink size={16} />}
-            onClick={handleCopyLink}
-          >
-            {t("Copy link")}
-          </Menu.Item>
-
-          <Menu.Item
-            leftSection={<IconMarkdown size={16} />}
-            onClick={handleCopyAsMarkdown}
-          >
-            {t("Copy as Markdown")}
-          </Menu.Item>
-
-          <Menu.Item
-            leftSection={
-              isFavorited ? (
-                <IconStarFilled size={16} color="var(--mantine-color-yellow-5)" />
-              ) : (
-                <IconStar size={16} />
-              )
-            }
-            onClick={handleToggleFavorite}
-          >
-            {isFavorited ? t("Remove from favorites") : t("Add to favorites")}
-          </Menu.Item>
-
-          {watchStatus?.watching ? (
+        {page && (
+          <Menu.Dropdown>
             <Menu.Item
-              leftSection={<IconEyeOff size={16} />}
-              onClick={() => unwatchPage.mutate(page.id)}
+              leftSection={<IconSearch size={16} />}
+              onClick={() => {
+                const event = new CustomEvent("openFindDialogFromEditor", {});
+                document.dispatchEvent(event);
+              }}
             >
-              {t("Stop watching")}
+              {t("Find in page")}
             </Menu.Item>
-          ) : (
+
+            <Menu.Item leftSection={<IconLink size={16} />} onClick={handleCopyLink}>
+              {t("Copy link")}
+            </Menu.Item>
+
+            <Menu.Item leftSection={<IconMarkdown size={16} />} onClick={handleCopyAsMarkdown}>
+              {t("Copy as Markdown")}
+            </Menu.Item>
+
             <Menu.Item
-              leftSection={<IconEye size={16} />}
-              onClick={() => watchPage.mutate(page.id)}
+              leftSection={
+                isFavorited ? (
+                  <IconStarFilled size={16} color="var(--mantine-color-yellow-5)" />
+                ) : (
+                  <IconStar size={16} />
+                )
+              }
+              onClick={handleToggleFavorite}
             >
-              {t("Watch page")}
+              {isFavorited ? t("Remove from favorites") : t("Add to favorites")}
             </Menu.Item>
-          )}
 
-          <Menu.Divider />
-
-          <Menu.Item leftSection={<IconArrowsHorizontal size={16} />}>
-            <Group wrap="nowrap">
-              <PageWidthToggle label={t("Full width")} />
-            </Group>
-          </Menu.Item>
-
-          <Box px="sm" py={6} onClick={(e) => e.stopPropagation()}>
-            <Text size="sm" mb={4}>
-              {t("Page width")}: {pageMaxWidth}px
-            </Text>
-            <Slider
-              min={PAGE_WIDTH_MIN}
-              max={PAGE_WIDTH_MAX}
-              step={50}
-              value={pageMaxWidth}
-              onChange={setPageMaxWidth}
-              label={(v) => `${v}px`}
-            />
-          </Box>
-
-          <Box px="sm" py={6} onClick={(e) => e.stopPropagation()}>
-            <Group justify="space-between" wrap="nowrap" mb={6}>
-              <Group gap={6} wrap="nowrap">
-                <IconLetterCase size={16} />
-                <Text size="sm">{t("Font size")}</Text>
-              </Group>
-              <Text size="sm" c="dimmed">
-                {pageFontScale}%
-              </Text>
-            </Group>
-            <Group gap="xs" wrap="nowrap">
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() => changePageFontScale(-5)}
-                disabled={pageFontScale <= PAGE_FONT_SCALE_MIN}
-                aria-label={t("Decrease font size")}
-              >
-                <IconMinus size={14} />
-              </ActionIcon>
-              <Slider
-                min={PAGE_FONT_SCALE_MIN}
-                max={PAGE_FONT_SCALE_MAX}
-                step={5}
-                value={pageFontScale}
-                onChange={setPageFontScale}
-                label={(v) => `${v}%`}
-                style={{ flex: 1 }}
-              />
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() => changePageFontScale(5)}
-                disabled={pageFontScale >= PAGE_FONT_SCALE_MAX}
-                aria-label={t("Increase font size")}
-              >
-                <IconPlus size={14} />
-              </ActionIcon>
-              <ActionIcon
-                variant="subtle"
-                size="sm"
-                onClick={() => setPageFontScale(PAGE_FONT_SCALE_DEFAULT)}
-                disabled={pageFontScale === PAGE_FONT_SCALE_DEFAULT}
-                aria-label={t("Reset font size")}
-              >
-                <IconLetterCase size={14} />
-              </ActionIcon>
-            </Group>
-          </Box>
-
-          <Menu.Item
-            leftSection={<IconHistory size={16} />}
-            onClick={openHistoryModal}
-          >
-            {t("Page history")}
-          </Menu.Item>
-
-          <VisitorRecordsMenuItem
-            onClick={() => setVisitorsModalOpen(true)}
-          />
-
-          {!readOnly && (
-            <PageVerificationMenuItem
-              pageId={page?.id}
-              onClick={openVerificationModal}
-            />
-          )}
-
-          <Menu.Divider />
-
-          {!readOnly && (
-            <Menu.Item
-              leftSection={<IconArrowRight size={16} />}
-              onClick={openMovePageModal}
-            >
-              {t("Move")}
-            </Menu.Item>
-          )}
-
-          <Menu.Item
-            leftSection={<IconFileExport size={16} />}
-            onClick={openExportModal}
-          >
-            {t("Export")}
-          </Menu.Item>
-
-          <Menu.Item
-            leftSection={<IconPrinter size={16} />}
-            onClick={handlePrint}
-          >
-            {t("Print PDF")}
-          </Menu.Item>
-
-          {!readOnly && (
-            <>
-              <Menu.Divider />
+            {watchStatus?.watching ? (
               <Menu.Item
-                color={"red"}
-                leftSection={<IconTrash size={16} />}
-                onClick={handleDeletePage}
+                leftSection={<IconEyeOff size={16} />}
+                onClick={() => unwatchPage.mutate(page.id)}
               >
-                {t("Move to trash")}
+                {t("Stop watching")}
               </Menu.Item>
-            </>
-          )}
+            ) : (
+              <Menu.Item
+                leftSection={<IconEye size={16} />}
+                onClick={() => watchPage.mutate(page.id)}
+              >
+                {t("Watch page")}
+              </Menu.Item>
+            )}
 
-          <Menu.Divider />
+            <Menu.Divider />
 
-          <>
+            <Menu.Item leftSection={<IconArrowsHorizontal size={16} />}>
+              <Group wrap="nowrap">
+                <PageWidthToggle label={t("Full width")} />
+              </Group>
+            </Menu.Item>
+
+            <Box px="sm" py={6} onClick={(e) => e.stopPropagation()}>
+              <Text size="sm" mb={4}>
+                {t("Page width")}: {pageMaxWidth}px
+              </Text>
+              <Slider
+                min={PAGE_WIDTH_MIN}
+                max={PAGE_WIDTH_MAX}
+                step={50}
+                value={pageMaxWidth}
+                onChange={setPageMaxWidth}
+                label={(v) => `${v}px`}
+              />
+            </Box>
+
+            <Box px="sm" py={6} onClick={(e) => e.stopPropagation()}>
+              <Group justify="space-between" wrap="nowrap" mb={6}>
+                <Group gap={6} wrap="nowrap">
+                  <IconLetterCase size={16} />
+                  <Text size="sm">{t("Font size")}</Text>
+                </Group>
+                <Text size="sm" c="dimmed">
+                  {pageFontScale}%
+                </Text>
+              </Group>
+              <Group gap="xs" wrap="nowrap">
+                <ActionIcon
+                  variant="default"
+                  size="sm"
+                  onClick={() => changePageFontScale(-5)}
+                  disabled={pageFontScale <= PAGE_FONT_SCALE_MIN}
+                  aria-label={t("Decrease font size")}
+                >
+                  <IconMinus size={14} />
+                </ActionIcon>
+                <Slider
+                  min={PAGE_FONT_SCALE_MIN}
+                  max={PAGE_FONT_SCALE_MAX}
+                  step={5}
+                  value={pageFontScale}
+                  onChange={setPageFontScale}
+                  label={(v) => `${v}%`}
+                  style={{ flex: 1 }}
+                />
+                <ActionIcon
+                  variant="default"
+                  size="sm"
+                  onClick={() => changePageFontScale(5)}
+                  disabled={pageFontScale >= PAGE_FONT_SCALE_MAX}
+                  aria-label={t("Increase font size")}
+                >
+                  <IconPlus size={14} />
+                </ActionIcon>
+                <ActionIcon
+                  variant="subtle"
+                  size="sm"
+                  onClick={() => setPageFontScale(PAGE_FONT_SCALE_DEFAULT)}
+                  disabled={pageFontScale === PAGE_FONT_SCALE_DEFAULT}
+                  aria-label={t("Reset font size")}
+                >
+                  <IconLetterCase size={14} />
+                </ActionIcon>
+              </Group>
+            </Box>
+
+            <Menu.Item leftSection={<IconHistory size={16} />} onClick={openHistoryModal}>
+              {t("Page history")}
+            </Menu.Item>
+
+            <VisitorRecordsMenuItem onClick={() => setVisitorsModalOpen(true)} />
+
+            {!readOnly && (
+              <PageVerificationMenuItem pageId={page.id} onClick={openVerificationModal} />
+            )}
+
+            <Menu.Divider />
+
+            {!readOnly && (
+              <Menu.Item leftSection={<IconArrowRight size={16} />} onClick={openMovePageModal}>
+                {t("Move")}
+              </Menu.Item>
+            )}
+
+            <Menu.Item leftSection={<IconFileExport size={16} />} onClick={openExportModal}>
+              {t("Export")}
+            </Menu.Item>
+
+            <Menu.Item leftSection={<IconPrinter size={16} />} onClick={handlePrint}>
+              {t("Print PDF")}
+            </Menu.Item>
+
+            {!readOnly && (
+              <>
+                <Menu.Divider />
+                <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={handleDeletePage}>
+                  {t("Move to trash")}
+                </Menu.Item>
+              </>
+            )}
+
+            <Menu.Divider />
+
             <Group px="sm" wrap="nowrap" style={{ cursor: "pointer" }}>
               <Tooltip
                 label={t("Edited by {{name}} {{time}}", {
@@ -462,7 +465,7 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
                   <Text size="xs" c="dimmed" lineClamp={1}>
                     <Trans
                       defaults="Created by: <b>{{creatorName}}</b>"
-                      values={{ creatorName: page?.creator?.name }}
+                      values={{ creatorName: page.creator?.name }}
                       components={{ b: <Text span fw={500} /> }}
                     />
                   </Text>
@@ -474,30 +477,34 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
                 </div>
               </Tooltip>
             </Group>
-          </>
-        </Menu.Dropdown>
+          </Menu.Dropdown>
+        )}
       </Menu>
 
-      <ExportModal
-        type="page"
-        id={page.id}
-        open={exportOpened}
-        onClose={closeExportModal}
-      />
+      {page && (
+        <>
+          <ExportModal
+            type="page"
+            id={page.id}
+            open={exportOpened}
+            onClose={closeExportModal}
+          />
 
-      <MovePageModal
-        pageId={page.id}
-        slugId={page.slugId}
-        currentSpaceSlug={spaceSlug}
-        onClose={closeMoveSpaceModal}
-        open={movePageModalOpened}
-      />
+          <MovePageModal
+            pageId={page.id}
+            slugId={page.slugId}
+            currentSpaceSlug={resolvedSpaceSlug}
+            onClose={closeMoveSpaceModal}
+            open={movePageModalOpened}
+          />
 
-      <PageVerificationModal
-        pageId={page.id}
-        opened={verificationOpened}
-        onClose={closeVerificationModal}
-      />
+          <PageVerificationModal
+            pageId={page.id}
+            opened={verificationOpened}
+            onClose={closeVerificationModal}
+          />
+        </>
+      )}
     </>
   );
 }

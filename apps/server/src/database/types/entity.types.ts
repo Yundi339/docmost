@@ -4,6 +4,9 @@ import {
   AiChatMessages,
   Attachments,
   Comments,
+  DatabaseBlocks,
+  DatabaseRecords,
+  DatabaseUserMappings,
   Groups,
   Notifications,
   PageAccess as _PageAccess,
@@ -213,3 +216,18 @@ export type UpdatableAudit = Updateable<Omit<_Audit, 'id'>>;
 export type Template = Selectable<Templates>;
 export type InsertableTemplate = Insertable<Templates>;
 export type UpdatableTemplate = Updateable<Omit<Templates, 'id'>>;
+
+// Database Block
+export type DatabaseBlock = Selectable<DatabaseBlocks>;
+export type InsertableDatabaseBlock = Insertable<DatabaseBlocks>;
+export type UpdatableDatabaseBlock = Updateable<Omit<DatabaseBlocks, 'id'>>;
+
+// Database Record
+export type DatabaseRecord = Selectable<DatabaseRecords>;
+export type InsertableDatabaseRecord = Insertable<DatabaseRecords>;
+export type UpdatableDatabaseRecord = Updateable<Omit<DatabaseRecords, 'id'>>;
+
+// Database User Mapping
+export type DatabaseUserMapping = Selectable<DatabaseUserMappings>;
+export type InsertableDatabaseUserMapping = Insertable<DatabaseUserMappings>;
+export type UpdatableDatabaseUserMapping = Updateable<Omit<DatabaseUserMappings, 'id'>>;
