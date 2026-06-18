@@ -11,7 +11,9 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import { Youtube } from "@tiptap/extension-youtube";
-import SlashCommand, { SlashCommandExtension as Command } from "@/features/editor/extensions/slash-command";
+import SlashCommand, {
+  SlashCommandExtension as Command,
+} from "@/features/editor/extensions/slash-command";
 import renderItems from "@/features/editor/components/slash-menu/render-items";
 import getSuggestionItems from "@/features/editor/components/slash-menu/menu-items";
 import { Collaboration, isChangeOrigin } from "@tiptap/extension-collaboration";
@@ -41,12 +43,14 @@ import {
   Excalidraw,
   Embed,
   TiptapPdf,
+  PageBreak,
   SearchAndReplace,
   Mention,
   TableDndExtension,
   Subpages,
   Heading,
   Highlight,
+  Indent,
   UniqueID,
   SharedStorage,
   Columns,
@@ -103,6 +107,7 @@ import { MarkdownClipboard } from "@/features/editor/extensions/markdown-clipboa
 import EmojiCommand from "./emoji-command";
 import { countWords } from "alfaaz";
 import AutoJoiner from "@/features/editor/extensions/autojoiner.ts";
+import { CleanStyles } from "@/features/editor/extensions/clean-styles.ts";
 
 const lowlight = createLowlight(common);
 lowlight.register("mermaid", plaintext);
@@ -200,6 +205,7 @@ export const mainExtensions = [
     showOnlyWhenEditable: true,
   }),
   TextAlign.configure({ types: ["heading", "paragraph"] }),
+  Indent,
   TaskList,
   TaskItem.configure({
     nested: true,
@@ -308,6 +314,8 @@ export const mainExtensions = [
     view: CodeBlockView,
     //@ts-ignore
     lowlight,
+    enableTabIndentation: true,
+    tabSize: 2,
     HTMLAttributes: {
       spellcheck: false,
     },
@@ -349,6 +357,7 @@ export const mainExtensions = [
   TiptapPdf.configure({
     view: PdfView,
   }),
+  PageBreak,
   Subpages.configure({
     view: SubpagesView,
   }),
@@ -361,6 +370,7 @@ export const mainExtensions = [
   MarkdownClipboard.configure({
     transformPastedText: true,
   }),
+  CleanStyles,
   CharacterCount.configure({
     wordCounter: (text) => countWords(text),
   }),
@@ -400,7 +410,10 @@ const TEMPLATE_EXCLUDED_SLASH_ITEMS = new Set([
 const TemplateSlashCommand = Command.configure({
   suggestion: {
     items: ({ query }: { query: string }) =>
-      getSuggestionItems({ query, excludeItems: TEMPLATE_EXCLUDED_SLASH_ITEMS }),
+      getSuggestionItems({
+        query,
+        excludeItems: TEMPLATE_EXCLUDED_SLASH_ITEMS,
+      }),
     render: renderItems,
   },
 });

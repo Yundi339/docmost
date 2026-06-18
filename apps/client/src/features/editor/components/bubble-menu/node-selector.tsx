@@ -147,7 +147,7 @@ export const NodeSelector: FC<NodeSelectorProps> = ({
   };
 
   return (
-    <Popover opened={isOpen} withArrow>
+    <Popover opened={isOpen} onChange={setIsOpen} withArrow>
       <Popover.Target>
         <Tooltip label={t("Turn into")} withArrow withinPortal={false} disabled={isOpen}>
           <Button

@@ -29,7 +29,7 @@ index 120c7388c24b757705aba64b4d16f36cde93accf..0eb035a6787ceee090f01135f153a082
              }
              else if (e.shiftKey && !this.tree.props.disableMultiSelection) {
 diff --git a/dist/module/components/default-container.js b/dist/module/components/default-container.js
-index 47724f59b482454fe3144dbb98bd16d3df6a9c17..2285e35ea0073a773b7b74e22758056fd3514c1a 100644
+index 47724f5..2285e35 100644
 --- a/dist/module/components/default-container.js
 +++ b/dist/module/components/default-container.js
 @@ -34,28 +34,6 @@ export function DefaultContainer() {

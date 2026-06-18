@@ -122,6 +122,15 @@ export function useRemovePageMutation() {
     mutationFn: (pageId: string) => deletePage(pageId, false),
     onSuccess: (_, pageId) => {
       notifications.show({ message: t("Page moved to trash") });
+
+      // Stamp deletedAt so a re-visit shows the trash banner, not stale state.
+      const cached = queryClient.getQueryData<IPage>(["pages", pageId]);
+      if (cached) {
+        const stamped = { ...cached, deletedAt: new Date() };
+        queryClient.setQueryData(["pages", cached.id], stamped);
+        queryClient.setQueryData(["pages", cached.slugId], stamped);
+      }
+
       invalidateOnDeletePage(pageId);
       queryClient.invalidateQueries({
         predicate: (item) =>
@@ -234,6 +243,13 @@ export function useRestorePageMutation() {
       await queryClient.invalidateQueries({
         queryKey: ["trash-list", restoredPage.spaceId],
       });
+
+      // Merge — restore endpoint returns a skinny page;
+      // Replace would strip space/permissions/content and break the editor.
+      const merge = (cached: IPage | undefined) =>
+        cached ? { ...cached, ...restoredPage } : cached;
+      queryClient.setQueryData<IPage>(["pages", restoredPage.id], merge);
+      queryClient.setQueryData<IPage>(["pages", restoredPage.slugId], merge);
     },
     onError: (error) => {
       notifications.show({ message: t("Failed to restore page"), color: "red" });

@@ -19,6 +19,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { getFileUrl } from "@/lib/config.ts";
 import { uploadImageAction } from "@/features/editor/components/image/upload-image-action.tsx";
+import { useAltTextControl } from "@/features/editor/components/common/use-alt-text-control.tsx";
 import classes from "../common/toolbar-menu.module.css";
 
 export function ImageMenu({ editor }: EditorMenuProps) {
@@ -40,6 +41,7 @@ export function ImageMenu({ editor }: EditorMenuProps) {
         isAlignCenter: ctx.editor.isActive("image", { align: "center" }),
         isAlignRight: ctx.editor.isActive("image", { align: "right" }),
         src: imageAttrs?.src || null,
+        alt: imageAttrs?.alt || "",
       };
     },
   });
@@ -135,6 +137,16 @@ export function ImageMenu({ editor }: EditorMenuProps) {
     editor.commands.deleteSelection();
   }, [editor]);
 
+  const {
+    button: altTextButton,
+    panel: altTextPanel,
+    isEditing: isEditingAlt,
+  } = useAltTextControl({
+    editor,
+    nodeName: "image",
+    currentAlt: editorState?.alt || "",
+  });
+
   return (
     <BaseBubbleMenu
       editor={editor}
@@ -148,7 +160,10 @@ export function ImageMenu({ editor }: EditorMenuProps) {
       }}
       shouldShow={shouldShow}
     >
-      <div className={classes.toolbar}>
+      {isEditingAlt ? (
+        altTextPanel
+      ) : (
+        <div className={classes.toolbar}>
         <Tooltip position="top" label={t("Align left")} withinPortal={false}>
           <ActionIcon
             onClick={alignImageLeft}
@@ -187,6 +202,10 @@ export function ImageMenu({ editor }: EditorMenuProps) {
 
         <div className={classes.divider} />
 
+        {altTextButton}
+
+        <div className={classes.divider} />
+
         <Tooltip position="top" label={t("Download")} withinPortal={false}>
           <ActionIcon
             onClick={handleDownload}
@@ -219,7 +238,8 @@ export function ImageMenu({ editor }: EditorMenuProps) {
             <IconTrash size={18} />
           </ActionIcon>
         </Tooltip>
-      </div>
+        </div>
+      )}
 
       <input
         ref={fileInputRef}

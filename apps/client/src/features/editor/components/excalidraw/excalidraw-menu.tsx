@@ -32,6 +32,7 @@ import { svgStringToFile } from "@/lib";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { IAttachment } from "@/features/attachments/types/attachment.types";
 import ReactClearModal from "react-clear-modal";
+import { useAltTextControl } from "@/features/editor/components/common/use-alt-text-control.tsx";
 import classes from "../common/toolbar-menu.module.css";
 
 // Lazy-load the heavy Excalidraw bundle (and its CSS) so it is fetched only
@@ -72,6 +73,7 @@ export function ExcalidrawMenu({ editor }: EditorMenuProps) {
         isAlignRight: ctx.editor.isActive("excalidraw", { align: "right" }),
         src: excalidrawAttr?.src || null,
         attachmentId: excalidrawAttr?.attachmentId || null,
+        alt: excalidrawAttr?.alt || "",
       };
     },
   });
@@ -147,6 +149,16 @@ export function ExcalidrawMenu({ editor }: EditorMenuProps) {
   const handleDelete = useCallback(() => {
     editor.commands.deleteSelection();
   }, [editor]);
+
+  const {
+    button: altTextButton,
+    panel: altTextPanel,
+    isEditing: isEditingAlt,
+  } = useAltTextControl({
+    editor,
+    nodeName: "excalidraw",
+    currentAlt: editorState?.alt || "",
+  });
 
   const handleOpen = useCallback(async () => {
     if (!editorState?.src) return;
@@ -286,7 +298,10 @@ export function ExcalidrawMenu({ editor }: EditorMenuProps) {
         }}
         shouldShow={shouldShow}
       >
-        <div className={classes.toolbar}>
+        {isEditingAlt ? (
+          altTextPanel
+        ) : (
+          <div className={classes.toolbar}>
           <Tooltip position="top" label={t("Align left")} withinPortal={false}>
             <ActionIcon
               onClick={alignLeft}
@@ -335,6 +350,10 @@ export function ExcalidrawMenu({ editor }: EditorMenuProps) {
 
           <div className={classes.divider} />
 
+          {altTextButton}
+
+          <div className={classes.divider} />
+
           <Tooltip position="top" label={t("Edit")} withinPortal={false}>
             <ActionIcon
               onClick={handleOpen}
@@ -368,7 +387,8 @@ export function ExcalidrawMenu({ editor }: EditorMenuProps) {
               <IconTrash size={18} />
             </ActionIcon>
           </Tooltip>
-        </div>
+          </div>
+        )}
       </BaseBubbleMenu>
 
       <ReactClearModal

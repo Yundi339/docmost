@@ -73,6 +73,7 @@ export class PageController {
       includeCreator: true,
       includeLastUpdatedBy: true,
       includeContributors: true,
+      includeDeletedBy: true,
     });
 
     if (!page) {

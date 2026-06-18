@@ -3,7 +3,7 @@ import {
   LocalStorageConfig,
   StorageOption,
 } from '../interfaces';
-import { join, dirname, resolve } from 'path';
+import { dirname, resolve, sep } from 'path';
 import * as fs from 'fs-extra';
 import { Readable } from 'stream';
 import { createReadStream, createWriteStream } from 'node:fs';
@@ -17,9 +17,9 @@ export class LocalDriver implements StorageDriver {
   }
 
   private _fullPath(filePath: string): string {
-    const fullPath = resolve(join(this.config.storagePath, filePath));
     const storageRoot = resolve(this.config.storagePath);
-    if (!fullPath.startsWith(storageRoot + '/') && fullPath !== storageRoot) {
+    const fullPath = resolve(storageRoot, filePath);
+    if (fullPath !== storageRoot && !fullPath.startsWith(storageRoot + sep)) {
       throw new Error('Invalid file path: path traversal detected');
     }
     return fullPath;

@@ -45,3 +45,7 @@ lerna-debug.log*
 .nx
 .nx/installation
 .nx/cache
+
+_doc
+.github/skills
+_env

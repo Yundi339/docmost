@@ -21,6 +21,7 @@ export interface IUser {
   fullPageWidth: boolean; // used for update
   pageEditMode: string; // used for update
   spellcheck: boolean; // used for update
+  editorToolbar: boolean; // used for update
   notificationPageUpdates: boolean; // used for update
   notificationPageUserMention: boolean; // used for update
   notificationCommentUserMention: boolean; // used for update
@@ -39,6 +40,7 @@ export interface IUserSettings {
     fullPageWidth: boolean;
     pageEditMode: string;
     spellcheck?: boolean;
+    editorToolbar: boolean;
   };
   notifications?: {
     "page.updated"?: boolean;

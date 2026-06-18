@@ -14,25 +14,27 @@ import {
 import { useAtom } from "jotai";
 import { userAtom } from "@/features/user/atoms/current-user-atom.ts";
 import {
-  pageMaxWidthAtom,
   pageAlignAtom,
   pageFontScaleAtom,
+  pageMaxWidthAtom,
 } from "@/features/user/atoms/page-width-atom.ts";
-import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms.ts";
-import { PageEditMode } from "@/features/user/types/user.types.ts";
 import { CustomAvatar } from "@/components/ui/custom-avatar.tsx";
 import { PageVerificationBadge } from "@/ee/page-verification";
 import { useTranslation } from "react-i18next";
 import { IContributor } from "@/features/page/types/page.types.ts";
+import { FixedToolbar } from "@/features/editor/components/fixed-toolbar/fixed-toolbar";
+import { PageEditMode } from "@/features/user/types/user.types.ts";
+import { DeletedPageBanner } from "@/features/page/trash/components/deleted-page-banner.tsx";
+import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms.ts";
 
 const MemoizedTitleEditor = React.memo(TitleEditor);
 const MemoizedPageEditor = React.memo(PageEditor);
+const MemoizedFixedToolbar = React.memo(FixedToolbar);
+const MemoizedDeletedPageBanner = React.memo(DeletedPageBanner);
 
-// Module-level flag: survives component unmount/remount on page navigation,
-// reset only on full page reload (i.e. a new app session).
 let defaultEditModeApplied = false;
 
-type PageCreator = {
+type PageUser = {
   id: string;
   name: string;
   avatarUrl: string;
@@ -45,7 +47,7 @@ export interface FullEditorProps {
   content: string;
   spaceSlug: string;
   editable: boolean;
-  creator?: PageCreator;
+  creator?: PageUser;
   contributors?: IContributor[];
   canComment?: boolean;
 }
@@ -63,16 +65,19 @@ export function FullEditor({
 }: FullEditorProps) {
   const [user] = useAtom(userAtom);
   const fullPageWidth = user.settings?.preferences?.fullPageWidth;
+  const editorToolbarEnabled =
+    user.settings?.preferences?.editorToolbar ?? false;
   const [pageMaxWidth] = useAtom(pageMaxWidthAtom);
   const [pageAlign] = useAtom(pageAlignAtom);
   const [pageFontScale] = useAtom(pageFontScaleAtom);
-  const [, setCurrentPageEditMode] = useAtom(currentPageEditModeAtom);
+  const [currentPageEditMode, setCurrentPageEditMode] = useAtom(
+    currentPageEditModeAtom,
+  );
   const userPageEditMode =
     (user?.settings?.preferences?.pageEditMode as PageEditMode) ??
     PageEditMode.Edit;
+  const isEditMode = currentPageEditMode === PageEditMode.Edit;
 
-  // Apply the user's saved preference only once on initial load, not on every
-  // page navigation — so the mode sticks across navigations within a session.
   useEffect(() => {
     if (!defaultEditModeApplied) {
       setCurrentPageEditMode(userPageEditMode);
@@ -94,6 +99,10 @@ export function FullEditor({
         } as React.CSSProperties
       }
     >
+      {editorToolbarEnabled && editable && isEditMode && (
+        <MemoizedFixedToolbar />
+      )}
+      <MemoizedDeletedPageBanner slugId={slugId} />
       <MemoizedTitleEditor
         pageId={pageId}
         slugId={slugId}
@@ -117,16 +126,12 @@ export function FullEditor({
 }
 
 type PageBylineProps = {
-  creator?: PageCreator;
+  creator?: PageUser;
   contributors?: IContributor[];
   readOnly?: boolean;
 };
 
-function PageByline({
-  creator,
-  contributors,
-  readOnly,
-}: PageBylineProps) {
+function PageByline({ creator, contributors, readOnly }: PageBylineProps) {
   const { t } = useTranslation();
 
   const otherContributors = (contributors ?? []).filter(

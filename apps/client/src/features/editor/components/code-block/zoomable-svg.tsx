@@ -508,6 +508,8 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
   useEffect(() => {
     if (isFullscreen) {
       document.body.style.overflow = "hidden";
+      // Try to lock to landscape on mobile
+      (screen.orientation as any)?.lock?.("landscape").catch(() => {});
       const handleEsc = (e: KeyboardEvent) => {
         if (e.key === "Escape") {
           exitFullscreen();

@@ -108,7 +108,10 @@ export class EnvironmentService {
   }
 
   getAwsS3ForcePathStyle(): boolean {
-    return this.configService.get<boolean>('AWS_S3_FORCE_PATH_STYLE');
+    const forcePathStyle = this.configService
+      .get<string>('AWS_S3_FORCE_PATH_STYLE', 'false')
+      .toLowerCase();
+    return forcePathStyle === 'true';
   }
 
   getAwsS3Url(): string {
@@ -125,6 +128,17 @@ export class EnvironmentService {
 
   getMailFromName(): string {
     return this.configService.get<string>('MAIL_FROM_NAME', 'Docmost');
+  }
+
+  getMailBlockedRecipientDomains(): string[] {
+    const raw = this.configService.get<string>(
+      'MAIL_BLOCKED_RECIPIENT_DOMAINS',
+      '',
+    );
+    return raw
+      .split(',')
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean);
   }
 
   getSmtpHost(): string {
@@ -313,5 +327,27 @@ export class EnvironmentService {
 
   getClickHouseUrl(): string {
     return this.configService.get<string>('CLICKHOUSE_URL');
+  }
+
+  getSamlDisableRequestedAuthnContext(): boolean {
+    const disabled = this.configService
+      .get<string>('SAML_DISABLE_REQUESTED_AUTHN_CONTEXT', 'false')
+      .toLowerCase();
+    return disabled === 'true';
+  }
+
+  isIframeEmbedAllowed(): boolean {
+    const allowed = this.configService
+      .get<string>('IFRAME_EMBED_ALLOWED', 'false')
+      .toLowerCase();
+    return allowed === 'true';
+  }
+
+  getIframeAllowedOrigins(): string[] {
+    const raw = this.configService.get<string>('IFRAME_ALLOWED_ORIGINS', '');
+    return raw
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
   }
 }

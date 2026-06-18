@@ -20,12 +20,14 @@ import {
   IconTimeline,
   IconTypography,
   IconMenu4,
+  IconPageBreak,
   IconCalendar,
   IconAppWindow,
   IconSitemap,
   IconColumns3,
   IconColumns2,
   IconTag,
+  IconMoodSmile,
 } from "@tabler/icons-react";
 import {
   CommandProps,
@@ -265,7 +267,7 @@ const CommandGroups: SlashMenuGroupedItemsType = {
     {
       title: "Numbered list",
       description: "Create a list with numbering.",
-      searchTerms: ["numbered", "ordered", "list"],
+      searchTerms: ["numbered", "ordered", "list", "ol"],
       icon: IconListNumbers,
       command: ({ editor, range }: CommandProps) => {
         editor.chain().focus().deleteRange(range).toggleOrderedList().run();
@@ -294,6 +296,14 @@ const CommandGroups: SlashMenuGroupedItemsType = {
       icon: IconMenu4,
       command: ({ editor, range }: CommandProps) =>
         editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
+    },
+    {
+      title: "Page break",
+      description: "Insert a page break for printing.",
+      searchTerms: ["page", "break", "pagebreak", "print"],
+      icon: IconPageBreak,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).setPageBreak().run(),
     },
     {
       title: "Image",
@@ -605,9 +615,25 @@ const CommandGroups: SlashMenuGroupedItemsType = {
       },
     },
     {
+      title: "Emoji",
+      description: "Insert emoji.",
+      searchTerms: ["emoji", "icon", "smiley", "emoticon", "symbol", "reaction"],
+      icon: IconMoodSmile,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).insertContent(":").run();
+      },
+    },
+    {
       title: "Subpages (Child pages)",
       description: "List all subpages of the current page",
-      searchTerms: ["subpages", "child", "children", "nested", "hierarchy"],
+      searchTerms: [
+        "subpages",
+        "child",
+        "children",
+        "nested",
+        "hierarchy",
+        "toc",
+      ],
       icon: IconSitemap,
       command: ({ editor, range }: CommandProps) => {
         editor.chain().focus().deleteRange(range).insertSubpages().run();
@@ -845,18 +871,34 @@ export const getSuggestionItems = ({
   for (const [group, items] of Object.entries(CommandGroups)) {
     const filteredItems = items.filter((item) => {
       if (excludeItems?.has(item.title)) return false;
+      const translatedTitle = i18n.t(item.title);
+      const translatedDescription = i18n.t(item.description);
       return (
         fuzzyMatch(search, item.title) ||
+        fuzzyMatch(search, translatedTitle) ||
         item.description.toLowerCase().includes(search) ||
+        translatedDescription.toLowerCase().includes(search) ||
         (item.searchTerms &&
-          item.searchTerms.some((term: string) => term.includes(search)))
+          item.searchTerms.some(
+            (term: string) =>
+              term.includes(search) ||
+              i18n.t(term).toLowerCase().includes(search),
+          ))
       );
     });
 
     if (filteredItems.length) {
       filteredGroups[group] = filteredItems.sort((a, b) => {
-        const aTitle = a.title.toLowerCase().includes(search) ? 0 : 1;
-        const bTitle = b.title.toLowerCase().includes(search) ? 0 : 1;
+        const aTitle =
+          a.title.toLowerCase().includes(search) ||
+          i18n.t(a.title).toLowerCase().includes(search)
+            ? 0
+            : 1;
+        const bTitle =
+          b.title.toLowerCase().includes(search) ||
+          i18n.t(b.title).toLowerCase().includes(search)
+            ? 0
+            : 1;
         return aTitle - bTitle;
       });
     }

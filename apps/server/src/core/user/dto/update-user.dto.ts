@@ -14,10 +14,6 @@ export class UpdateUserDto extends PartialType(
   OmitType(CreateUserDto, ['password'] as const),
 ) {
   @IsOptional()
-  @IsString()
-  avatarUrl: string;
-
-  @IsOptional()
   @IsBoolean()
   fullPageWidth: boolean;
 
@@ -29,6 +25,10 @@ export class UpdateUserDto extends PartialType(
   @IsString()
   @IsIn(['read', 'edit'])
   pageEditMode: string;
+
+  @IsOptional()
+  @IsBoolean()
+  editorToolbar: boolean;
 
   @IsOptional()
   @IsString()
