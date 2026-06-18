@@ -119,7 +119,7 @@ export const deleteTreeNode = (
 };
 
 export function buildTreeWithChildren(items: SpaceTreeNode[]): SpaceTreeNode[] {
-  const nodeMap = {};
+  const nodeMap: Record<string, SpaceTreeNode> = {};
   let result: SpaceTreeNode[] = [];
 
   // Create a reference object for each item with the specified structure
@@ -130,7 +130,7 @@ export function buildTreeWithChildren(items: SpaceTreeNode[]): SpaceTreeNode[] {
   // Build the tree array
   items.forEach((item) => {
     const node = nodeMap[item.id];
-    if (item.parentPageId !== null) {
+    if (item.parentPageId !== null && nodeMap[item.parentPageId]) {
       // Find the parent node and add the current node to its children
       nodeMap[item.parentPageId].children.push(node);
     } else {

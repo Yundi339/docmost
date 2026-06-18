@@ -31,9 +31,8 @@ export type UseTreeMutation = {
 export function useTreeMutation(spaceId: string): UseTreeMutation {
   const { t } = useTranslation();
   const [, setData] = useAtom(treeDataAtom);
-  // `store` reads the *current* treeDataAtom imperatively in handlers — avoids
-  // stale-closure issues when the caller updates the tree (e.g. lazy-load
-  // children) and then immediately invokes a handler.
+  // `store` reads the current treeDataAtom imperatively in handlers and avoids
+  // stale-closure issues when callers update the tree before invoking actions.
   const store = useStore();
   const createPageMutation = useCreatePageMutation();
   const updatePageMutation = useUpdatePageMutation();
@@ -153,10 +152,8 @@ export function useTreeMutation(spaceId: string): UseTreeMutation {
         children: [],
       };
 
-      // Read latest tree at call time. Without this, callers that mutate the
-      // tree (e.g. lazy-load children on expand) immediately before calling
-      // handleCreate hit a stale closure and compute lastIndex against the
-      // pre-load tree, requiring a setTimeout-based wait at the call site.
+      // Read latest tree at call time so lastIndex is computed against the
+      // current sidebar state.
       const current = store.get(treeDataAtom);
       let lastIndex: number;
       if (parentId === null) {
@@ -166,7 +163,10 @@ export function useTreeMutation(spaceId: string): UseTreeMutation {
         lastIndex = parent?.children?.length ?? 0;
       }
 
-      setData((prev) => treeModel.insert(prev, parentId, newNode, lastIndex));
+      setData((prev) => {
+        if (treeModel.find(prev, newNode.id)) return prev;
+        return treeModel.insert(prev, parentId, newNode, lastIndex);
+      });
 
       setTimeout(() => {
         emit({

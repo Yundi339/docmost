@@ -53,7 +53,7 @@ export type AddTreeNodeEvent = {
   operation: "addTreeNode";
   spaceId: string;
   payload: {
-    parentId: string;
+    parentId: string | null;
     index: number;
     data: SpaceTreeNode;
   };
@@ -64,7 +64,7 @@ export type MoveTreeNodeEvent = {
   spaceId: string;
   payload: {
     id: string;
-    parentId: string;
+    parentId: string | null;
     oldParentId: string | null;
     index: number;
     position: string;

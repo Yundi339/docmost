@@ -85,9 +85,9 @@ export const useTreeSocket = () => {
               index: event.payload.index,
             });
             // `place` silently returns the same reference if the destination
-            // parent isn't loaded on this client. Falling back to removing the
-            // source keeps the UI consistent (the source will reappear when
-            // the user expands the new parent and lazy-load fetches it).
+            // parent is not available locally. Falling back to removing the
+            // source keeps the UI consistent until the full tree refetch
+            // restores the server-confirmed location.
             if (placed === prev) {
               return treeModel.remove(prev, event.payload.id);
             }

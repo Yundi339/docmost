@@ -18,16 +18,12 @@ import EmojiPicker from "@/components/ui/emoji-picker.tsx";
 import { queryClient } from "@/main.tsx";
 import { buildPageUrl } from "@/features/page/page.utils.ts";
 import { getPageById } from "@/features/page/services/page-service.ts";
-import {
-  useUpdatePageMutation,
-  fetchAllAncestorChildren,
-} from "@/features/page/queries/page-query.ts";
+import { useUpdatePageMutation } from "@/features/page/queries/page-query.ts";
 import { useQueryEmit } from "@/features/websocket/use-query-emit.ts";
 import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 
 import { treeDataAtom } from "@/features/page/tree/atoms/tree-data-atom.ts";
-import { treeModel } from "@/features/page/tree/model/tree-model";
 import { useTreeMutation } from "@/features/page/tree/hooks/use-tree-mutation.ts";
 import type { SpaceTreeNode } from "@/features/page/tree/types.ts";
 import type { RenderRowProps } from "./doc-tree";
@@ -164,21 +160,6 @@ export function SpaceTreeRow({
         payload: { icon: null },
       });
     }, 50);
-  };
-
-  const handleLoadChildren = async () => {
-    if (!node.hasChildren) return;
-    try {
-      const childrenTree = await fetchAllAncestorChildren({
-        pageId: node.id,
-        spaceId: node.spaceId,
-      });
-      setTreeData((prev) =>
-        treeModel.appendChildren(prev, node.id, childrenTree),
-      );
-    } catch (error) {
-      console.error("Failed to fetch children:", error);
-    }
   };
 
   return (
@@ -373,7 +354,6 @@ export function SpaceTreeRow({
               isOpen={isOpen}
               hasChildren={hasChildren}
               onToggle={toggleOpen}
-              onExpandTree={handleLoadChildren}
             />
           )}
         </div>
@@ -439,7 +419,6 @@ interface CreateNodeProps {
   isOpen: boolean;
   hasChildren: boolean;
   onToggle: () => void;
-  onExpandTree: () => Promise<void> | void;
 }
 
 function CreateNode({
@@ -447,18 +426,13 @@ function CreateNode({
   isOpen,
   hasChildren,
   onToggle,
-  onExpandTree,
 }: CreateNodeProps) {
   const { t } = useTranslation();
   const { handleCreate } = useTreeMutation(node.spaceId);
 
   async function handleClickCreate() {
     if (node.hasChildren && !hasChildren) {
-      // Expand and lazy-load before creating a child. handleCreate reads the
-      // latest tree imperatively (via useStore) so we no longer need a
-      // setTimeout to wait for React to rerun the closure with fresh data.
       if (!isOpen) onToggle();
-      await onExpandTree();
     } else if (!isOpen) {
       onToggle();
     }

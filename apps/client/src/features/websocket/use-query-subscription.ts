@@ -19,8 +19,8 @@ export const useQuerySubscription = () => {
   const [socket] = useAtom(socketAtom);
 
   React.useEffect(() => {
-    socket?.on("message", (event) => {
-      const data: WebSocketEvent = event;
+    const handleMessage = (event: WebSocketEvent) => {
+      const data = event;
 
       let entity = null;
       let queryKeyId = null;
@@ -163,6 +163,11 @@ export const useQuerySubscription = () => {
           });
           break;
       }
-    });
+    };
+
+    socket?.on("message", handleMessage);
+    return () => {
+      socket?.off("message", handleMessage);
+    };
   }, [queryClient, socket]);
 };

@@ -31,7 +31,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import { IPagination, QueryParams } from "@/lib/types.ts";
 import { queryClient } from "@/main.tsx";
-import { buildTree } from "@/features/page/tree/utils";
+import { buildTree, buildTreeWithChildren } from "@/features/page/tree/utils";
 import { useEffect } from "react";
 import { validate as isValidUuid } from "uuid";
 import { useTranslation } from "react-i18next";
@@ -40,6 +40,16 @@ import { treeDataAtom } from "@/features/page/tree/atoms/tree-data-atom";
 import { treeModel } from "@/features/page/tree/model/tree-model";
 import { SpaceTreeNode } from "@/features/page/tree/types";
 import { useQueryEmit } from "@/features/websocket/use-query-emit";
+
+export const fullSidebarTreeQueryKey = (spaceId: string) =>
+  ["sidebar-full-tree", spaceId] as const;
+
+function invalidateFullSidebarTree(spaceId?: string | null) {
+  if (!spaceId) return;
+  queryClient.invalidateQueries({
+    queryKey: fullSidebarTreeQueryKey(spaceId),
+  });
+}
 
 export function usePageQuery(
   pageInput: Partial<IPageInput>,
@@ -273,6 +283,22 @@ export function useGetRootSidebarPagesQuery(data: SidebarPagesParams) {
   });
 }
 
+export function useGetFullSidebarTreeQuery(data: SidebarPagesParams) {
+  return useQuery({
+    queryKey: fullSidebarTreeQueryKey(data.spaceId),
+    enabled: !!data.spaceId,
+    queryFn: async () => {
+      const response = await getAllSidebarPages({
+        spaceId: data.spaceId,
+        all: true,
+      });
+      const allItems = buildTree(response.pages.flatMap((page) => page.items));
+      return buildTreeWithChildren(allItems);
+    },
+    refetchOnMount: true,
+  });
+}
+
 export function usePageBreadcrumbsQuery(
   pageId: string,
 ): UseQueryResult<Partial<IPage[]>, Error> {
@@ -429,6 +455,7 @@ export function invalidateOnCreatePage(data: Partial<IPage>) {
   queryClient.invalidateQueries({
     queryKey: ["recent-changes", data.spaceId],
   });
+  invalidateFullSidebarTree(data.spaceId);
 }
 
 export function invalidateOnUpdatePage(
@@ -467,6 +494,7 @@ export function invalidateOnUpdatePage(
   queryClient.invalidateQueries({
     queryKey: ["recent-changes", spaceId],
   });
+  invalidateFullSidebarTree(spaceId);
 }
 
 export function updateCacheOnMovePage(
@@ -590,6 +618,8 @@ export function updateCacheOnMovePage(
       });
     });
   }
+
+  invalidateFullSidebarTree(spaceId);
 }
 
 export function invalidateOnDeletePage(pageId: string) {
@@ -618,5 +648,9 @@ export function invalidateOnDeletePage(pageId: string) {
   //update recent changes
   queryClient.invalidateQueries({
     queryKey: ["recent-changes"],
+  });
+
+  queryClient.invalidateQueries({
+    queryKey: ["sidebar-full-tree"],
   });
 }

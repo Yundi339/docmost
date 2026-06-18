@@ -6,8 +6,7 @@ import { Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import {
-  fetchAllAncestorChildren,
-  useGetRootSidebarPagesQuery,
+  useGetFullSidebarTreeQuery,
   usePageQuery,
   useRemovePageMutation,
 } from "@/features/page/queries/page-query.ts";
@@ -18,15 +17,8 @@ import {
   openTreeNodesAtom,
 } from "@/features/page/tree/atoms/open-tree-nodes-atom.ts";
 import { useTreeMutation } from "@/features/page/tree/hooks/use-tree-mutation.ts";
-import {
-  buildTree,
-  buildTreeWithChildren,
-  mergeRootTrees,
-} from "@/features/page/tree/utils/utils.ts";
 import { SpaceTreeNode } from "@/features/page/tree/types.ts";
 import { treeModel } from "@/features/page/tree/model/tree-model";
-import { getPageBreadcrumbs } from "@/features/page/services/page-service.ts";
-import { IPage } from "@/features/page/types/page.types.ts";
 import { extractPageSlugId } from "@/lib";
 import { useDeletePageModal } from "@/features/page/hooks/use-delete-page-modal.tsx";
 import BulkExportModal from "@/components/common/bulk-export-modal";
@@ -102,12 +94,7 @@ export default function SpaceTree({
   const { pageSlug, spaceSlug } = useParams();
   const [data, setData] = useAtom(treeDataAtom);
   const { handleMove } = useTreeMutation(spaceId);
-  const {
-    data: pagesData,
-    hasNextPage,
-    fetchNextPage,
-    isFetching,
-  } = useGetRootSidebarPagesQuery({ spaceId });
+  const { data: fullTreeData } = useGetFullSidebarTreeQuery({ spaceId });
   const [openTreeNodes, setOpenTreeNodes] = useAtom(openTreeNodesAtom);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -121,8 +108,6 @@ export default function SpaceTree({
     useDisclosure(false);
   const [bulkMoveOpened, { open: openBulkMove, close: closeBulkMove }] =
     useDisclosure(false);
-  const spaceIdRef = useRef(spaceId);
-  spaceIdRef.current = spaceId;
   selectionModeRef.current = selectionMode;
   selectedIdsRef.current = selectedIds;
   const { data: currentPage } = usePageQuery({
@@ -138,108 +123,37 @@ export default function SpaceTree({
   }, [spaceId]);
 
   useEffect(() => {
-    if (hasNextPage && !isFetching) {
-      fetchNextPage();
-    }
-  }, [hasNextPage, fetchNextPage, isFetching, spaceId]);
-
-  useEffect(() => {
-    if (!pagesData?.pages || hasNextPage) return;
-
-    const allItems = pagesData.pages.flatMap((page) => page.items);
-    const treeData = buildTree(allItems);
+    if (!fullTreeData) return;
 
     setData((prev) => {
-      // Keep nodes belonging to other spaces — filteredData filters by spaceId
-      // for rendering, so accumulating is safe. Preserves lazy-loaded children
-      // and open-state when the user returns to a previously-visited space.
       const otherSpaces = prev.filter((n) => n?.spaceId !== spaceId);
-      const currentSpace = prev.filter((n) => n?.spaceId === spaceId);
-      const refreshed =
-        currentSpace.length > 0
-          ? mergeRootTrees(currentSpace, treeData)
-          : treeData;
-      return [...otherSpaces, ...refreshed];
+      return [...otherSpaces, ...fullTreeData];
     });
     setIsDataLoaded(true);
-  }, [pagesData, hasNextPage, spaceId]);
+  }, [fullTreeData, setData, spaceId]);
 
   useEffect(() => {
-    const effectSpaceId = spaceId;
+    if (!isDataLoaded || !currentPage?.id) return;
+    const path = treeModel.path(
+      data.filter((node) => node?.spaceId === spaceId),
+      currentPage.id,
+    );
+    if (!path || path.length <= 1) return;
 
-    const fetchData = async () => {
-      if (isDataLoaded && currentPage) {
-        // check if pageId node is present in the tree
-        const node = treeModel.find(data, currentPage.id);
-        if (node) {
-          // if node is found, no need to traverse its ancestors
-          return;
-        }
-
-        // if not found, fetch and build its ancestors and their children
-        if (!currentPage.id) return;
-        const ancestors = await getPageBreadcrumbs(currentPage.id);
-
-        if (spaceIdRef.current !== effectSpaceId) return;
-
-        if (ancestors && ancestors.length > 1) {
-          let flatTreeItems = [...buildTree(ancestors)];
-
-          const fetchAndUpdateChildren = async (ancestor: IPage) => {
-            // we don't want to fetch the children of the opened page
-            if (ancestor.id === currentPage.id) return;
-            const children = await fetchAllAncestorChildren({
-              pageId: ancestor.id,
-              spaceId: ancestor.spaceId,
-            });
-
-            flatTreeItems = [
-              ...flatTreeItems,
-              ...children.filter(
-                (child) => !flatTreeItems.some((item) => item.id === child.id),
-              ),
-            ];
-          };
-
-          const fetchPromises = ancestors.map((ancestor) =>
-            fetchAndUpdateChildren(ancestor),
-          );
-
-          Promise.all(fetchPromises).then(() => {
-            if (spaceIdRef.current !== effectSpaceId) return;
-
-            // build tree with children
-            const ancestorsTree = buildTreeWithChildren(flatTreeItems);
-            // child of root page we're attaching the built ancestors to
-            const rootChild = ancestorsTree[0];
-
-            // attach built ancestors to tree using functional updater
-            setData((currentData) =>
-              treeModel.appendChildren(
-                currentData,
-                rootChild.id,
-                rootChild.children ?? [],
-              ),
-            );
-
-            // open all ancestors of the current page. DocTree picks up the
-            // selectedId change and scrolls the row into view on its own once
-            // flat contains it.
-            setOpenTreeNodes((prev) => {
-              const next = { ...prev };
-              for (const a of ancestors) {
-                if (a.id !== currentPage.id) next[a.id] = true;
-              }
-              saveOpenState(effectSpaceId, next);
-              return next;
-            });
-          });
+    setOpenTreeNodes((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const ancestor of path.slice(0, -1)) {
+        if (!next[ancestor.id]) {
+          next[ancestor.id] = true;
+          changed = true;
         }
       }
-    };
-
-    fetchData();
-  }, [isDataLoaded, currentPage?.id]);
+      if (!changed) return prev;
+      saveOpenState(spaceId, next);
+      return next;
+    });
+  }, [data, isDataLoaded, currentPage?.id, setOpenTreeNodes, spaceId]);
 
   const openIds = useMemo(
     () => new Set(Object.keys(openTreeNodes).filter((k) => openTreeNodes[k])),
@@ -247,27 +161,14 @@ export default function SpaceTree({
   );
 
   const handleToggle = useCallback(
-    async (id: string, isOpen: boolean) => {
+    (id: string, isOpen: boolean) => {
       setOpenTreeNodes((prev) => {
         const next = { ...prev, [id]: isOpen };
         saveOpenState(spaceId, next);
         return next;
       });
-      if (isOpen) {
-        const node = treeModel.find(data, id) as SpaceTreeNode | null;
-        if (
-          node?.hasChildren &&
-          (!node.children || node.children.length === 0)
-        ) {
-          const fetched = await fetchAllAncestorChildren({
-            pageId: id,
-            spaceId: node.spaceId,
-          });
-          setData((prev) => treeModel.appendChildren(prev, id, fetched));
-        }
-      }
     },
-    [data, setOpenTreeNodes, setData, spaceId],
+    [setOpenTreeNodes, spaceId],
   );
 
   const filteredData = useMemo(
