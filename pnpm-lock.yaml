@@ -44,7 +44,7 @@ overrides:
 
 patchedDependencies:
   react-arborist@3.4.0:
-    hash: 419b3b02e24afe928cc006a006f6e906666aff19aa6fd7daaa788ccc2202678a
+    hash: ee851d8dfe35ca3950523d2582009ca0677a095cf9e9e93a509367772b64e1b2
     path: patches/react-arborist@3.4.0.patch
 
 importers:
@@ -351,7 +351,7 @@ importers:
         version: 18.3.1
       react-arborist:
         specifier: 3.4.0
-        version: 3.4.0(patch_hash=419b3b02e24afe928cc006a006f6e906666aff19aa6fd7daaa788ccc2202678a)(@types/node@22.19.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 3.4.0(patch_hash=ee851d8dfe35ca3950523d2582009ca0677a095cf9e9e93a509367772b64e1b2)(@types/node@22.19.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react-clear-modal:
         specifier: ^2.0.18
         version: 2.0.18(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -20481,7 +20481,7 @@ snapshots:
       iconv-lite: 0.7.2
       unpipe: 1.0.0
 
-  react-arborist@3.4.0(patch_hash=419b3b02e24afe928cc006a006f6e906666aff19aa6fd7daaa788ccc2202678a)(@types/node@22.19.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  react-arborist@3.4.0(patch_hash=ee851d8dfe35ca3950523d2582009ca0677a095cf9e9e93a509367772b64e1b2)(@types/node@22.19.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       react: 18.3.1
       react-dnd: 14.0.5(@types/node@22.19.1)(@types/react@18.3.12)(react@18.3.1)

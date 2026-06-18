@@ -1,5 +1,18 @@
+diff --git a/dist/main/interfaces/node-api.js b/dist/main/interfaces/node-api.js
+index 120c738..0eb035a 100644
+--- a/dist/main/interfaces/node-api.js
++++ b/dist/main/interfaces/node-api.js
+@@ -5,7 +5,7 @@ const create_root_1 = require("../data/create-root");
+ class NodeApi {
+     constructor(params) {
+         this.handleClick = (e) => {
+-            if (e.metaKey && !this.tree.props.disableMultiSelection) {
++            if ((e.metaKey || e.ctrlKey) && !this.tree.props.disableMultiSelection) {
+                 this.isSelected ? this.deselect() : this.selectMulti();
+             }
+             else if (e.shiftKey && !this.tree.props.disableMultiSelection) {
 diff --git a/dist/module/components/default-container.js b/dist/module/components/default-container.js
-index 47724f59b482454fe3144dbb98bd16d3df6a9c17..2285e35ea0073a773b7b74e22758056fd3514c1a 100644
+index 47724f5..2285e35 100644
 --- a/dist/module/components/default-container.js
 +++ b/dist/module/components/default-container.js
 @@ -34,28 +34,6 @@ export function DefaultContainer() {
@@ -32,23 +45,11 @@ index 47724f59b482454fe3144dbb98bd16d3df6a9c17..2285e35ea0073a773b7b74e22758056f
              }
              if (e.key === "Tab" && !e.shiftKey) {
 diff --git a/dist/module/interfaces/node-api.js b/dist/module/interfaces/node-api.js
-index a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0..b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0 100644
+index 484fe0a..1321d59 100644
 --- a/dist/module/interfaces/node-api.js
 +++ b/dist/module/interfaces/node-api.js
 @@ -2,7 +2,7 @@ import { ROOT_ID } from "../data/create-root";
  export class NodeApi {
-     constructor(params) {
-         this.handleClick = (e) => {
--            if (e.metaKey && !this.tree.props.disableMultiSelection) {
-+            if ((e.metaKey || e.ctrlKey) && !this.tree.props.disableMultiSelection) {
-                 this.isSelected ? this.deselect() : this.selectMulti();
-             }
-             else if (e.shiftKey && !this.tree.props.disableMultiSelection) {
-diff --git a/dist/main/interfaces/node-api.js b/dist/main/interfaces/node-api.js
-index c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0..d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0 100644
---- a/dist/main/interfaces/node-api.js
-+++ b/dist/main/interfaces/node-api.js
-@@ -5,7 +5,7 @@ class NodeApi {
      constructor(params) {
          this.handleClick = (e) => {
 -            if (e.metaKey && !this.tree.props.disableMultiSelection) {
