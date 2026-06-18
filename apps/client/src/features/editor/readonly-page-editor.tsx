@@ -15,12 +15,14 @@ interface PageEditorProps {
   title: string;
   content: any;
   pageId?: string;
+  printMode?: boolean;
 }
 
 export default function ReadonlyPageEditor({
   title,
   content,
   pageId,
+  printMode = false,
 }: PageEditorProps) {
   const { t } = useTranslation();
   const [, setReadOnlyEditor] = useAtom(readOnlyEditorAtom);
@@ -41,8 +43,12 @@ export default function ReadonlyPageEditor({
   }, []);
 
   const extensions = useMemo(() => {
+    const excludedExtensions = new Set([
+      "uniqueID",
+      ...(printMode ? ["tableHeaderPin", "tableReadonlySort"] : []),
+    ]);
     const filteredExtensions = mainExtensions.filter(
-      (ext) => ext.name !== "uniqueID",
+      (ext) => !excludedExtensions.has(ext.name),
     );
 
     return [
@@ -52,7 +58,7 @@ export default function ReadonlyPageEditor({
         updateDocument: false,
       }),
     ];
-  }, []);
+  }, [printMode]);
 
   const titleExtensions = [
     Document.extend({
