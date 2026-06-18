@@ -163,10 +163,9 @@ function DocTreeRowInner<T extends object>(props: Props<T>) {
           : isLastSibling
             ? 'last-in-group'
             : 'standard';
-      // Always block 'reparent' (out of scope per spec).
       // Block 'reorder-below' when the row is open with children — ambiguous gesture,
       // force users to drop into the folder via 'make-child' instead.
-      const block: Instruction['type'][] = ['reparent'];
+      const block: Instruction['type'][] = [];
       if (isOpen && hasChildren) block.push('reorder-below');
 
       cleanups.push(
@@ -175,7 +174,6 @@ function DocTreeRowInner<T extends object>(props: Props<T>) {
           canDrop: ({ source }) =>
             source.data.type === DRAG_TYPE &&
             source.data.uniqueContextId === contextId &&
-            source.data.id !== node.id &&
             !treeModel.isDescendant(
               getRootData(),
               source.data.id as string,
@@ -229,14 +227,34 @@ function DocTreeRowInner<T extends object>(props: Props<T>) {
                   ? { kind: 'reorder-after', targetId: node.id }
                   : inst.type === 'make-child'
                     ? { kind: 'make-child', targetId: node.id }
-                    : null!;
+                    : inst.type === 'reparent'
+                      ? {
+                          kind: 'reparent',
+                          targetId: node.id,
+                          desiredLevel: inst.desiredLevel,
+                        }
+                      : null!;
             if (!op) return;
+            if (sourceId === node.id && op.kind !== 'reparent') return;
             onMove(sourceId, op);
             triggerPostMoveFlash(el);
             const liveTree = getRootData();
             const parentName =
               op.kind === 'make-child'
                 ? getDragLabel(node)
+                : op.kind === 'reparent'
+                  ? (() => {
+                      const path = treeModel.path(liveTree, op.targetId);
+                      if (!path) return 'root';
+                      const targetLevel = path.length - 1;
+                      const desiredLevel = Math.max(
+                        0,
+                        Math.min(op.desiredLevel, targetLevel),
+                      );
+                      const parent =
+                        desiredLevel > 0 ? path[desiredLevel - 1] : null;
+                      return parent ? getDragLabel(parent) : 'root';
+                    })()
                 : (() => {
                     const sib = treeModel.siblingsOf(liveTree, op.targetId);
                     const parent = sib?.parentId

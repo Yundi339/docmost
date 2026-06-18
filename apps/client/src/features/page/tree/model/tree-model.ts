@@ -205,18 +205,41 @@ export const treeModel = {
     sourceId: string,
     op: import('./tree-model.types').DropOp,
   ): { tree: TreeNode<T>[]; result: import('./tree-model.types').DropResult } {
-    if (sourceId === op.targetId) return { tree, result: { parentId: null, index: 0 } };
     if (!treeModel.find(tree, sourceId) || !treeModel.find(tree, op.targetId)) {
       return { tree, result: { parentId: null, index: 0 } };
     }
-    if (treeModel.isDescendant(tree, sourceId, op.targetId)) {
+    if (sourceId === op.targetId && op.kind !== 'reparent') {
+      return { tree, result: { parentId: null, index: 0 } };
+    }
+    if (sourceId !== op.targetId && treeModel.isDescendant(tree, sourceId, op.targetId)) {
       return { tree, result: { parentId: null, index: 0 } };
     }
 
     let parentId: string | null;
     let index: number;
 
-    if (op.kind === 'make-child') {
+    if (op.kind === 'reparent') {
+      const path = treeModel.path(tree, op.targetId);
+      if (!path) return { tree, result: { parentId: null, index: 0 } };
+
+      const targetLevel = path.length - 1;
+      const desiredLevel = Math.max(0, Math.min(op.desiredLevel, targetLevel));
+      if (sourceId === op.targetId && desiredLevel >= targetLevel) {
+        return { tree, result: { parentId: null, index: 0 } };
+      }
+
+      const anchor = path[desiredLevel];
+      if (!anchor || anchor.id === sourceId) {
+        return { tree, result: { parentId: null, index: 0 } };
+      }
+
+      const info = treeModel.siblingsOf(tree, anchor.id)!;
+      parentId = info.parentId;
+      const sourceInfo = treeModel.siblingsOf(tree, sourceId)!;
+      const sameParent = sourceInfo.parentId === parentId;
+      const adjust = sameParent && sourceInfo.index < info.index ? -1 : 0;
+      index = info.index + adjust + 1;
+    } else if (op.kind === 'make-child') {
       parentId = op.targetId;
       const target = treeModel.find(tree, op.targetId)!;
       index = target.children?.length ?? 0;

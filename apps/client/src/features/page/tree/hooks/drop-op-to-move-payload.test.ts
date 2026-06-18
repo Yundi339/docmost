@@ -48,6 +48,15 @@ describe('dropOpToMovePayload', () => {
     expect(p).toEqual({ pageId: 'b', parentPageId: null, position: 'START|A' });
   });
 
+  it('reparent to root sends parentPageId null and a root-level position', () => {
+    const p = dropOpToMovePayload(tree, 'a2', {
+      kind: 'reparent',
+      targetId: 'a2',
+      desiredLevel: 0,
+    });
+    expect(p).toEqual({ pageId: 'a2', parentPageId: null, position: 'A|B' });
+  });
+
   // Regression: when source is already adjacent to target, the BEFORE-tree
   // treats source itself as the target's neighbor and falls back to null,
   // producing an unbounded fractional key that overshoots other siblings.

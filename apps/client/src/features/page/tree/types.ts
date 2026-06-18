@@ -5,7 +5,7 @@ export type SpaceTreeNode = {
   icon?: string;
   position: string;
   spaceId: string;
-  parentPageId: string;
+  parentPageId: string | null;
   hasChildren: boolean;
   canEdit?: boolean;
   children: SpaceTreeNode[];

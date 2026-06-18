@@ -7,7 +7,7 @@ export interface IPage {
   content: string;
   icon: string;
   coverPhoto: string;
-  parentPageId: string;
+  parentPageId: string | null;
   creatorId: string;
   spaceId: string;
   workspaceId: string;
@@ -59,7 +59,7 @@ export interface IMovePage {
   position?: string;
   after?: string;
   before?: string;
-  parentPageId?: string;
+  parentPageId?: string | null;
 }
 
 export interface IMovePageToSpace {

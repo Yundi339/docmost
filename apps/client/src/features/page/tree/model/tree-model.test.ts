@@ -307,6 +307,26 @@ describe('treeModel.move', () => {
     expect(treeModel.find(t, 'a')?.children?.map((n) => n.id)).toEqual(['a2']);
     expect(result).toEqual({ parentId: null, index: 1 });
   });
+  it('reparent lowers the dragged last child to root', () => {
+    const { tree: t, result } = treeModel.move(fixture, 'a2', {
+      kind: 'reparent',
+      targetId: 'a2',
+      desiredLevel: 0,
+    });
+    expect(t.map((n) => n.id)).toEqual(['a', 'a2', 'b']);
+    expect(treeModel.find(t, 'a')?.children?.map((n) => n.id)).toEqual(['a1']);
+    expect(result).toEqual({ parentId: null, index: 1 });
+  });
+  it('reparent can lower a sibling using the last row in the group as target', () => {
+    const { tree: t, result } = treeModel.move(fixture, 'a1', {
+      kind: 'reparent',
+      targetId: 'a2',
+      desiredLevel: 0,
+    });
+    expect(t.map((n) => n.id)).toEqual(['a', 'a1', 'b']);
+    expect(treeModel.find(t, 'a')?.children?.map((n) => n.id)).toEqual(['a2']);
+    expect(result).toEqual({ parentId: null, index: 1 });
+  });
   it('no-op when sourceId === targetId', () => {
     const out = treeModel.move(fixture, 'a', {
       kind: 'make-child',

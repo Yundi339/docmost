@@ -265,7 +265,7 @@ export function useGetRootSidebarPagesQuery(data: SidebarPagesParams) {
     queryKey: ["root-sidebar-pages", data.spaceId],
     enabled: !!data.spaceId,
     queryFn: async ({ pageParam }) => {
-      return getSidebarPages({ spaceId: data.spaceId, cursor: pageParam, limit: 100, all: true });
+      return getSidebarPages({ spaceId: data.spaceId, cursor: pageParam, limit: 100 });
     },
     initialPageParam: undefined,
     getNextPageParam: (lastPage) =>
@@ -433,7 +433,7 @@ export function invalidateOnCreatePage(data: Partial<IPage>) {
 
 export function invalidateOnUpdatePage(
   spaceId: string,
-  parentPageId: string,
+  parentPageId: string | null,
   id: string,
   title: string,
   icon: string,
