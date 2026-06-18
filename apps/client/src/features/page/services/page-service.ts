@@ -3,6 +3,7 @@ import {
   ICopyPageToSpace,
   IExportPageParams,
   IMovePage,
+  IMovePageUnder,
   IMovePageToSpace,
   IPage,
   IPageInput,
@@ -55,6 +56,10 @@ export async function movePage(data: IMovePage): Promise<void> {
 
 export async function movePageToSpace(data: IMovePageToSpace): Promise<void> {
   await api.post<void>("/pages/move-to-space", data);
+}
+
+export async function movePageUnder(data: IMovePageUnder): Promise<void> {
+  await api.post<void>("/pages/move-under", data);
 }
 
 export async function duplicatePage(data: ICopyPageToSpace): Promise<IPage> {

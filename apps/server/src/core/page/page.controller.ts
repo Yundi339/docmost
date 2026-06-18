@@ -15,7 +15,11 @@ import { BacklinkService } from './services/backlink.service';
 import { PageAccessService } from './page-access/page-access.service';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
-import { MovePageDto, MovePageToSpaceDto } from './dto/move-page.dto';
+import {
+  MovePageDto,
+  MovePageToSpaceDto,
+  MovePageUnderDto,
+} from './dto/move-page.dto';
 import {
   DeletePageDto,
   PageHistoryIdDto,
@@ -653,6 +657,99 @@ export class PageController {
         ...(childPageIds.length > 0 && { childPageIds }),
       },
     });
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('move-under')
+  async movePageUnder(@Body() dto: MovePageUnderDto, @AuthUser() user: User) {
+    if (
+      (!dto.targetPageId && !dto.targetSpaceId) ||
+      (dto.targetPageId && dto.targetSpaceId)
+    ) {
+      throw new BadRequestException(
+        'Provide exactly one target page or target space',
+      );
+    }
+
+    const movedPage = await this.pageRepo.findById(dto.pageId);
+    if (!movedPage || movedPage.deletedAt) {
+      throw new NotFoundException('Page to move not found');
+    }
+
+    let targetSpaceId = dto.targetSpaceId;
+    let targetParentPageId: string | null = null;
+
+    if (dto.targetPageId) {
+      if (dto.targetPageId === movedPage.id) {
+        throw new BadRequestException(
+          'Cannot move a page under itself or its descendants',
+        );
+      }
+
+      const targetPage = await this.pageRepo.findById(dto.targetPageId);
+      if (!targetPage || targetPage.deletedAt) {
+        throw new NotFoundException('Target parent page not found');
+      }
+
+      await this.pageAccessService.validateCanEdit(targetPage, user);
+      targetSpaceId = targetPage.spaceId;
+      targetParentPageId = targetPage.id;
+    }
+
+    if (!targetSpaceId) {
+      throw new BadRequestException(
+        'Provide exactly one target page or target space',
+      );
+    }
+
+    const spaceIds = [...new Set([movedPage.spaceId, targetSpaceId])].filter(
+      Boolean,
+    ) as string[];
+    const abilities = await Promise.all(
+      spaceIds.map((spaceId) => this.spaceAbility.createForUser(user, spaceId)),
+    );
+
+    if (
+      abilities.some((ability) =>
+        ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page),
+      )
+    ) {
+      throw new ForbiddenException();
+    }
+
+    await this.pageAccessService.validateCanEdit(movedPage, user);
+
+    if (targetSpaceId === movedPage.spaceId) {
+      await this.pageService.movePageToParent(movedPage, targetParentPageId);
+      return { childPageIds: [] };
+    }
+
+    const result = await this.pageService.movePageToSpace(
+      movedPage,
+      targetSpaceId,
+      user.id,
+      targetParentPageId,
+    );
+
+    this.auditService.log({
+      event: AuditEvent.PAGE_MOVED_TO_SPACE,
+      resourceType: AuditResource.PAGE,
+      resourceId: movedPage.id,
+      spaceId: movedPage.spaceId,
+      changes: {
+        before: { spaceId: movedPage.spaceId },
+        after: { spaceId: targetSpaceId },
+      },
+      metadata: {
+        title: getPageTitle(movedPage.title),
+        targetParentPageId,
+        ...(result.childPageIds.length > 0 && {
+          childPageIds: result.childPageIds,
+        }),
+      },
+    });
+
+    return result;
   }
 
   @HttpCode(HttpStatus.OK)

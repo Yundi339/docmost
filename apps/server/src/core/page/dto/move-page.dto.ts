@@ -29,3 +29,17 @@ export class MovePageToSpaceDto {
   @IsString()
   spaceId: string;
 }
+
+export class MovePageUnderDto {
+  @IsNotEmpty()
+  @IsString()
+  pageId: string;
+
+  @IsOptional()
+  @IsString()
+  targetPageId?: string;
+
+  @IsOptional()
+  @IsString()
+  targetSpaceId?: string;
+}

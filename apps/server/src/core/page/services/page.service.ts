@@ -162,10 +162,18 @@ export class PageService {
     return page;
   }
 
-  async nextPagePosition(spaceId: string, parentPageId?: string) {
+  async nextPagePosition(spaceId: string, parentPageId?: string | null) {
+    return this.nextPagePositionIn(this.db, spaceId, parentPageId);
+  }
+
+  private async nextPagePositionIn(
+    db: KyselyDB | KyselyTransaction,
+    spaceId: string,
+    parentPageId?: string | null,
+  ) {
     let pagePosition: string;
 
-    const lastPageQuery = this.db
+    const lastPageQuery = db
       .selectFrom('pages')
       .select(['position'])
       .where('spaceId', '=', spaceId)
@@ -380,7 +388,12 @@ export class PageService {
     return result;
   }
 
-  async movePageToSpace(rootPage: Page, spaceId: string, userId: string) {
+  async movePageToSpace(
+    rootPage: Page,
+    spaceId: string,
+    userId: string,
+    parentPageId: string | null = null,
+  ) {
     let childPageIds: string[] = [];
 
     const allPages = await this.pageRepo.getPageAndDescendants(rootPage.id, {
@@ -405,9 +418,14 @@ export class PageService {
     );
 
     await executeTx(this.db, async (trx) => {
+      for (const lockedSpaceId of [...new Set([rootPage.spaceId, spaceId])].sort()) {
+        await this.lockSpaceTreeForMove(lockedSpaceId, trx);
+      }
+
       // Orphan inaccessible child pages (make them root pages in original space)
       for (const page of pagesToOrphan) {
-        const orphanPosition = await this.nextPagePosition(
+        const orphanPosition = await this.nextPagePositionIn(
+          trx,
           rootPage.spaceId,
           null,
         );
@@ -419,9 +437,13 @@ export class PageService {
       }
 
       // Update root page
-      const nextPosition = await this.nextPagePosition(spaceId);
+      const nextPosition = await this.nextPagePositionIn(
+        trx,
+        spaceId,
+        parentPageId,
+      );
       await this.pageRepo.updatePage(
-        { spaceId, parentPageId: null, position: nextPosition },
+        { spaceId, parentPageId, position: nextPosition },
         rootPage.id,
         trx,
       );
@@ -495,6 +517,60 @@ export class PageService {
     });
 
     return { childPageIds };
+  }
+
+  async movePageToParent(movedPage: Page, parentPageId: string | null) {
+    await this.db.transaction().execute(async (trx) => {
+      await this.lockSpaceTreeForMove(movedPage.spaceId, trx);
+
+      const currentMovedPage = await this.pageRepo.findById(movedPage.id, {
+        withLock: true,
+        trx,
+      });
+      if (!currentMovedPage || currentMovedPage.deletedAt) {
+        throw new NotFoundException('Moved page not found');
+      }
+
+      if (parentPageId) {
+        const parentPage = await this.pageRepo.findById(parentPageId, {
+          withLock: true,
+          trx,
+        });
+        if (
+          !parentPage ||
+          parentPage.deletedAt ||
+          parentPage.spaceId !== currentMovedPage.spaceId
+        ) {
+          throw new NotFoundException('Parent page not found');
+        }
+
+        const wouldCreateCycle = await this.isPageInSubtree(
+          currentMovedPage.id,
+          parentPage.id,
+          trx,
+        );
+        if (wouldCreateCycle) {
+          throw new BadRequestException(
+            'Cannot move a page under itself or its descendants',
+          );
+        }
+      }
+
+      const position = await this.nextPagePositionIn(
+        trx,
+        currentMovedPage.spaceId,
+        parentPageId,
+      );
+
+      await this.pageRepo.updatePage(
+        {
+          parentPageId,
+          position,
+        },
+        currentMovedPage.id,
+        trx,
+      );
+    });
   }
 
   async duplicatePage(

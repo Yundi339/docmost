@@ -444,32 +444,25 @@
   outline: none;
 }
 
-.cardOpenButton {
+.draftCard {
+  border-style: dashed;
+}
+
+.cardMenuButton {
   position: absolute;
   top: 6px;
   right: 6px;
   opacity: 0;
   transition: opacity 120ms ease;
-  appearance: none;
   border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
   border-radius: 5px;
   background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
   color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-gray-1));
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  height: 24px;
-  padding: 0 6px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
+  z-index: 3;
 }
 
-.card:hover .cardOpenButton {
+.card:hover .cardMenuButton,
+.cardMenuButton[data-expanded='true'] {
   opacity: 1;
 }
 

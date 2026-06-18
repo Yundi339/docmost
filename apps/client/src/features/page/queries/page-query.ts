@@ -15,6 +15,7 @@ import {
   getSidebarPages,
   updatePage,
   movePage,
+  movePageUnder,
   getPageBreadcrumbs,
   getRecentChanges,
   getCreatedByPages,
@@ -24,6 +25,7 @@ import {
 } from "@/features/page/services/page-service";
 import {
   IMovePage,
+  IMovePageUnder,
   IPage,
   IPageInput,
   SidebarPagesParams,
@@ -178,6 +180,23 @@ export function useDeletePageMutation() {
 export function useMovePageMutation() {
   return useMutation<void, Error, IMovePage>({
     mutationFn: (data) => movePage(data),
+  });
+}
+
+export function useMovePageUnderMutation() {
+  return useMutation<void, Error, IMovePageUnder>({
+    mutationFn: (data) => movePageUnder(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        predicate: (item) =>
+          [
+            "pages",
+            "sidebar-pages",
+            "root-sidebar-pages",
+            "sidebar-full-tree",
+          ].includes(item.queryKey[0] as string),
+      });
+    },
   });
 }
 

@@ -5,6 +5,7 @@ import {
   Button,
   Group,
   Loader,
+  Menu,
   Popover,
   Stack,
   Switch,
@@ -94,6 +95,7 @@ import {
   useAttachDatabasePageMutation,
   useDatabaseInfoQuery,
   useDatabaseRecordsQuery,
+  useDetachDatabaseRecordMutation,
   useReorderDatabaseRecordMutation,
   useUpdateDatabaseFieldMutation,
   useUpdateDatabaseRecordMutation,
@@ -108,9 +110,16 @@ import {
 } from '@/features/database/types/database.types';
 import { buildPageUrl } from '@/features/page/page.utils';
 import { PageActionMenu } from '@/features/page/components/header/page-header-menu';
-import { usePageQuery } from '@/features/page/queries/page-query';
+import {
+  useMovePageUnderMutation,
+  usePageQuery,
+  useRemovePageMutation,
+} from '@/features/page/queries/page-query';
 import { useSearchSuggestionsQuery } from '@/features/search/queries/search-query';
+import { DestinationPickerModal } from '@/components/ui/destination-picker/destination-picker-modal';
+import type { DestinationSelection } from '@/components/ui/destination-picker/destination-picker.types';
 import { PageShareModal } from '@/ee/page-permission';
+import { notifications } from '@mantine/notifications';
 import { EmbeddedRecordPageEditor } from './embedded-record-page-editor';
 import {
   clearDocmostDragPayloads,
@@ -209,6 +218,11 @@ type UpdateFieldInput = {
   name?: string;
   type?: DatabaseFieldDefinition['type'];
   options?: string[];
+};
+
+type CardDestinationAction = {
+  type: 'move-page' | 'move-out';
+  record: DatabaseRecord;
 };
 
 function valueAsString(value: unknown): string {
@@ -760,6 +774,9 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const [userSearch, setUserSearch] = useState('');
   const [titleDraft, setTitleDraft] = useState(fallbackTitle);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [destinationAction, setDestinationAction] =
+    useState<CardDestinationAction | null>(null);
+  const [kanbanDraftStatus, setKanbanDraftStatus] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const databaseQuery = useDatabaseInfoQuery(databaseId);
@@ -772,6 +789,9 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const createViewMutation = useCreateDatabaseViewMutation(databaseId);
   const reorderRecordMutation = useReorderDatabaseRecordMutation(databaseId);
   const attachPageMutation = useAttachDatabasePageMutation(databaseId);
+  const detachRecordMutation = useDetachDatabaseRecordMutation(databaseId);
+  const movePageUnderMutation = useMovePageUnderMutation();
+  const removePageMutation = useRemovePageMutation();
   const userSuggestionsQuery = useSearchSuggestionsQuery({
     query: userSearch,
     includeUsers: true,
@@ -860,8 +880,12 @@ export default function DatabaseBlockView(props: NodeViewProps) {
     });
   };
 
-  const createRecord = (status?: string) => {
-    createRecordWithFields({ Status: status || statuses[0] || 'Todo' });
+  const createRecord = (status?: string, title?: string) => {
+    const nextTitle = title?.trim();
+    createRecordWithFields({
+      Status: status || statuses[0] || 'Todo',
+      ...(nextTitle ? { Title: nextTitle } : {}),
+    });
   };
 
   const updateRecord = (recordId: string, fields: Record<string, unknown>) => {
@@ -904,6 +928,52 @@ export default function DatabaseBlockView(props: NodeViewProps) {
       },
       sourceDatabaseId: payload.sourceDatabaseId,
       sourceRecordId: payload.sourceRecordId,
+    });
+  };
+
+  const selectDestination = async (selection: DestinationSelection) => {
+    if (!destinationAction) return;
+
+    const { record, type } = destinationAction;
+    if (!record.pageId) return;
+
+    const target =
+      selection.type === 'page'
+        ? { targetPageId: selection.pageId }
+        : { targetSpaceId: selection.spaceId };
+
+    try {
+      if (type === 'move-page') {
+        await movePageUnderMutation.mutateAsync({
+          pageId: record.pageId,
+          ...target,
+        });
+      } else {
+        await movePageUnderMutation.mutateAsync({
+          pageId: record.pageId,
+          ...target,
+        });
+        await detachRecordMutation.mutateAsync({ recordId: record.id });
+      }
+
+      notifications.show({ message: t('Page moved successfully') });
+      setDestinationAction(null);
+    } catch {
+      notifications.show({
+        message: t('Failed to move page'),
+        color: 'red',
+      });
+    }
+  };
+
+  const moveRecordPageToTrash = (record: DatabaseRecord) => {
+    if (!record.pageId) return;
+
+    removePageMutation.mutate(record.pageId, {
+      onSuccess: () => {
+        void recordsQuery.refetch();
+        if (openedRecord?.id === record.id) setOpenedRecord(null);
+      },
     });
   };
 
@@ -1096,6 +1166,10 @@ export default function DatabaseBlockView(props: NodeViewProps) {
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();
+                  if (activeView.type === 'kanban') {
+                    setKanbanDraftStatus(statuses[0] || 'Todo');
+                    return;
+                  }
                   createRecord();
                 }}
               >
@@ -1204,6 +1278,8 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             databaseId={databaseId}
             userById={userById}
             onOpen={setOpenedRecord}
+            requestedDraftStatus={kanbanDraftStatus}
+            onDraftRequestHandled={() => setKanbanDraftStatus(null)}
             onCreate={createRecord}
             onCreateColumn={(name, afterStatus) => {
               const nextOption = uniqueOptionName(name, statuses);
@@ -1224,6 +1300,9 @@ export default function DatabaseBlockView(props: NodeViewProps) {
               });
             }}
             onAttachPage={(payload, fields) => attachPageFromPayload(payload, fields)}
+            onMovePage={(record) => setDestinationAction({ type: 'move-page', record })}
+            onMoveOut={(record) => setDestinationAction({ type: 'move-out', record })}
+            onMoveToTrash={moveRecordPageToTrash}
             onMoveRecord={(recordId, status, beforeRecordId) => {
               updateRecord(recordId, { Status: status });
               reorderRecord(recordId, beforeRecordId);
@@ -1313,6 +1392,20 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         )}
       </div>
 
+      <DestinationPickerModal
+        opened={Boolean(destinationAction)}
+        onClose={() => setDestinationAction(null)}
+        title={
+          destinationAction?.type === 'move-out'
+            ? t('Move out of board to...')
+            : t('Move page to...')
+        }
+        actionLabel={t('Move')}
+        onSelect={selectDestination}
+        loading={movePageUnderMutation.isPending || detachRecordMutation.isPending}
+        excludePageId={destinationAction?.record.pageId ?? undefined}
+      />
+
       <RecordSidePage
         opened={Boolean(openedRecord)}
         record={openedRecord}
@@ -1338,9 +1431,14 @@ function KanbanView({
   databaseId,
   userById,
   onOpen,
+  requestedDraftStatus,
+  onDraftRequestHandled,
   onCreate,
   onCreateColumn,
   onAttachPage,
+  onMovePage,
+  onMoveOut,
+  onMoveToTrash,
   onMoveRecord,
   onUpdateTitle,
 }: {
@@ -1350,9 +1448,14 @@ function KanbanView({
   databaseId?: string;
   userById: Map<string, DatabaseUser>;
   onOpen: (record: DatabaseRecord) => void;
-  onCreate: (status: string) => void;
+  requestedDraftStatus: string | null;
+  onDraftRequestHandled: () => void;
+  onCreate: (status: string, title?: string) => void;
   onCreateColumn: (name: string, afterStatus?: string) => void;
   onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
+  onMovePage: (record: DatabaseRecord) => void;
+  onMoveOut: (record: DatabaseRecord) => void;
+  onMoveToTrash: (record: DatabaseRecord) => void;
   onMoveRecord: (recordId: string, status: string, beforeRecordId?: string) => void;
   onUpdateTitle: (recordId: string, title: string) => void;
 }) {
@@ -1360,8 +1463,15 @@ function KanbanView({
   const ADD_COLUMN_AT_END = '__end__';
   const [addingColumnAfter, setAddingColumnAfter] = useState<string | null>(null);
   const [columnDraft, setColumnDraft] = useState('');
+  const [draftStatus, setDraftStatus] = useState<string | null>(null);
   const [dropColumnStatus, setDropColumnStatus] = useState<string | null>(null);
   const [dropTargetRecordId, setDropTargetRecordId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!requestedDraftStatus) return;
+    setDraftStatus(requestedDraftStatus);
+    onDraftRequestHandled();
+  }, [onDraftRequestHandled, requestedDraftStatus]);
 
   const commitColumn = () => {
     const nextName = columnDraft.trim();
@@ -1400,6 +1510,10 @@ function KanbanView({
   const startAddingColumn = (afterStatus: string | null) => {
     setColumnDraft('');
     setAddingColumnAfter(afterStatus ?? ADD_COLUMN_AT_END);
+  };
+
+  const startDraft = (status: string) => {
+    setDraftStatus(status);
   };
 
   return (
@@ -1478,7 +1592,7 @@ function KanbanView({
                     onMouseDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.stopPropagation();
-                      onCreate(status);
+                      startDraft(status);
                     }}
                   >
                     <IconPlus size={15} />
@@ -1495,6 +1609,9 @@ function KanbanView({
                   status={status}
                   databaseId={databaseId}
                   onOpen={onOpen}
+                  onMovePage={onMovePage}
+                  onMoveOut={onMoveOut}
+                  onMoveToTrash={onMoveToTrash}
                   onUpdateTitle={(title) => onUpdateTitle(record.id, title)}
                   onMoveRecord={onMoveRecord}
                   onAttachPage={onAttachPage}
@@ -1510,6 +1627,15 @@ function KanbanView({
                   canEdit={canEdit}
                 />
               ))}
+              {canEdit && draftStatus === status && (
+                <DraftTaskCard
+                  onCreate={(title) => {
+                    onCreate(status, title);
+                    setDraftStatus(null);
+                  }}
+                  onCancel={() => setDraftStatus(null)}
+                />
+              )}
               {canEdit && (
                 <button
                   type="button"
@@ -1517,7 +1643,7 @@ function KanbanView({
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onCreate(status);
+                    startDraft(status);
                   }}
                 >
                   <IconPlus size={16} />
@@ -1549,12 +1675,59 @@ function KanbanView({
   );
 }
 
+function DraftTaskCard({
+  onCreate,
+  onCancel,
+}: {
+  onCreate: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const [title, setTitle] = useState('');
+
+  const commit = () => {
+    const nextTitle = title.trim();
+    if (!nextTitle) return;
+    onCreate(nextTitle);
+  };
+
+  return (
+    <div className={clsx(classes.card, classes.draftCard)}>
+      <div className={classes.cardMain}>
+        <input
+          autoFocus
+          className={classes.cardTitleInput}
+          value={title}
+          placeholder={t('Task name...')}
+          onChange={(event) => setTitle(event.currentTarget.value)}
+          onBlur={() => {
+            if (!title.trim()) onCancel();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              commit();
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              onCancel();
+            }
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function TaskCard({
   record,
   userById,
   status,
   databaseId,
   onOpen,
+  onMovePage,
+  onMoveOut,
+  onMoveToTrash,
   onUpdateTitle,
   onMoveRecord,
   onAttachPage,
@@ -1568,6 +1741,9 @@ function TaskCard({
   status: string;
   databaseId?: string;
   onOpen: (record: DatabaseRecord) => void;
+  onMovePage: (record: DatabaseRecord) => void;
+  onMoveOut: (record: DatabaseRecord) => void;
+  onMoveToTrash: (record: DatabaseRecord) => void;
   onUpdateTitle: (title: string) => void;
   onMoveRecord: (recordId: string, status: string, beforeRecordId?: string) => void;
   onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
@@ -1652,15 +1828,57 @@ function TaskCard({
           )}
         </Group>
       </div>
-      <button
-        type="button"
-        className={classes.cardOpenButton}
-        aria-label={t('Open page')}
-        onClick={() => onOpen(record)}
-      >
-        <IconArrowsMaximize size={14} />
-        <span>{t('Open page')}</span>
-      </button>
+      <Menu shadow="md" width={220} position="bottom-end" withinPortal>
+        <Menu.Target>
+          <ActionIcon
+            className={classes.cardMenuButton}
+            variant="subtle"
+            size="sm"
+            aria-label={t('Card actions')}
+            data-no-row-drag
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <IconDots size={16} />
+          </ActionIcon>
+        </Menu.Target>
+        <Menu.Dropdown onMouseDown={(event) => event.stopPropagation()}>
+          <Menu.Item
+            leftSection={<IconArrowsMaximize size={15} />}
+            onClick={() => onOpen(record)}
+          >
+            {t('Open page')}
+          </Menu.Item>
+          <Menu.Item
+            leftSection={<IconFileText size={15} />}
+            disabled={!record.pageId || !canEdit}
+            onClick={() => onMovePage(record)}
+          >
+            {t('Move page to...')}
+          </Menu.Item>
+          <Menu.Item
+            leftSection={<IconArrowBarToRight size={15} />}
+            disabled={!record.pageId || !canEdit}
+            onClick={() => onMoveOut(record)}
+          >
+            {t('Move out of board to...')}
+          </Menu.Item>
+          <Menu.Item
+            leftSection={<IconLayoutBoard size={15} />}
+            disabled
+          >
+            {t('Move to another board...')}
+          </Menu.Item>
+          <Menu.Divider />
+          <Menu.Item
+            color="red"
+            leftSection={<IconTrash size={15} />}
+            disabled={!record.pageId || !canEdit}
+            onClick={() => onMoveToTrash(record)}
+          >
+            {t('Move to trash')}
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
       {record.assigneeIds.length > 0 && (
         <div className={classes.cardAssignees}>
           {record.assigneeIds.slice(0, 3).map((id) => {

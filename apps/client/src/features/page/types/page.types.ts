@@ -67,6 +67,12 @@ export interface IMovePageToSpace {
   spaceId: string;
 }
 
+export interface IMovePageUnder {
+  pageId: string;
+  targetPageId?: string;
+  targetSpaceId?: string;
+}
+
 export interface ICopyPageToSpace {
   pageId: string;
   spaceId?: string;
