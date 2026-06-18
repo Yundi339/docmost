@@ -37,7 +37,7 @@ import { buildPageUrl } from "@/features/page/page.utils.ts";
 import { notifications } from "@mantine/notifications";
 import { getAppUrl } from "@/lib/config.ts";
 import { extractPageSlugId } from "@/lib";
-import { treeApiAtom } from "@/features/page/tree/atoms/tree-api-atom.ts";
+import { useTreeMutation } from "@/features/page/tree/hooks/use-tree-mutation.ts";
 import { useDeletePageModal } from "@/features/page/hooks/use-delete-page-modal.tsx";
 import { PageWidthToggle } from "@/features/user/components/page-width-pref.tsx";
 import {
@@ -194,7 +194,7 @@ export function PageActionMenu({
     pageId: pageIdProp ?? extractPageSlugId(pageSlug),
   });
   const { openDeleteModal } = useDeletePageModal();
-  const [tree] = useAtom(treeApiAtom);
+  const { handleDelete } = useTreeMutation(page?.spaceId ?? "");
   const [exportOpened, { open: openExportModal, close: closeExportModal }] =
     useDisclosure(false);
   const [
@@ -261,7 +261,7 @@ export function PageActionMenu({
           return;
         }
 
-        tree?.delete(page.id);
+        void handleDelete(page.id);
       },
     });
   };
