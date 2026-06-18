@@ -21,6 +21,7 @@ import {
   IconSettings,
   IconStar,
   IconStarFilled,
+  IconTemplate,
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
@@ -57,6 +58,10 @@ import {
 import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import { searchSpotlight } from "@/features/search/constants";
+import TemplatePickerModal from "@/ee/template/components/template-picker-modal";
+import { useHasFeature } from "@/ee/hooks/use-feature";
+import { Feature } from "@/ee/features";
+import { ErrorBoundary } from "react-error-boundary";
 
 type SpaceSelectionState = {
   selectionMode: boolean;
@@ -371,6 +376,11 @@ function SpaceMenu({
     useDisclosure(false);
   const [exportOpened, { open: openExportModal, close: closeExportModal }] =
     useDisclosure(false);
+  const [
+    templatePickerOpened,
+    { open: openTemplatePicker, close: closeTemplatePicker },
+  ] = useDisclosure(false);
+  const hasTemplates = useHasFeature(Feature.TEMPLATES);
 
   const { data: watchStatus } = useSpaceWatchStatusQuery(spaceId);
   const watchMutation = useWatchSpaceMutation();
@@ -440,6 +450,18 @@ function SpaceMenu({
             {isWatching ? t("Stop watching space") : t("Watch space")}
           </Menu.Item>
 
+          {hasTemplates && canManagePages && (
+            <>
+              <Menu.Divider />
+              <Menu.Item
+                onClick={openTemplatePicker}
+                leftSection={<IconTemplate size={16} />}
+              >
+                {t("Templates")}
+              </Menu.Item>
+            </>
+          )}
+
           {canManagePages && (
             <>
               <Menu.Divider />
@@ -494,6 +516,16 @@ function SpaceMenu({
             onClose={closeExportModal}
           />
         </>
+      )}
+
+      {hasTemplates && templatePickerOpened && (
+        <ErrorBoundary fallbackRender={() => null}>
+          <TemplatePickerModal
+            opened={templatePickerOpened}
+            onClose={closeTemplatePicker}
+            initialSpaceId={spaceId}
+          />
+        </ErrorBoundary>
       )}
     </>
   );
