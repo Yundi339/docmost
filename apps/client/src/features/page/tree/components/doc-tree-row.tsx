@@ -18,7 +18,6 @@ import {
   attachInstruction,
   extractInstruction,
   type Instruction,
-  type ItemMode,
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item';
 import { triggerPostMoveFlash } from '@atlaskit/pragmatic-drag-and-drop-flourish/trigger-post-move-flash';
 import * as liveRegion from '@atlaskit/pragmatic-drag-and-drop-live-region';
@@ -27,6 +26,10 @@ import type { TreeNode, DropOp } from '../model/tree-model.types';
 import { treeModel } from '../model/tree-model';
 import { DocTreeDropIndicator } from './doc-tree-drop-indicator';
 import { DocTreeDragPreview } from './doc-tree-drag-preview';
+import {
+  getBlockedTreeInstructions,
+  getTreeItemMode,
+} from './doc-tree-hitbox';
 import type { RenderRowProps } from './doc-tree';
 import styles from '../styles/tree.module.css';
 
@@ -157,16 +160,10 @@ function DocTreeRowInner<T extends object>(props: Props<T>) {
     }
 
     if (!dropDisabled) {
-      const mode: ItemMode =
-        isOpen && hasChildren
-          ? 'expanded'
-          : isLastSibling
-            ? 'last-in-group'
-            : 'standard';
+      const mode = getTreeItemMode({ isLastSibling, isOpen, hasChildren });
       // Block 'reorder-below' when the row is open with children — ambiguous gesture,
       // force users to drop into the folder via 'make-child' instead.
-      const block: Instruction['type'][] = [];
-      if (isOpen && hasChildren) block.push('reorder-below');
+      const block = getBlockedTreeInstructions({ isOpen, hasChildren });
 
       cleanups.push(
         dropTargetForElements({
