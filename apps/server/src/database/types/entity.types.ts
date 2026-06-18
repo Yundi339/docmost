@@ -8,7 +8,9 @@ import {
   DatabaseRecords,
   DatabaseUserMappings,
   Groups,
+  Labels,
   Notifications,
+  PageLabels,
   PageAccess as _PageAccess,
   PagePermissions as _PagePermissions,
   PageVerifications as _PageVerifications,
@@ -182,6 +184,15 @@ export type UpdatableNotification = Updateable<Omit<Notifications, 'id'>>;
 export type Watcher = Selectable<Watchers>;
 export type InsertableWatcher = Insertable<Watchers>;
 export type UpdatableWatcher = Updateable<Omit<Watchers, 'id'>>;
+
+// Label
+export type Label = Selectable<Labels>;
+export type InsertableLabel = Insertable<Labels>;
+export type UpdatableLabel = Updateable<Omit<Labels, 'id'>>;
+
+// PageLabel
+export type PageLabel = Selectable<PageLabels>;
+export type InsertablePageLabel = Insertable<PageLabels>;
 
 // Page Access
 export type PageAccess = Selectable<_PageAccess>;

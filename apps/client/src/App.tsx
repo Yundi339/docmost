@@ -25,6 +25,7 @@ const SpaceTrash = lazy(() => import("@/pages/space/space-trash.tsx"));
 const SpacesPage = lazy(() => import("@/pages/spaces/spaces.tsx"));
 const FavoritesPage = lazy(() => import("@/pages/favorites/favorites-page"));
 const PageRedirect = lazy(() => import("@/pages/page/page-redirect.tsx"));
+const LabelPage = lazy(() => import("@/pages/label/label-page"));
 
 // Share pages
 const SharedPage = lazy(() => import("@/pages/share/shared-page.tsx"));
@@ -102,6 +103,7 @@ export default function App() {
           <Route path={"/ai/chat/:chatId"} element={<AiChat />} />
           <Route path={"/spaces"} element={<SpacesPage />} />
           <Route path={"/favorites"} element={<FavoritesPage />} />
+          <Route path={"/labels/:labelName"} element={<LabelPage />} />
           <Route path={"/templates"} element={<TemplateList />} />
           <Route
             path={"/templates/:templateId"}

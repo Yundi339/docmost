@@ -480,6 +480,15 @@ export interface Watchers {
   createdAt: Generated<Timestamp>;
 }
 
+export interface Labels {
+  id: Generated<string>;
+  name: string;
+  type: Generated<string>;
+  workspaceId: string;
+  createdAt: Generated<Timestamp>;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface PageAccess {
   id: Generated<string>;
   pageId: string;
@@ -489,6 +498,13 @@ export interface PageAccess {
   creatorId: string | null;
   createdAt: Generated<Timestamp>;
   updatedAt: Generated<Timestamp>;
+}
+
+export interface PageLabels {
+  id: Generated<string>;
+  pageId: string;
+  labelId: string;
+  createdAt: Generated<Timestamp>;
 }
 
 export interface PagePermissions {
@@ -612,8 +628,10 @@ export interface DB {
   fileTasks: FileTasks;
   groups: Groups;
   groupUsers: GroupUsers;
+  labels: Labels;
   notifications: Notifications;
   pageAccess: PageAccess;
+  pageLabels: PageLabels;
   pagePermissions: PagePermissions;
   pageHistory: PageHistory;
   pageVerifications: PageVerifications;

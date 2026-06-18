@@ -23,6 +23,7 @@ import { BacklinkRepo } from '@docmost/db/repos/backlink/backlink.repo';
 import { ShareRepo } from '@docmost/db/repos/share/share.repo';
 import { NotificationRepo } from '@docmost/db/repos/notification/notification.repo';
 import { WatcherRepo } from '@docmost/db/repos/watcher/watcher.repo';
+import { LabelRepo } from '@docmost/db/repos/label/label.repo';
 import { FavoriteRepo } from '@docmost/db/repos/favorite/favorite.repo';
 import { TemplateRepo } from '@docmost/db/repos/template/template.repo';
 import { ApiKeyRepo } from '@docmost/db/repos/api-key/api-key.repo';
@@ -90,6 +91,7 @@ import { normalizePostgresUrl } from '../common/helpers';
     ShareRepo,
     NotificationRepo,
     WatcherRepo,
+    LabelRepo,
     TemplateRepo,
     ApiKeyRepo,
     AuditRepo,
@@ -115,6 +117,7 @@ import { normalizePostgresUrl } from '../common/helpers';
     ShareRepo,
     NotificationRepo,
     WatcherRepo,
+    LabelRepo,
     TemplateRepo,
     ApiKeyRepo,
     AuditRepo,

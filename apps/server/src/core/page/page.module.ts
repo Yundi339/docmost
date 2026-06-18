@@ -8,6 +8,7 @@ import { BacklinkService } from './services/backlink.service';
 import { StorageModule } from '../../integrations/storage/storage.module';
 import { CollaborationModule } from '../../collaboration/collaboration.module';
 import { WatcherModule } from '../watcher/watcher.module';
+import { LabelModule } from '../label/label.module';
 
 @Module({
   controllers: [PageController],
@@ -19,6 +20,6 @@ import { WatcherModule } from '../watcher/watcher.module';
     BacklinkService,
   ],
   exports: [PageService, PageHistoryService, PageVisitorService],
-  imports: [StorageModule, CollaborationModule, WatcherModule],
+  imports: [StorageModule, CollaborationModule, WatcherModule, LabelModule],
 })
 export class PageModule {}
