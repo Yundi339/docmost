@@ -15,7 +15,10 @@ import {
   executeWithCursorPagination,
 } from '@docmost/db/pagination/cursor-pagination';
 import { InjectKysely } from 'nestjs-kysely';
-import { KyselyDB } from '@docmost/db/types/kysely.types';
+import {
+  KyselyDB,
+  KyselyTransaction,
+} from '@docmost/db/types/kysely.types';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { MovePageDto } from '../dto/move-page.dto';
 import { generateSlugId } from '../../../common/helpers';
@@ -757,31 +760,96 @@ export class PageService {
       throw new BadRequestException('Invalid move position');
     }
 
-    let parentPageId = null;
-    if (movedPage.parentPageId === dto.parentPageId) {
-      parentPageId = undefined;
-    } else {
-      // changing the page's parent
-      if (dto.parentPageId) {
-        const parentPage = await this.pageRepo.findById(dto.parentPageId);
-        if (
-          !parentPage ||
-          parentPage.deletedAt ||
-          parentPage.spaceId !== movedPage.spaceId
-        ) {
-          throw new NotFoundException('Parent page not found');
-        }
-        parentPageId = parentPage.id;
-      }
-    }
+    await this.db.transaction().execute(async (trx) => {
+      await this.lockSpaceTreeForMove(movedPage.spaceId, trx);
 
-    await this.pageRepo.updatePage(
-      {
-        position: dto.position,
-        parentPageId: parentPageId,
-      },
-      dto.pageId,
+      const currentMovedPage = await this.pageRepo.findById(dto.pageId, {
+        withLock: true,
+        trx,
+      });
+      if (!currentMovedPage || currentMovedPage.deletedAt) {
+        throw new NotFoundException('Moved page not found');
+      }
+
+      let parentPageId = null;
+      if (currentMovedPage.parentPageId === dto.parentPageId) {
+        parentPageId = undefined;
+      } else {
+        // changing the page's parent
+        if (dto.parentPageId) {
+          const parentPage = await this.pageRepo.findById(dto.parentPageId, {
+            withLock: true,
+            trx,
+          });
+          if (
+            !parentPage ||
+            parentPage.deletedAt ||
+            parentPage.spaceId !== currentMovedPage.spaceId
+          ) {
+            throw new NotFoundException('Parent page not found');
+          }
+
+          const wouldCreateCycle = await this.isPageInSubtree(
+            currentMovedPage.id,
+            parentPage.id,
+            trx,
+          );
+          if (wouldCreateCycle) {
+            throw new BadRequestException(
+              'Cannot move a page under itself or its descendants',
+            );
+          }
+
+          parentPageId = parentPage.id;
+        }
+      }
+
+      await this.pageRepo.updatePage(
+        {
+          position: dto.position,
+          parentPageId: parentPageId,
+        },
+        dto.pageId,
+        trx,
+      );
+    });
+  }
+
+  private async lockSpaceTreeForMove(
+    spaceId: string,
+    trx: KyselyTransaction,
+  ) {
+    await sql`select pg_advisory_xact_lock(hashtext(${spaceId})::bigint)`.execute(
+      trx,
     );
+  }
+
+  private async isPageInSubtree(
+    rootPageId: string,
+    pageId: string,
+    trx: KyselyTransaction,
+  ): Promise<boolean> {
+    const page = await trx
+      .withRecursive('page_descendants', (db) =>
+        db
+          .selectFrom('pages')
+          .select(['id'])
+          .where('id', '=', rootPageId)
+          .where('deletedAt', 'is', null)
+          .unionAll((exp) =>
+            exp
+              .selectFrom('pages as p')
+              .select(['p.id'])
+              .innerJoin('page_descendants as pd', 'pd.id', 'p.parentPageId')
+              .where('p.deletedAt', 'is', null),
+          ),
+      )
+      .selectFrom('page_descendants')
+      .select('id')
+      .where('id', '=', pageId)
+      .executeTakeFirst();
+
+    return !!page;
   }
 
   async getPageBreadCrumbs(childPageId: string) {
