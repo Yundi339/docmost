@@ -254,14 +254,14 @@ export default function ZoomableSvg({ children }: ZoomableSvgProps) {
     if (isFullscreen) {
       document.body.style.overflow = "hidden";
       // Try to lock to landscape on mobile
-      screen.orientation?.lock?.("landscape").catch(() => {});
+      (screen.orientation as any)?.lock?.("landscape").catch(() => {});
       const handleEsc = (e: KeyboardEvent) => {
         if (e.key === "Escape") setIsFullscreen(false);
       };
       document.addEventListener("keydown", handleEsc);
       return () => {
         document.body.style.overflow = "";
-        screen.orientation?.unlock?.();
+        (screen.orientation as any)?.unlock?.();
         document.removeEventListener("keydown", handleEsc);
       };
     } else {

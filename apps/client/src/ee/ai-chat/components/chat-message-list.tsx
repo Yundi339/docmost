@@ -33,6 +33,7 @@ export default function ChatMessageList({
   streamingContent,
   streamingToolCalls,
 }: Props) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
