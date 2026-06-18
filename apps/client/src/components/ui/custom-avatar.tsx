@@ -48,11 +48,21 @@ function pickInitialsColor(name: string) {
 export const CustomAvatar = React.memo(React.forwardRef<
   HTMLInputElement,
   CustomAvatarProps
->(({ avatarUrl, name, type, color, ...props }: CustomAvatarProps, ref) => {
+>(({ avatarUrl, name, type, color, variant, ...props }: CustomAvatarProps, ref) => {
   const avatarLink = getAvatarUrl(avatarUrl, type);
   const initialsSource = sanitizeInitialsSource(name ?? "");
-  const resolvedColor =
-    !color || color === "initials" ? pickInitialsColor(initialsSource) : color;
+  const isInitials = !color || color === "initials";
+  const initialsColor = pickInitialsColor(initialsSource);
+  const resolvedColor = isInitials ? initialsColor : color;
+
+  const placeholderStyles =
+    isInitials && variant !== "filled"
+      ? {
+          placeholder: {
+            color: `var(--mantine-color-${initialsColor.split(".")[0]}-9)`,
+          },
+        }
+      : undefined;
 
   return (
     <Avatar
@@ -61,6 +71,8 @@ export const CustomAvatar = React.memo(React.forwardRef<
       name={initialsSource}
       alt={name}
       color={resolvedColor}
+      variant={variant}
+      styles={placeholderStyles}
       {...props}
     />
   );

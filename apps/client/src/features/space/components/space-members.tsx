@@ -215,7 +215,9 @@ export default function SpaceMembersList({
                           <ActionIcon
                             variant="subtle"
                             c="gray"
-                            aria-label={t("Member actions")}
+                            aria-label={t("Member actions for {{name}}", {
+                              name: member.name,
+                            })}
                           >
                             <IconDots size={20} stroke={2} />
                           </ActionIcon>
