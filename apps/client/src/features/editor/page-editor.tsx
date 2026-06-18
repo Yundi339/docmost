@@ -14,6 +14,7 @@ import {
   WebSocketStatus,
   HocuspocusProviderWebsocket,
   onSyncedParameters,
+  onStatelessParameters,
 } from "@hocuspocus/provider";
 import {
   Editor,
@@ -154,6 +155,24 @@ export default function PageEditor({
       const onSyncedHandler = (event: onSyncedParameters) => {
         setIsRemoteSynced(event.state);
       };
+      const onStatelessHandler = ({ payload }: onStatelessParameters) => {
+        try {
+          const message = JSON.parse(payload);
+          if (message?.type !== "page.updated" || !message.updatedAt) return;
+          const pageData = queryClient.getQueryData<IPage>(["pages", slugId]);
+          if (pageData) {
+            queryClient.setQueryData(["pages", slugId], {
+              ...pageData,
+              updatedAt: message.updatedAt,
+              ...(message.lastUpdatedBy && {
+                lastUpdatedBy: message.lastUpdatedBy,
+              }),
+            });
+          }
+        } catch {
+          // ignore unrelated stateless messages
+        }
+      };
       const onAuthenticationFailedHandler = () => {
         const payload = jwtDecode(collabQuery?.token);
         const now = Date.now().valueOf() / 1000;
@@ -178,6 +197,7 @@ export default function PageEditor({
         onAuthenticationFailed: onAuthenticationFailedHandler,
         onStatus: onStatusHandler,
         onSynced: onSyncedHandler,
+        onStateless: onStatelessHandler,
       });
 
       local.on("synced", onLocalSyncedHandler);
@@ -341,7 +361,6 @@ export default function PageEditor({
       queryClient.setQueryData(["pages", slugId], {
         ...pageData,
         content: newContent,
-        updatedAt: new Date(),
       });
     }
   }, 3000);

@@ -31,16 +31,17 @@ import { useTranslation } from "react-i18next";
 
 interface Props {
   editor: Editor;
+  templateMode?: boolean;
 }
 
-export const MoreInsertsGroup: FC<Props> = ({ editor }) => {
-  const { t } = useTranslation();
+export const MoreInsertsGroup: FC<Props> = ({ editor, templateMode }) => {
+  const { t, i18n } = useTranslation();
 
   const setEmbed = (provider: string) =>
     editor.chain().focus().setEmbed({ provider }).run();
 
   const insertDate = () => {
-    const currentDate = new Date().toLocaleDateString("en-US", {
+    const currentDate = new Date().toLocaleDateString(i18n.language, {
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -106,18 +107,22 @@ export const MoreInsertsGroup: FC<Props> = ({ editor }) => {
         >
           {t("Mermaid diagram")}
         </Menu.Item>
-        <Menu.Item
-          leftSection={<IconDrawio size={16} />}
-          onClick={() => editor.chain().focus().setDrawio().run()}
-        >
-          Draw.io
-        </Menu.Item>
-        <Menu.Item
-          leftSection={<IconExcalidraw size={16} />}
-          onClick={() => editor.chain().focus().setExcalidraw().run()}
-        >
-          Excalidraw
-        </Menu.Item>
+        {!templateMode && (
+          <Menu.Item
+            leftSection={<IconDrawio size={16} />}
+            onClick={() => editor.chain().focus().setDrawio().run()}
+          >
+            Draw.io
+          </Menu.Item>
+        )}
+        {!templateMode && (
+          <Menu.Item
+            leftSection={<IconExcalidraw size={16} />}
+            onClick={() => editor.chain().focus().setExcalidraw().run()}
+          >
+            Excalidraw
+          </Menu.Item>
+        )}
 
         <Menu.Divider />
         <Menu.Label>{t("Embeds")}</Menu.Label>

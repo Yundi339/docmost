@@ -47,6 +47,7 @@ import IconDrawio from "@/components/icons/icon-drawio";
 import { isDrawioEnabled } from "@/lib/config.ts";
 import { IconColumns4 } from "@/components/icons/icon-columns-4";
 import { IconColumns5 } from "@/components/icons/icon-columns-5";
+import i18n from "@/i18n.ts";
 import {
   AirtableIcon,
   FigmaIcon,
@@ -59,7 +60,6 @@ import {
   VimeoIcon,
   YoutubeIcon,
 } from "@/components/icons";
-import i18n from "@/i18n.ts";
 
 function createBlockId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
