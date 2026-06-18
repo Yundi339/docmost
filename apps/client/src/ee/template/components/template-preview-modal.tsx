@@ -45,7 +45,7 @@ export default function TemplatePreviewModal({
             <Button size="xs" onClick={onUse}>
               {t("Use template")}
             </Button>
-            <Modal.CloseButton />
+            <Modal.CloseButton aria-label={t("Close")} />
           </Group>
         </Modal.Header>
         <Modal.Body p={0}>

@@ -19,6 +19,8 @@ import classes from "./app-shell.module.css";
 import { useTrialEndAction } from "@/ee/hooks/use-trial-end-action.tsx";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import GlobalSidebar from "@/components/layouts/global/global-sidebar.tsx";
+import { ASIDE_PANEL_ID } from "@/hooks/use-toggle-aside.tsx";
+import { MAIN_CONTENT_ID, SkipToMain } from "@/components/ui/skip-to-main.tsx";
 
 export default function GlobalAppShell({
   children,
@@ -121,9 +123,7 @@ export default function GlobalAppShell({
 
   return (
     <>
-      <a href="#main-content" className={classes.skipLink}>
-        {t("Skip to main content")}
-      </a>
+      <SkipToMain />
       <AppShell
         header={{ height: 45 }}
         navbar={{
@@ -189,7 +189,8 @@ export default function GlobalAppShell({
           {showGlobalSidebar && <GlobalSidebar />}
         </AppShell.Navbar>
         <AppShell.Main
-          id="main-content"
+          id={MAIN_CONTENT_ID}
+          tabIndex={-1}
           style={
             isMobile && (mobileOpened || isAsideOpen)
               ? { pointerEvents: "none" }
@@ -207,6 +208,8 @@ export default function GlobalAppShell({
 
         {isPageRoute && (
           <AppShell.Aside
+            id={ASIDE_PANEL_ID}
+            tabIndex={-1}
             className={classes.aside}
             p="md"
             withBorder={false}

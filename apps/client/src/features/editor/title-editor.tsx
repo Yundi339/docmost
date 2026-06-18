@@ -91,6 +91,9 @@ export function TitleEditor({
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: {
+      attributes: {
+        "aria-label": t("Page title"),
+      },
       handleDOMEvents: {
         keydown: (_view, event) => {
           if (platformModifierKey(event) && event.code === "KeyS") {

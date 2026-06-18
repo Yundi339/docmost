@@ -2,6 +2,7 @@ import "@mantine/core/styles.css";
 import "@mantine/spotlight/styles.css";
 import "@mantine/notifications/styles.css";
 import '@mantine/dates/styles.css';
+import "@/styles/a11y-overrides.css";
 
 // Polyfill URL.canParse for older browsers (required by mermaid v11)
 if (typeof URL.canParse !== "function") {

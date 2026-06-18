@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import DOMPurify from "dompurify";
 import { ActionIcon, Tooltip } from "@mantine/core";
 import {
@@ -55,6 +56,7 @@ export default function ChatMessage({
   streamingToolCalls,
 }: Props) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const handleContentClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -90,7 +92,11 @@ export default function ChatMessage({
       }[]) || [];
 
     return (
-      <div className={classes.userMessage}>
+      <div
+        className={classes.userMessage}
+        role="article"
+        aria-label={t("You said:")}
+      >
         <div className={classes.userBubble}>
           {attachments.length > 0 && (
             <div className={classes.messageAttachments}>
@@ -112,8 +118,16 @@ export default function ChatMessage({
     );
   }
 
+  // Only label the article when there's something meaningful to announce.
+  // Tool-only assistant turns (no text) shouldn't announce "Assistant said:" with empty content.
+  const hasAnnouncableContent = Boolean(content);
+
   return (
-    <div className={classes.assistantMessage}>
+    <div
+      className={classes.assistantMessage}
+      role="article"
+      aria-label={hasAnnouncableContent ? t("Assistant said:") : undefined}
+    >
       <div className={classes.messageContent}>
         {toolCalls && toolCalls.length > 0 && (
           <ChatToolGroup toolCalls={toolCalls} isStreaming={isStreaming} />
@@ -143,7 +157,10 @@ export default function ChatMessage({
       </div>
       {!isStreaming && message.content && (
         <div className={classes.messageActions}>
-          <CopyTextButton text={message?.content} />
+          <CopyTextButton
+            text={message?.content}
+            label={t("Copy assistant response")}
+          />
         </div>
       )}
     </div>

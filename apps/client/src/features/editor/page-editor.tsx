@@ -74,6 +74,7 @@ import { EditorAiMenu } from "@/ee/ai/components/editor/ai-menu/ai-menu";
 import { EditorLinkMenu } from "@/features/editor/components/link/link-menu";
 import ColumnsMenu from "@/features/editor/components/columns/columns-menu.tsx";
 import { useTableFullscreenControls } from "@/features/editor/components/table/use-table-fullscreen-controls.tsx";
+import { useTranslation } from "react-i18next";
 
 interface PageEditorProps {
   pageId: string;
@@ -88,6 +89,7 @@ export default function PageEditor({
   content,
   canComment,
 }: PageEditorProps) {
+  const { t } = useTranslation();
   const collaborationURL = useCollaborationUrl();
   const isComponentMounted = useRef(false);
   const editorRef = useRef<Editor | null>(null);
@@ -240,6 +242,9 @@ export default function PageEditor({
       editorProps: {
         scrollThreshold: 80,
         scrollMargin: 80,
+        attributes: {
+          "aria-label": t("Page content"),
+        },
         handleDOMEvents: {
           keydown: (_view, event) => {
             if (platformModifierKey(event) && event.code === "KeyS") {
@@ -412,6 +417,11 @@ export default function PageEditor({
         immediatelyRender={true}
         extensions={mainExtensions}
         content={content}
+        editorProps={{
+          attributes: {
+            "aria-label": t("Page content"),
+          },
+        }}
       />
     );
   }

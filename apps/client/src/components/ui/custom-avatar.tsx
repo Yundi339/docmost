@@ -21,12 +21,12 @@ function sanitizeInitialsSource(name: string) {
   return sanitized || name;
 }
 
-// Color/shade pairs whose filled background meets WCAG AA against white text.
+// Color/shade pairs whose contrast meets WCAG AA in filled and light variants.
 const SAFE_INITIALS_COLORS: MantineColor[] = [
   "blue.8",
   "cyan.9",
-  "grape.7",
-  "indigo.7",
+  "grape.9",
+  "indigo.8",
   "pink.8",
   "red.8",
   "violet.7",

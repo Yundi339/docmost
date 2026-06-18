@@ -33,6 +33,7 @@ export function ApiKeyCreatedModal({
       onClose={onClose}
       title={t("API key created")}
       size="lg"
+      closeButtonProps={{ "aria-label": t("Close") }}
     >
       <Stack gap="md">
         <Alert

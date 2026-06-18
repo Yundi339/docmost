@@ -34,7 +34,7 @@ import {
   IconWifiOff,
 } from "@tabler/icons-react";
 import React, { useEffect, useRef, useState } from "react";
-import useToggleAside from "@/hooks/use-toggle-aside.tsx";
+import { useAsideTriggerProps } from "@/hooks/use-toggle-aside.tsx";
 import { useAtom, useAtomValue } from "jotai";
 import { historyAtoms } from "@/features/page-history/atoms/history-atoms.ts";
 import { visitorsModalAtom } from "@/features/page-visitors/atoms/visitors-atoms.ts";
@@ -93,7 +93,8 @@ interface PageHeaderMenuProps {
 }
 export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
   const { t } = useTranslation();
-  const toggleAside = useToggleAside();
+  const commentsTriggerProps = useAsideTriggerProps("comments");
+  const tocTriggerProps = useAsideTriggerProps("toc");
   const [pageAlign, setPageAlign] = useAtom(pageAlignAtom);
   const { pageSlug } = useParams();
   const { data: page } = usePageQuery({
@@ -139,7 +140,7 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
           variant="subtle"
           color="dark"
           aria-label={t("Comments")}
-          onClick={() => toggleAside("comments")}
+          {...commentsTriggerProps}
         >
           <IconMessage size={20} stroke={2} />
         </ActionIcon>
@@ -150,7 +151,7 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
           variant="subtle"
           color="dark"
           aria-label={t("Table of contents")}
-          onClick={() => toggleAside("toc")}
+          {...tocTriggerProps}
         >
           <IconList size={20} stroke={2} />
         </ActionIcon>
