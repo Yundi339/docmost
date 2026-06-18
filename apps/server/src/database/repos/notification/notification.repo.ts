@@ -142,6 +142,33 @@ export class NotificationRepo {
       .execute();
   }
 
+  async deleteStalePageUpdateNotifications({
+    readBefore,
+    unreadBefore,
+  }: {
+    readBefore: Date;
+    unreadBefore: Date;
+  }): Promise<number> {
+    const result = await this.db
+      .deleteFrom('notifications')
+      .where('type', '=', NotificationType.PAGE_UPDATED)
+      .where((eb) =>
+        eb.or([
+          eb.and([
+            eb('readAt', 'is not', null),
+            eb('createdAt', '<', readBefore),
+          ]),
+          eb.and([
+            eb('readAt', 'is', null),
+            eb('createdAt', '<', unreadBefore),
+          ]),
+        ]),
+      )
+      .executeTakeFirst();
+
+    return Number(result.numDeletedRows);
+  }
+
   async getRecentlyNotifiedUserIds(
     userIds: string[],
     pageId: string,

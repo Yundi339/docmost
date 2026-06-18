@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { NotificationRepo } from '@docmost/db/repos/notification/notification.repo';
@@ -6,8 +7,16 @@ import { InsertableNotification } from '@docmost/db/types/entity.types';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { WsGateway } from '../../ws/ws.gateway';
 import { MailService } from '../../integrations/mail/mail.service';
-import { NotificationTab, NotificationType, NotificationTypeToSettingKey } from './notification.constants';
+import {
+  NotificationTab,
+  NotificationType,
+  NotificationTypeToSettingKey,
+} from './notification.constants';
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
+
+const NOTIFICATION_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const PAGE_UPDATE_READ_RETENTION_DAYS = 30;
+const PAGE_UPDATE_UNREAD_RETENTION_DAYS = 90;
 
 @Injectable()
 export class NotificationService {
@@ -52,9 +61,7 @@ export class NotificationService {
       type,
     );
 
-    const pageIds = result.items
-      .map((n: any) => n.pageId)
-      .filter(Boolean);
+    const pageIds = result.items.map((n: any) => n.pageId).filter(Boolean);
 
     if (pageIds.length > 0) {
       const accessiblePageIds =
@@ -86,6 +93,28 @@ export class NotificationService {
 
   async markAllAsRead(userId: string) {
     return this.notificationRepo.markAllAsRead(userId);
+  }
+
+  @Interval('notification-cleanup', NOTIFICATION_CLEANUP_INTERVAL_MS)
+  async cleanupNotifications() {
+    try {
+      const removed =
+        await this.notificationRepo.deleteStalePageUpdateNotifications({
+          readBefore: this.daysAgo(PAGE_UPDATE_READ_RETENTION_DAYS),
+          unreadBefore: this.daysAgo(PAGE_UPDATE_UNREAD_RETENTION_DAYS),
+        });
+
+      this.logger.debug(
+        removed > 0
+          ? `Notification cleanup completed: ${removed} page update notifications removed`
+          : 'No stale page update notifications to clean up',
+      );
+    } catch (err) {
+      this.logger.error(
+        'Notification cleanup failed',
+        err instanceof Error ? err.stack : undefined,
+      );
+    }
   }
 
   async queueEmail(
@@ -126,5 +155,9 @@ export class NotificationService {
         `Failed to queue email for notification ${notificationId}: ${message}`,
       );
     }
+  }
+
+  private daysAgo(days: number): Date {
+    return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   }
 }
