@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { SpaceTreeNode } from "@/features/page/tree/types";
-import { buildTreeWithChildren } from "./utils";
+import {
+  buildTreeWithChildren,
+  expandOpenStateForPath,
+  setTreeNodeOpenState,
+} from "./utils";
 
 function node(
   id: string,
@@ -43,5 +47,60 @@ describe("buildTreeWithChildren", () => {
 
     expect(tree.map((n) => n.id)).toEqual(["orphan", "root"]);
     expect(tree[0].children.map((n) => n.id)).toEqual(["orphan-child"]);
+  });
+});
+
+describe("tree open state", () => {
+  it("stores only open nodes when toggling", () => {
+    expect(
+      setTreeNodeOpenState(
+        { alreadyOpen: true, staleClosed: false },
+        "alreadyOpen",
+        false,
+      ),
+    ).toEqual({});
+
+    expect(
+      setTreeNodeOpenState({ staleClosed: false }, "newOpen", true),
+    ).toEqual({ newOpen: true });
+  });
+
+  it("expands the current page path including the selected node itself", () => {
+    const leaf = node("leaf", "A", "current");
+    const current = {
+      ...node("current", "A", "root"),
+      hasChildren: true,
+      children: [leaf],
+    };
+    const root = {
+      ...node("root", "A"),
+      hasChildren: true,
+      children: [current],
+    };
+
+    expect(
+      expandOpenStateForPath(
+        { root: false, unrelated: true },
+        [root, current],
+      ),
+    ).toEqual({
+      root: true,
+      current: true,
+      unrelated: true,
+    });
+  });
+
+  it("does not open leaf pages or allocate when nothing changes", () => {
+    const root = {
+      ...node("root", "A"),
+      hasChildren: true,
+      children: [node("leaf", "A", "root")],
+    };
+    const openState = { root: true };
+
+    expect(expandOpenStateForPath(openState, [root])).toBe(openState);
+    expect(expandOpenStateForPath(openState, [root.children[0]])).toBe(
+      openState,
+    );
   });
 });

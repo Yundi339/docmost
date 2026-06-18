@@ -1,6 +1,8 @@
 import { IPage } from "@/features/page/types/page.types.ts";
 import { SpaceTreeNode } from "@/features/page/tree/types.ts";
 
+export type TreeOpenState = Record<string, boolean>;
+
 export function sortPositionKeys(keys: any[]) {
   return keys.sort((a, b) => {
     if (a.position < b.position) return -1;
@@ -57,6 +59,49 @@ export function findBreadcrumbPath(
     }
   }
   return null;
+}
+
+export function treeNodeHasChildren(node: SpaceTreeNode): boolean {
+  return node.hasChildren === true || (node.children?.length ?? 0) > 0;
+}
+
+export function compactTreeOpenState(
+  openState: TreeOpenState,
+): TreeOpenState {
+  return Object.fromEntries(
+    Object.entries(openState).filter(([, isOpen]) => isOpen === true),
+  );
+}
+
+export function setTreeNodeOpenState(
+  openState: TreeOpenState,
+  nodeId: string,
+  isOpen: boolean,
+): TreeOpenState {
+  const next = compactTreeOpenState(openState);
+  if (isOpen) {
+    next[nodeId] = true;
+  } else {
+    delete next[nodeId];
+  }
+  return next;
+}
+
+export function expandOpenStateForPath(
+  openState: TreeOpenState,
+  path: SpaceTreeNode[] | null,
+): TreeOpenState {
+  if (!path?.length) return openState;
+
+  let next: TreeOpenState | null = null;
+  for (const node of path) {
+    if (!treeNodeHasChildren(node)) continue;
+    if (openState[node.id] === true) continue;
+    next ??= compactTreeOpenState(openState);
+    next[node.id] = true;
+  }
+
+  return next ?? openState;
 }
 
 export const updateTreeNodeName = (

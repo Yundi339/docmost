@@ -19,6 +19,11 @@ import {
 import { useTreeMutation } from "@/features/page/tree/hooks/use-tree-mutation.ts";
 import { SpaceTreeNode } from "@/features/page/tree/types.ts";
 import { treeModel } from "@/features/page/tree/model/tree-model";
+import {
+  compactTreeOpenState,
+  expandOpenStateForPath,
+  setTreeNodeOpenState,
+} from "@/features/page/tree/utils/utils.ts";
 import { extractPageSlugId } from "@/lib";
 import { useDeletePageModal } from "@/features/page/hooks/use-delete-page-modal.tsx";
 import BulkExportModal from "@/components/common/bulk-export-modal";
@@ -50,7 +55,7 @@ function loadOpenState(spaceId: string): OpenMap {
   try {
     if (typeof localStorage === "undefined") return {};
     const stored = localStorage.getItem(STORAGE_KEY_PREFIX + spaceId);
-    return stored ? JSON.parse(stored) : {};
+    return stored ? compactTreeOpenState(JSON.parse(stored)) : {};
   } catch {
     return {};
   }
@@ -138,18 +143,11 @@ export default function SpaceTree({
       data.filter((node) => node?.spaceId === spaceId),
       currentPage.id,
     );
-    if (!path || path.length <= 1) return;
+    if (!path) return;
 
     setOpenTreeNodes((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const ancestor of path.slice(0, -1)) {
-        if (!next[ancestor.id]) {
-          next[ancestor.id] = true;
-          changed = true;
-        }
-      }
-      if (!changed) return prev;
+      const next = expandOpenStateForPath(prev, path);
+      if (next === prev) return prev;
       saveOpenState(spaceId, next);
       return next;
     });
@@ -163,7 +161,7 @@ export default function SpaceTree({
   const handleToggle = useCallback(
     (id: string, isOpen: boolean) => {
       setOpenTreeNodes((prev) => {
-        const next = { ...prev, [id]: isOpen };
+        const next = setTreeNodeOpenState(prev, id, isOpen);
         saveOpenState(spaceId, next);
         return next;
       });

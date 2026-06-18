@@ -215,6 +215,10 @@ export function SpaceTreeRow({
           return;
         }
 
+        if (hasChildren && !isOpen) {
+          toggleOpen();
+        }
+
         if (mobileSidebarOpened) {
           toggleMobileSidebar();
         }
