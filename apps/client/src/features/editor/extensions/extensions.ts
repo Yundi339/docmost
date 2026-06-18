@@ -9,7 +9,6 @@ import SubScript from "@tiptap/extension-subscript";
 import { Typography } from "@tiptap/extension-typography";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
-import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import { Youtube } from "@tiptap/extension-youtube";
 import SlashCommand, {
   SlashCommandExtension as Command,
@@ -47,6 +46,9 @@ import {
   SearchAndReplace,
   Mention,
   TableDndExtension,
+  TableHandleCommandsExtension,
+  TableHeaderPin,
+  TableReadonlySort,
   Subpages,
   Heading,
   Highlight,
@@ -58,6 +60,7 @@ import {
   Status,
   DatabaseBlock,
   MoveBlock,
+  TableView,
 } from "@docmost/editor-ext";
 import {
   randomElement,
@@ -108,6 +111,7 @@ import EmojiCommand from "./emoji-command";
 import { countWords } from "alfaaz";
 import AutoJoiner from "@/features/editor/extensions/autojoiner.ts";
 import { CleanStyles } from "@/features/editor/extensions/clean-styles.ts";
+import GlobalDragHandle from "@/features/editor/extensions/drag-handle.ts";
 
 const lowlight = createLowlight(common);
 lowlight.register("mermaid", plaintext);
@@ -258,11 +262,16 @@ export const mainExtensions = [
     resizable: true,
     lastColumnResizable: true,
     allowTableNodeSelection: true,
+    cellMinWidth: 49,
+    View: TableView,
   }),
   TableRow,
   TableCell,
   TableHeader,
   TableDndExtension,
+  TableHandleCommandsExtension,
+  TableHeaderPin,
+  TableReadonlySort,
   MathInline.configure({
     view: MathInlineView,
   }),
