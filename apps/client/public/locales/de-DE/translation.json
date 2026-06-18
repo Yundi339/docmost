@@ -1263,7 +1263,7 @@
   "Zoom in": "Vergrößern",
   "Zoom out": "Verkleinern",
   "{{amount}} {{currency}} / {{interval}}": "{{amount}} {{currency}} / {{interval}}",
-  "{{count}} Columns": "{count, plural, one {# Spalte} other {# Spalten}}",
+  "{{count}} Columns": "{{count}} Spalten",
   "{{latestVersion}} is available": "{{latestVersion}} ist verfügbar",
   "{{min}}-{{max}} users": "{{min}}-{{max}} Benutzer",
   "{{ssoProviderType}} configuration": "{{ssoProviderType}}-Konfiguration"
