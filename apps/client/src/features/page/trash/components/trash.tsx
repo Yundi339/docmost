@@ -106,7 +106,7 @@ export default function Trash() {
                   <Table.Th style={{ whiteSpace: "nowrap" }}>
                     {t("Deleted at")}
                   </Table.Th>
-                  <Table.Th></Table.Th>
+                  <Table.Th aria-label={t("Action")} />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>

@@ -99,6 +99,9 @@ export const TextAlignmentSelector: FC<TextAlignmentProps> = ({
             rightSection={<IconChevronDown size={16} />}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setIsOpen(!isOpen)}
+            aria-label={t("Text align")}
+            aria-haspopup="menu"
+            aria-expanded={isOpen}
           >
             <activeItem.icon style={{ width: rem(16) }} stroke={2} />
           </Button>

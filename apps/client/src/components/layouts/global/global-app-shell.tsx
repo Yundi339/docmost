@@ -120,107 +120,112 @@ export default function GlobalAppShell({
   const showGlobalSidebar = !isSpaceRoute && !isSettingsRoute && !isAiRoute;
 
   return (
-    <AppShell
-      header={{ height: 45 }}
-      navbar={{
-        width: isSpaceRoute ? sidebarWidth : 300,
-        breakpoint: "sm",
-        collapsed: {
-          mobile: !mobileOpened,
-          desktop: !desktopOpened,
-        },
-      }}
-      aside={
-        isPageRoute && {
-          width: 350,
+    <>
+      <a href="#main-content" className={classes.skipLink}>
+        {t("Skip to main content")}
+      </a>
+      <AppShell
+        header={{ height: 45 }}
+        navbar={{
+          width: isSpaceRoute ? sidebarWidth : 300,
           breakpoint: "sm",
-          collapsed: { mobile: !isAsideOpen, desktop: !isAsideOpen },
+          collapsed: {
+            mobile: !mobileOpened,
+            desktop: !desktopOpened,
+          },
+        }}
+        aside={
+          isPageRoute && {
+            width: 350,
+            breakpoint: "sm",
+            collapsed: { mobile: !isAsideOpen, desktop: !isAsideOpen },
+          }
         }
-      }
-      padding="md"
-    >
-      {mobileOpened && (
-        <Overlay
-          className={classes.mobileOverlay}
-          opacity={0.35}
-          color="black"
-          zIndex={98}
-          onClick={toggleMobile}
-        />
-      )}
-
-      {isPageRoute && isMobile && isAsideOpen && (
-        <Overlay
-          className={classes.mobileOverlay}
-          opacity={0.35}
-          color="black"
-          zIndex={98}
-          onClick={closeMobileAside}
-        />
-      )}
-
-      <AppShell.Header px="md" className={classes.header}>
-        <AppHeader />
-      </AppShell.Header>
-      <AppShell.Navbar
-        className={classes.navbar}
-        withBorder={false}
-        ref={sidebarRef}
-        aria-label={
-          isSpaceRoute
-            ? t("Space navigation")
-            : isSettingsRoute
-              ? t("Settings navigation")
-              : isAiRoute
-                ? t("AI navigation")
-                : t("Main navigation")
-        }
+        padding="md"
       >
-        {isSpaceRoute && (
-          <div className={classes.resizeHandle} onMouseDown={startResizing} />
+        {mobileOpened && (
+          <Overlay
+            className={classes.mobileOverlay}
+            opacity={0.35}
+            color="black"
+            zIndex={98}
+            onClick={toggleMobile}
+          />
         )}
-        {isSpaceRoute && <SpaceSidebar />}
-        {isSettingsRoute && <SettingsSidebar />}
-        {isAiRoute && <AiChatSidebar />}
-        {showGlobalSidebar && <GlobalSidebar />}
-      </AppShell.Navbar>
-      <AppShell.Main
-        id="main-content"
-        style={
-          isMobile && (mobileOpened || isAsideOpen)
-            ? { pointerEvents: "none" }
-            : undefined
-        }
-      >
-        {isSettingsRoute ? (
-          <Container size={900} pb={80}>
-            {children}
-          </Container>
-        ) : (
-          children
-        )}
-      </AppShell.Main>
 
-      {isPageRoute && (
-        <AppShell.Aside
-          className={classes.aside}
-          p="md"
+        {isPageRoute && isMobile && isAsideOpen && (
+          <Overlay
+            className={classes.mobileOverlay}
+            opacity={0.35}
+            color="black"
+            zIndex={98}
+            onClick={closeMobileAside}
+          />
+        )}
+
+        <AppShell.Header px="md" className={classes.header}>
+          <AppHeader />
+        </AppShell.Header>
+        <AppShell.Navbar
+          className={classes.navbar}
           withBorder={false}
+          ref={sidebarRef}
           aria-label={
-            asideTab === "comments"
-              ? t("Comments")
-              : asideTab === "toc"
-                ? t("Table of contents")
-                : asideTab === "chat"
-                  ? t("AI Chat")
-                  : asideTab === "details"
-                    ? t("Details")
-                    : undefined
+            isSpaceRoute
+              ? t("Space navigation")
+              : isSettingsRoute
+                ? t("Settings navigation")
+                : isAiRoute
+                  ? t("AI navigation")
+                  : t("Main navigation")
           }
         >
-          <Aside />
-        </AppShell.Aside>
-      )}
-    </AppShell>
+          {isSpaceRoute && (
+            <div className={classes.resizeHandle} onMouseDown={startResizing} />
+          )}
+          {isSpaceRoute && <SpaceSidebar />}
+          {isSettingsRoute && <SettingsSidebar />}
+          {isAiRoute && <AiChatSidebar />}
+          {showGlobalSidebar && <GlobalSidebar />}
+        </AppShell.Navbar>
+        <AppShell.Main
+          id="main-content"
+          style={
+            isMobile && (mobileOpened || isAsideOpen)
+              ? { pointerEvents: "none" }
+              : undefined
+          }
+        >
+          {isSettingsRoute ? (
+            <Container size={900} pb={80}>
+              {children}
+            </Container>
+          ) : (
+            children
+          )}
+        </AppShell.Main>
+
+        {isPageRoute && (
+          <AppShell.Aside
+            className={classes.aside}
+            p="md"
+            withBorder={false}
+            aria-label={
+              asideTab === "comments"
+                ? t("Comments")
+                : asideTab === "toc"
+                  ? t("Table of contents")
+                  : asideTab === "chat"
+                    ? t("AI Chat")
+                    : asideTab === "details"
+                      ? t("Details")
+                      : undefined
+            }
+          >
+            <Aside />
+          </AppShell.Aside>
+        )}
+      </AppShell>
+    </>
   );
 }
