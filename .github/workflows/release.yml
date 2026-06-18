@@ -116,3 +116,87 @@ jobs:
           tag_name: ${{ env.VERSION }}
           files: /tmp/images/*.docker.tar.gz
           draft: true
+
+      - name: Upload AIO image archives to upload URL
+        continue-on-error: true
+        shell: bash
+        env:
+          UPLOAD_AIO_AMD64_TO_URL: ${{ vars.UPLOAD_AIO_AMD64_TO_URL || secrets.UPLOAD_AIO_AMD64_TO_URL }}
+          UPLOAD_AIO_ARM64_TO_URL: ${{ vars.UPLOAD_AIO_ARM64_TO_URL || secrets.UPLOAD_AIO_ARM64_TO_URL }}
+          AIO_UPLOAD_URL: ${{ vars.AIO_UPLOAD_URL || secrets.AIO_UPLOAD_URL }}
+          AIO_UPLOAD_EXPIRE_SECONDS: ${{ vars.AIO_UPLOAD_EXPIRE_SECONDS || secrets.AIO_UPLOAD_EXPIRE_SECONDS }}
+        run: |
+          set -u
+
+          enabled() {
+            case "${1,,}" in
+              1|true|yes|on) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          if ! enabled "${UPLOAD_AIO_AMD64_TO_URL:-}" && ! enabled "${UPLOAD_AIO_ARM64_TO_URL:-}"; then
+            echo 'AIO upload URL is disabled for both amd64 and arm64.'
+            exit 0
+          fi
+
+          if [ -z "${AIO_UPLOAD_URL:-}" ]; then
+            echo '::warning::Skipping AIO upload because AIO_UPLOAD_URL is not configured.'
+            exit 1
+          fi
+
+          expire_seconds="${AIO_UPLOAD_EXPIRE_SECONDS:-2592000}"
+
+          failures=0
+          upload_arch() {
+            local arch="$1"
+            local flag="$2"
+
+            if ! enabled "$flag"; then
+              echo "Skipping AIO $arch upload URL."
+              return 0
+            fi
+
+            shopt -s nullglob
+            local files=(/tmp/images/docmost-aio-*-"$arch".docker.tar.gz)
+            shopt -u nullglob
+
+            if [ "${#files[@]}" -ne 1 ]; then
+              echo "::warning::Expected one AIO $arch image archive, found ${#files[@]}."
+              return 1
+            fi
+
+            local file="${files[0]}"
+            local response_path="$RUNNER_TEMP/aio-upload-$arch-response.json"
+            echo "Uploading $(basename "$file") to configured upload URL."
+
+            if ! status_code="$(
+              curl \
+                --fail \
+                --silent \
+                --show-error \
+                --location \
+                --request POST \
+                --output "$response_path" \
+                --write-out '%{http_code}' \
+                "$AIO_UPLOAD_URL" \
+                --form "file=@$file;filename=$(basename "$file");type=application/gzip" \
+                --form-string 'anonymous=1' \
+                --form-string "expire_in_seconds=$expire_seconds"
+            )"; then
+              echo "::warning::AIO $arch upload failed."
+              if [ -s "$response_path" ]; then
+                cat "$response_path"
+              fi
+              return 1
+            fi
+            echo "AIO $arch upload completed with HTTP $status_code."
+          }
+
+          upload_arch amd64 "${UPLOAD_AIO_AMD64_TO_URL:-}" || failures=$((failures + 1))
+          upload_arch arm64 "${UPLOAD_AIO_ARM64_TO_URL:-}" || failures=$((failures + 1))
+
+          if [ "$failures" -gt 0 ]; then
+            echo "::warning::AIO upload URL step completed with $failures failure(s)."
+            exit 1
+          fi
