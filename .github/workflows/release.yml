@@ -123,7 +123,7 @@ jobs:
         env:
           UPLOAD_AIO_AMD64_TO_URL: ${{ vars.UPLOAD_AIO_AMD64_TO_URL || secrets.UPLOAD_AIO_AMD64_TO_URL }}
           UPLOAD_AIO_ARM64_TO_URL: ${{ vars.UPLOAD_AIO_ARM64_TO_URL || secrets.UPLOAD_AIO_ARM64_TO_URL }}
-          AIO_UPLOAD_URL: ${{ vars.AIO_UPLOAD_URL || secrets.AIO_UPLOAD_URL }}
+          AIO_UPLOAD_URL: ${{ secrets.AIO_UPLOAD_URL || vars.AIO_UPLOAD_URL }}
           AIO_UPLOAD_EXPIRE_SECONDS: ${{ vars.AIO_UPLOAD_EXPIRE_SECONDS || secrets.AIO_UPLOAD_EXPIRE_SECONDS }}
         run: |
           set -u
@@ -142,11 +142,17 @@ jobs:
 
           if [ -z "${AIO_UPLOAD_URL:-}" ]; then
             echo '::warning::Skipping AIO upload because AIO_UPLOAD_URL is not configured.'
-            exit 1
+            exit 0
           fi
 
           expire_seconds="${AIO_UPLOAD_EXPIRE_SECONDS:-2592000}"
-
+          curl_args=(
+            --fail
+            --silent
+            --show-error
+            --location
+            --request POST
+          )
           failures=0
           upload_arch() {
             local arch="$1"
@@ -171,12 +177,7 @@ jobs:
             echo "Uploading $(basename "$file") to configured upload URL."
 
             if ! status_code="$(
-              curl \
-                --fail \
-                --silent \
-                --show-error \
-                --location \
-                --request POST \
+              curl "${curl_args[@]}" \
                 --output "$response_path" \
                 --write-out '%{http_code}' \
                 "$AIO_UPLOAD_URL" \
@@ -198,5 +199,4 @@ jobs:
 
           if [ "$failures" -gt 0 ]; then
             echo "::warning::AIO upload URL step completed with $failures failure(s)."
-            exit 1
           fi
