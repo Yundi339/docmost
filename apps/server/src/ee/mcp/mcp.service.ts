@@ -47,6 +47,20 @@ import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import { ApiKeyScope, hasApiKeyScope } from '../../core/api-key/api-key-scopes';
 import { PageAccessService } from '../../core/page/page-access/page-access.service';
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
+import { validateDto } from '../../common/helpers/validate-dto';
+import { CreatePageDto } from '../../core/page/dto/create-page.dto';
+import { UpdatePageDto } from '../../core/page/dto/update-page.dto';
+import { PageIdDto, PageInfoDto } from '../../core/page/dto/page.dto';
+import { SidebarPageDto } from '../../core/page/dto/sidebar-page.dto';
+import {
+  MovePageToSpaceDto,
+  MovePageUnderDto,
+} from '../../core/page/dto/move-page.dto';
+import { DuplicatePageDto } from '../../core/page/dto/duplicate-page.dto';
+import { CreateCommentDto } from '../../core/comment/dto/create-comment.dto';
+import { UpdateCommentDto } from '../../core/comment/dto/update-comment.dto';
+import { CreateSpaceDto } from '../../core/space/dto/create-space.dto';
+import { UpdateSpaceDto } from '../../core/space/dto/update-space.dto';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const tsquery = require('pg-tsquery')();
@@ -452,7 +466,8 @@ export class McpService implements OnModuleDestroy {
         format: z.enum(['json', 'markdown', 'html']).optional(),
       },
       async ({ pageId, format }) => {
-        const page = await this.pageRepo.findById(pageId, {
+        const input = await validateDto(PageInfoDto, { pageId, format });
+        const page = await this.pageRepo.findById(input.pageId, {
           includeContent: true,
           includeSpace: true,
         });
@@ -464,9 +479,9 @@ export class McpService implements OnModuleDestroy {
         }
         await this.pageAccessService.validateCanView(page, user);
         let content = page.content;
-        if (format && format !== 'json' && content) {
+        if (input.format && input.format !== 'json' && content) {
           content =
-            format === 'markdown'
+            input.format === 'markdown'
               ? jsonToMarkdown(content)
               : jsonToHtml(content);
         }
@@ -504,13 +519,20 @@ export class McpService implements OnModuleDestroy {
         parentPageId: z.string().optional(),
       },
       async ({ spaceId, title, content, format, parentPageId }) => {
-        if (parentPageId) {
-          const parentPage = await this.pageRepo.findById(parentPageId);
+        const input = await validateDto(CreatePageDto, {
+          spaceId,
+          title,
+          content,
+          format,
+          parentPageId,
+        });
+        if (input.parentPageId) {
+          const parentPage = await this.pageRepo.findById(input.parentPageId);
           if (
             !parentPage ||
             parentPage.deletedAt ||
             parentPage.workspaceId !== workspaceId ||
-            parentPage.spaceId !== spaceId
+            parentPage.spaceId !== input.spaceId
           ) {
             return {
               content: [{ type: 'text', text: 'Parent page not found' }],
@@ -521,16 +543,16 @@ export class McpService implements OnModuleDestroy {
         } else {
           await this.assertSpacePageAccess(
             user,
-            spaceId,
+            input.spaceId,
             SpaceCaslAction.Create,
           );
         }
         const page = await this.pageService.create(userId, workspaceId, {
-          spaceId,
-          title,
-          content,
-          format: format ?? 'markdown',
-          parentPageId,
+          spaceId: input.spaceId,
+          title: input.title,
+          content: input.content,
+          format: input.format ?? 'markdown',
+          parentPageId: input.parentPageId,
         });
         return {
           content: [
@@ -559,7 +581,14 @@ export class McpService implements OnModuleDestroy {
         operation: z.enum(['append', 'prepend', 'replace']).optional(),
       },
       async ({ pageId, title, content, format, operation }) => {
-        const page = await this.pageRepo.findById(pageId);
+        const input = await validateDto(UpdatePageDto, {
+          pageId,
+          title,
+          content,
+          format,
+          operation,
+        });
+        const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
@@ -570,11 +599,11 @@ export class McpService implements OnModuleDestroy {
         const updated = await this.pageService.update(
           page,
           {
-            pageId,
-            title,
-            content,
-            format: format ?? 'markdown',
-            operation: operation ?? 'replace',
+            pageId: input.pageId,
+            title: input.title,
+            content: input.content,
+            format: input.format ?? 'markdown',
+            operation: input.operation ?? 'replace',
           },
           user,
         );
@@ -595,9 +624,13 @@ export class McpService implements OnModuleDestroy {
       'List root-level pages in a space',
       { spaceId: z.string(), limit: z.number().optional() },
       async ({ spaceId, limit }) => {
-        const spaceCanEdit = await this.getSpacePageEditAccess(user, spaceId);
+        const input = await validateDto(SidebarPageDto, { spaceId });
+        const spaceCanEdit = await this.getSpacePageEditAccess(
+          user,
+          input.spaceId,
+        );
         const result = await this.pageService.getSidebarPages(
-          spaceId,
+          input.spaceId,
           this.paginate(limit),
           undefined,
           userId,
@@ -615,12 +648,13 @@ export class McpService implements OnModuleDestroy {
       'List child pages of a specific page',
       { spaceId: z.string(), pageId: z.string(), limit: z.number().optional() },
       async ({ spaceId, pageId, limit }) => {
-        const page = await this.pageRepo.findById(pageId);
+        const input = await validateDto(SidebarPageDto, { spaceId, pageId });
+        const page = await this.pageRepo.findById(input.pageId);
         if (
           !page ||
           page.deletedAt ||
           page.workspaceId !== workspaceId ||
-          page.spaceId !== spaceId
+          page.spaceId !== input.spaceId
         ) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
@@ -628,11 +662,14 @@ export class McpService implements OnModuleDestroy {
           };
         }
         await this.pageAccessService.validateCanView(page, user);
-        const spaceCanEdit = await this.getSpacePageEditAccess(user, spaceId);
+        const spaceCanEdit = await this.getSpacePageEditAccess(
+          user,
+          input.spaceId,
+        );
         const result = await this.pageService.getSidebarPages(
-          spaceId,
+          input.spaceId,
           this.paginate(limit),
-          pageId,
+          input.pageId,
           userId,
           spaceCanEdit,
         );
@@ -648,7 +685,8 @@ export class McpService implements OnModuleDestroy {
       'Duplicate a page within the same space',
       { pageId: z.string() },
       async ({ pageId }) => {
-        const page = await this.pageRepo.findById(pageId);
+        const input = await validateDto(DuplicatePageDto, { pageId });
+        const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
@@ -683,7 +721,8 @@ export class McpService implements OnModuleDestroy {
       'Copy a page to a different space',
       { pageId: z.string(), spaceId: z.string() },
       async ({ pageId, spaceId }) => {
-        const page = await this.pageRepo.findById(pageId);
+        const input = await validateDto(DuplicatePageDto, { pageId, spaceId });
+        const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
@@ -696,10 +735,14 @@ export class McpService implements OnModuleDestroy {
           page.spaceId,
           SpaceCaslAction.Edit,
         );
-        await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Edit);
+        await this.assertSpacePageAccess(
+          user,
+          input.spaceId,
+          SpaceCaslAction.Edit,
+        );
         const newPage = await this.pageService.duplicatePage(
           page,
-          spaceId,
+          input.spaceId,
           user,
         );
         return {
@@ -719,7 +762,11 @@ export class McpService implements OnModuleDestroy {
       'Move a page under a new parent within the same space',
       { pageId: z.string(), parentPageId: z.string().optional() },
       async ({ pageId, parentPageId }) => {
-        const page = await this.pageRepo.findById(pageId);
+        const input = await validateDto(MovePageUnderDto, {
+          pageId,
+          targetPageId: parentPageId,
+        });
+        const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
@@ -732,8 +779,8 @@ export class McpService implements OnModuleDestroy {
           SpaceCaslAction.Edit,
         );
         await this.pageAccessService.validateCanEdit(page, user);
-        if (parentPageId) {
-          const parentPage = await this.pageRepo.findById(parentPageId);
+        if (input.targetPageId) {
+          const parentPage = await this.pageRepo.findById(input.targetPageId);
           if (
             !parentPage ||
             parentPage.deletedAt ||
@@ -749,9 +796,9 @@ export class McpService implements OnModuleDestroy {
         }
         await this.pageService.movePage(
           {
-            pageId,
+            pageId: input.pageId,
             position: page.position ?? 'a0',
-            parentPageId: parentPageId ?? null,
+            parentPageId: input.targetPageId ?? null,
           },
           page,
         );
@@ -769,7 +816,11 @@ export class McpService implements OnModuleDestroy {
       'Move a page to a different space',
       { pageId: z.string(), spaceId: z.string() },
       async ({ pageId, spaceId }) => {
-        const page = await this.pageRepo.findById(pageId);
+        const input = await validateDto(MovePageToSpaceDto, {
+          pageId,
+          spaceId,
+        });
+        const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
@@ -782,11 +833,18 @@ export class McpService implements OnModuleDestroy {
           SpaceCaslAction.Edit,
         );
         await this.pageAccessService.validateCanEdit(page, user);
-        await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Edit);
-        await this.pageService.movePageToSpace(page, spaceId, userId);
+        await this.assertSpacePageAccess(
+          user,
+          input.spaceId,
+          SpaceCaslAction.Edit,
+        );
+        await this.pageService.movePageToSpace(page, input.spaceId, userId);
         return {
           content: [
-            { type: 'text', text: `Page ${pageId} moved to space ${spaceId}` },
+            {
+              type: 'text',
+              text: `Page ${input.pageId} moved to space ${input.spaceId}`,
+            },
           ],
         };
       },
@@ -831,17 +889,22 @@ export class McpService implements OnModuleDestroy {
         description: z.string().optional(),
       },
       async ({ name, slug, description }) => {
+        const input = await validateDto(CreateSpaceDto, {
+          name,
+          slug,
+          description,
+        });
         const ability = this.workspaceAbility.createForUser(user, workspace);
         if (
           ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Space)
         ) {
           throw new ForbiddenException('Forbidden: cannot create spaces');
         }
-        const space = await this.spaceService.createSpace(user, workspaceId, {
-          name,
-          slug,
-          description,
-        });
+        const space = await this.spaceService.createSpace(
+          user,
+          workspaceId,
+          input,
+        );
         return {
           content: [
             {
@@ -867,9 +930,14 @@ export class McpService implements OnModuleDestroy {
         description: z.string().optional(),
       },
       async ({ spaceId, name, description }) => {
-        await this.assertSpaceSettingsManage(user, spaceId);
+        const input = await validateDto(UpdateSpaceDto, {
+          spaceId,
+          name,
+          description,
+        });
+        await this.assertSpaceSettingsManage(user, input.spaceId);
         const space = await this.spaceService.updateSpace(
-          { spaceId, name, description } as any,
+          input as any,
           workspaceId,
         );
         return { content: [{ type: 'text', text: JSON.stringify(space) }] };
@@ -882,7 +950,8 @@ export class McpService implements OnModuleDestroy {
       'Get comments on a page',
       { pageId: z.string(), limit: z.number().optional() },
       async ({ pageId, limit }) => {
-        const page = await this.pageRepo.findById(pageId);
+        const input = await validateDto(PageIdDto, { pageId });
+        const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
@@ -891,7 +960,7 @@ export class McpService implements OnModuleDestroy {
         }
         await this.pageAccessService.validateCanView(page, user);
         const comments = await this.commentService.findByPageId(
-          pageId,
+          input.pageId,
           this.paginate(limit),
         );
         return { content: [{ type: 'text', text: JSON.stringify(comments) }] };
@@ -907,7 +976,12 @@ export class McpService implements OnModuleDestroy {
         content: z.string().describe('JSON ProseMirror content string'),
       },
       async ({ pageId, content }) => {
-        const page = await this.pageRepo.findById(pageId);
+        const input = await validateDto(CreateCommentDto, {
+          pageId,
+          content,
+          type: 'page',
+        });
+        const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
@@ -917,7 +991,7 @@ export class McpService implements OnModuleDestroy {
         await this.pageAccessService.validateCanComment(page, user, workspaceId);
         const comment = await this.commentService.create(
           { page, workspaceId, user },
-          { pageId, content, type: 'page' } as any,
+          input,
         );
         return {
           content: [{ type: 'text', text: JSON.stringify({ id: comment.id }) }],
@@ -934,8 +1008,12 @@ export class McpService implements OnModuleDestroy {
         content: z.string().describe('JSON ProseMirror content string'),
       },
       async ({ commentId, content }) => {
-        const existingComment = await this.commentService.findById(
+        const input = await validateDto(UpdateCommentDto, {
           commentId,
+          content,
+        });
+        const existingComment = await this.commentService.findById(
+          input.commentId,
           workspaceId,
         );
         if (!existingComment) {
@@ -951,7 +1029,7 @@ export class McpService implements OnModuleDestroy {
         await this.pageAccessService.validateCanComment(page, user, workspaceId);
         const updated = await this.commentService.update(
           existingComment,
-          { commentId, content } as any,
+          input,
           user,
         );
         return {
