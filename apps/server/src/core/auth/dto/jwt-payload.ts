@@ -5,6 +5,7 @@ export enum JwtType {
   ATTACHMENT = 'attachment',
   MFA_TOKEN = 'mfa_token',
   API_KEY = 'api_key',
+  MCP_OAUTH = 'mcp_oauth',
 }
 export type JwtPayload = {
   sub: string;
@@ -45,4 +46,15 @@ export type JwtApiKeyPayload = {
   apiKeyId: string;
   scopes?: string[];
   type: 'api_key';
+};
+
+export type JwtMcpOAuthPayload = {
+  sub: string;
+  workspaceId: string;
+  authorizationId: string;
+  oauthClientId?: string;
+  clientId: string;
+  resource: string;
+  scopes?: string[];
+  type: 'mcp_oauth';
 };

@@ -73,7 +73,8 @@ function redirectToLogin() {
     "/invites",
   ];
   if (!exemptPaths.some((path) => window.location.pathname.startsWith(path))) {
-    const redirectTo = window.location.pathname;
+    const redirectTo =
+      window.location.pathname + window.location.search + window.location.hash;
     if (redirectTo === APP_ROUTE.HOME) {
       window.location.href = APP_ROUTE.AUTH.LOGIN;
     } else {

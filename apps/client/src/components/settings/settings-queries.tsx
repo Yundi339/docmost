@@ -11,6 +11,11 @@ import { getLicenseInfo } from "@/ee/licence/services/license-service.ts";
 import { getSsoProviders } from "@/ee/security/services/security-service.ts";
 import { getShares } from "@/features/share/services/share-service.ts";
 import { getApiKeys } from "@/ee/api-key";
+import {
+  getAvailableOAuthClients,
+  getOAuthAuthorizations,
+  getOAuthClients,
+} from "@/ee/oauth";
 import { getAuditLogs } from "@/ee/audit/services/audit-service";
 import { getVerificationList } from "@/ee/page-verification/services/page-verification-service";
 
@@ -86,6 +91,30 @@ export const prefetchApiKeyManagement = () => {
   queryClient.prefetchQuery({
     queryKey: ["api-key-list", { adminView: true }],
     queryFn: () => getApiKeys({ adminView: true }),
+  });
+};
+
+export const prefetchOAuthSettings = () => {
+  queryClient.prefetchQuery({
+    queryKey: ["oauth-clients", "available"],
+    queryFn: getAvailableOAuthClients,
+  });
+
+  queryClient.prefetchQuery({
+    queryKey: ["oauth-authorizations", {}],
+    queryFn: () => getOAuthAuthorizations(),
+  });
+};
+
+export const prefetchOAuthManagement = () => {
+  queryClient.prefetchQuery({
+    queryKey: ["oauth-clients"],
+    queryFn: getOAuthClients,
+  });
+
+  queryClient.prefetchQuery({
+    queryKey: ["oauth-authorizations", { adminView: true }],
+    queryFn: () => getOAuthAuthorizations({ adminView: true }),
   });
 };
 

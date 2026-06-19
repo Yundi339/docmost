@@ -1,0 +1,232 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import { FastifyReply, FastifyRequest } from 'fastify';
+import { Workspace } from '@docmost/db/types/entity.types';
+import { AuthUser } from '../../common/decorators/auth-user.decorator';
+import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
+import { SkipTransform } from '../../common/decorators/skip-transform.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { SessionAuthGuard } from '../../common/guards/session-auth.guard';
+import { User } from '@docmost/db/types/entity.types';
+import { OAuthService } from './oauth.service';
+import {
+  OAuthAuthorizeQuery,
+  OAuthRequestError,
+  OAuthTokenRequest,
+} from './oauth.types';
+
+@Controller('.well-known')
+export class OAuthMetadataController {
+  constructor(private readonly oauthService: OAuthService) {}
+
+  @SkipTransform()
+  @Get('oauth-protected-resource/mcp')
+  protectedResourceForMcp(@Req() req: FastifyRequest) {
+    return this.oauthService.getProtectedResourceMetadata(
+      getWorkspaceFromRequest(req),
+    );
+  }
+
+  @SkipTransform()
+  @Get('oauth-protected-resource')
+  protectedResource(@Req() req: FastifyRequest) {
+    return this.oauthService.getProtectedResourceMetadata(
+      getWorkspaceFromRequest(req),
+    );
+  }
+
+  @SkipTransform()
+  @Get('oauth-authorization-server')
+  authorizationServer(@Req() req: FastifyRequest) {
+    return this.oauthService.getAuthorizationServerMetadata(
+      getWorkspaceFromRequest(req),
+    );
+  }
+
+  @SkipTransform()
+  @Get('openid-configuration')
+  openIdConfiguration(@Req() req: FastifyRequest) {
+    return this.oauthService.getAuthorizationServerMetadata(
+      getWorkspaceFromRequest(req),
+    );
+  }
+}
+
+@Controller('oauth')
+export class OAuthController {
+  constructor(private readonly oauthService: OAuthService) {}
+
+  @SkipTransform()
+  @HttpCode(HttpStatus.OK)
+  @Post('token')
+  async token(
+    @Body() body: OAuthTokenRequest,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    reply.header('Cache-Control', 'no-store');
+    reply.header('Pragma', 'no-cache');
+
+    try {
+      return await this.oauthService.exchangeToken(
+        normalizeBody(body) as OAuthTokenRequest,
+        getWorkspaceFromRequest(req),
+      );
+    } catch (err) {
+      if (err instanceof OAuthRequestError) {
+        reply.status(err.statusCode);
+        return {
+          error: err.errorCode,
+          error_description: err.errorDescription,
+        };
+      }
+      if (err instanceof BadRequestException) {
+        reply.status(HttpStatus.BAD_REQUEST);
+        return {
+          error: 'invalid_request',
+          error_description: extractErrorMessage(err),
+        };
+      }
+      throw err;
+    }
+  }
+
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('clients')
+  async listClients(
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.oauthService.listClients(workspace, user);
+  }
+
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('clients/available')
+  async listAvailableClients(@AuthWorkspace() workspace: Workspace) {
+    return this.oauthService.listAvailableClients(workspace);
+  }
+
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('clients/update')
+  async updateClient(
+    @Body()
+    input: {
+      clientId: string;
+      name?: string;
+      isEnabled?: boolean;
+      allowedScopes?: string[];
+    },
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.oauthService.updateClient(input, workspace, user);
+  }
+
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('authorizations')
+  async listAuthorizations(
+    @Body() input: { adminView?: boolean },
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.oauthService.listAuthorizations(workspace, user, {
+      adminView: input?.adminView === true,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('authorizations/revoke')
+  async revokeAuthorization(
+    @Body() input: { authorizationId: string },
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    await this.oauthService.revokeAuthorization(
+      input.authorizationId,
+      workspace,
+      user,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('authorize/info')
+  async authorizeInfo(
+    @Body() query: OAuthAuthorizeQuery,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.oauthService.previewAuthorization(query, user, workspace);
+  }
+
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('authorize/approve')
+  async approveAuthorization(
+    @Body() query: OAuthAuthorizeQuery,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.oauthService.approveAuthorization(query, user, workspace);
+  }
+
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('authorize/deny')
+  async denyAuthorization(
+    @Body() query: OAuthAuthorizeQuery,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.oauthService.denyAuthorization(query, workspace);
+  }
+}
+
+function getWorkspaceFromRequest(req: FastifyRequest): Workspace {
+  const workspace = (req.raw as any)?.workspace;
+  if (!workspace) {
+    throw new NotFoundException('Workspace not found');
+  }
+  return workspace;
+}
+
+function normalizeBody(body: unknown) {
+  if (!body || typeof body !== 'object') {
+    return {};
+  }
+
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(body)) {
+    normalized[key] = Array.isArray(value) ? value[0] : value;
+  }
+  return normalized;
+}
+
+function extractErrorMessage(err: BadRequestException) {
+  const response = err.getResponse();
+  if (typeof response === 'string') return response;
+  if (
+    response &&
+    typeof response === 'object' &&
+    'message' in response &&
+    typeof response.message === 'string'
+  ) {
+    return response.message;
+  }
+  return err.message || 'Invalid OAuth token request.';
+}

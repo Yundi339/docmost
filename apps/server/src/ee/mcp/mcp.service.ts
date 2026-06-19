@@ -56,7 +56,10 @@ export type McpMode = 'off' | 'read-only' | 'read-write';
 type McpToolAccess = 'read' | 'write';
 
 export interface McpRequestContext {
-  apiKeyId: string;
+  authType: 'api_key' | 'oauth';
+  credentialId: string;
+  apiKeyId?: string;
+  oauthAuthorizationId?: string;
   scopes: string[];
   mode: McpMode;
 }
@@ -66,7 +69,8 @@ interface McpSession {
   server: McpServer;
   userId: string;
   workspaceId: string;
-  apiKeyId: string;
+  authType: 'api_key' | 'oauth';
+  credentialId: string;
   scopes: string[];
   mode: McpMode;
 }
@@ -117,7 +121,8 @@ export class McpService implements OnModuleDestroy {
       if (
         session.userId !== user.id ||
         session.workspaceId !== workspace.id ||
-        session.apiKeyId !== context.apiKeyId
+        session.authType !== context.authType ||
+        session.credentialId !== context.credentialId
       ) {
         res
           .writeHead(403, { 'Content-Type': 'application/json' })
@@ -163,7 +168,8 @@ export class McpService implements OnModuleDestroy {
           server,
           userId: user.id,
           workspaceId: workspace.id,
-          apiKeyId: context.apiKeyId,
+          authType: context.authType,
+          credentialId: context.credentialId,
           scopes: context.scopes,
           mode: context.mode,
         });
@@ -196,7 +202,9 @@ export class McpService implements OnModuleDestroy {
         workspace &&
         (session.userId !== user.id ||
           session.workspaceId !== workspace.id ||
-          (context && session.apiKeyId !== context.apiKeyId))
+          (context &&
+            (session.authType !== context.authType ||
+              session.credentialId !== context.credentialId)))
       ) {
         res.writeHead(403).end();
         return;
@@ -303,7 +311,10 @@ export class McpService implements OnModuleDestroy {
         resourceId: getMcpTargetId(args),
         metadata: {
           toolName,
+          authType: context.authType,
+          credentialId: context.credentialId,
           apiKeyId: context.apiKeyId,
+          oauthAuthorizationId: context.oauthAuthorizationId,
           success,
           target: getMcpTargetMetadata(args),
         },
@@ -311,7 +322,7 @@ export class McpService implements OnModuleDestroy {
       {
         workspaceId: workspace.id,
         actorId: user.id,
-        actorType: 'api_key',
+        actorType: context.authType,
       },
     );
   }
@@ -352,10 +363,13 @@ export class McpService implements OnModuleDestroy {
       schema: any,
       handler: (args: any) => Promise<any>,
     ) =>
-      server.tool(name, description, schema, (args: any) =>
-        this.runTool(context, user, workspace, name, 'read', args, () =>
-          handler(args),
-        ),
+      server.registerTool(
+        name,
+        toolOptions(description, schema, 'read'),
+        (args: any) =>
+          this.runTool(context, user, workspace, name, 'read', args, () =>
+            handler(args),
+          ),
       );
     const writeTool = (
       name: string,
@@ -363,10 +377,13 @@ export class McpService implements OnModuleDestroy {
       schema: any,
       handler: (args: any) => Promise<any>,
     ) =>
-      server.tool(name, description, schema, (args: any) =>
-        this.runTool(context, user, workspace, name, 'write', args, () =>
-          handler(args),
-        ),
+      server.registerTool(
+        name,
+        toolOptions(description, schema, 'write'),
+        (args: any) =>
+          this.runTool(context, user, workspace, name, 'write', args, () =>
+            handler(args),
+          ),
       );
 
     // 1. search_pages
@@ -1027,4 +1044,26 @@ function sameScopes(left: string[], right: string[]) {
 
   const leftSet = new Set(left);
   return right.every((scope) => leftSet.has(scope));
+}
+
+function toolOptions(
+  description: string,
+  inputSchema: any,
+  access: McpToolAccess,
+) {
+  const scope = access === 'write' ? 'mcp:write' : 'mcp:read';
+  const securitySchemes = [{ type: 'oauth2', scopes: [scope] }];
+
+  return {
+    description,
+    inputSchema,
+    annotations: {
+      readOnlyHint: access === 'read',
+      destructiveHint: false,
+    },
+    securitySchemes,
+    _meta: {
+      securitySchemes,
+    },
+  } as any;
 }

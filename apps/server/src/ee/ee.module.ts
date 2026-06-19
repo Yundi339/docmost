@@ -8,6 +8,7 @@ import { DocxImportModule } from './docx-import/docx-import.module';
 import { AttachmentEeModule } from './attachments-ee/attachment-ee.module';
 import { ConfluenceImportModule } from './confluence-import/confluence-import.module';
 import { McpModule } from './mcp/mcp.module';
+import { OAuthModule } from './oauth/oauth.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { McpModule } from './mcp/mcp.module';
     DocxImportModule,
     AttachmentEeModule,
     ConfluenceImportModule,
+    OAuthModule,
     McpModule,
   ],
 })

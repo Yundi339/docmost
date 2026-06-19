@@ -10,6 +10,7 @@ import {
   JwtAttachmentPayload,
   JwtCollabPayload,
   JwtExchangePayload,
+  JwtMcpOAuthPayload,
   JwtMfaTokenPayload,
   JwtPayload,
   JwtType,
@@ -113,6 +114,47 @@ export class TokenService {
     return this.jwtService.sign(payload, { expiresIn });
   }
 
+  async generateMcpOAuthAccessToken(opts: {
+    user: User;
+    workspaceId: string;
+    authorizationId: string;
+    oauthClientId?: string;
+    clientId: string;
+    resource: string;
+    scopes?: string[];
+    expiresIn: StringValue | number;
+  }): Promise<string> {
+    const {
+      user,
+      workspaceId,
+      authorizationId,
+      oauthClientId,
+      clientId,
+      resource,
+      scopes,
+      expiresIn,
+    } = opts;
+    if (isUserDisabled(user)) {
+      throw new ForbiddenException();
+    }
+
+    const payload: JwtMcpOAuthPayload = {
+      sub: user.id,
+      workspaceId,
+      authorizationId,
+      oauthClientId,
+      clientId,
+      resource,
+      scopes,
+      type: JwtType.MCP_OAUTH,
+    };
+
+    return this.jwtService.sign(payload, {
+      expiresIn,
+      audience: resource,
+    });
+  }
+
   async verifyJwt(token: string, tokenType: string) {
     const payload = await this.jwtService.verifyAsync(token);
 
@@ -123,5 +165,9 @@ export class TokenService {
     }
 
     return payload;
+  }
+
+  async verifyAnyJwt(token: string) {
+    return this.jwtService.verifyAsync(token);
   }
 }

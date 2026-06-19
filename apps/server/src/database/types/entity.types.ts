@@ -29,6 +29,10 @@ import {
   Billing as BillingSubscription,
   AuthProviders,
   AuthAccounts,
+  OauthAuthorizationCodes,
+  OauthAuthorizations,
+  OauthClients,
+  OauthRefreshTokens,
   Shares,
   Favorites,
   FileTasks,
@@ -144,6 +148,27 @@ export type UpdatableAuthProvider = Updateable<Omit<AuthProviders, 'id'>>;
 export type AuthAccount = Selectable<AuthAccounts>;
 export type InsertableAuthAccount = Insertable<AuthAccounts>;
 export type UpdatableAuthAccount = Updateable<Omit<AuthAccounts, 'id'>>;
+
+// OAuth
+export type OauthClient = Selectable<OauthClients>;
+export type InsertableOauthClient = Insertable<OauthClients>;
+export type UpdatableOauthClient = Updateable<Omit<OauthClients, 'id'>>;
+export type OauthAuthorization = Selectable<OauthAuthorizations>;
+export type InsertableOauthAuthorization = Insertable<OauthAuthorizations>;
+export type UpdatableOauthAuthorization = Updateable<
+  Omit<OauthAuthorizations, 'id'>
+>;
+export type OauthAuthorizationCode = Selectable<OauthAuthorizationCodes>;
+export type InsertableOauthAuthorizationCode =
+  Insertable<OauthAuthorizationCodes>;
+export type UpdatableOauthAuthorizationCode = Updateable<
+  Omit<OauthAuthorizationCodes, 'id'>
+>;
+export type OauthRefreshToken = Selectable<OauthRefreshTokens>;
+export type InsertableOauthRefreshToken = Insertable<OauthRefreshTokens>;
+export type UpdatableOauthRefreshToken = Updateable<
+  Omit<OauthRefreshTokens, 'id'>
+>;
 
 // Share
 export type Share = Selectable<Shares>;

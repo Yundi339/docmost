@@ -8,15 +8,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { ApiKeyAuthGuard } from '../../common/guards/api-key-auth.guard';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { McpMode, McpRequestContext, McpService } from './mcp.service';
+import { McpAuthGuard } from './mcp-auth.guard';
 
-@UseGuards(JwtAuthGuard, ApiKeyAuthGuard)
+@UseGuards(McpAuthGuard)
 @Controller('mcp')
 export class McpController {
   private readonly logger = new Logger(McpController.name);
@@ -44,13 +43,16 @@ export class McpController {
     if (mode === 'off') {
       throw new ForbiddenException('MCP is not enabled for this workspace');
     }
-    const apiKey = (req as any).raw?.apiKey;
-    if (!apiKey?.id) {
-      throw new ForbiddenException('An API key bearer token is required');
+    const mcpAuth = (req as any).raw?.mcpAuth;
+    if (!mcpAuth?.credentialId) {
+      throw new ForbiddenException('A valid MCP bearer token is required');
     }
     const context: McpRequestContext = {
-      apiKeyId: apiKey.id,
-      scopes: apiKey.scopes ?? [],
+      authType: mcpAuth.authType,
+      credentialId: mcpAuth.credentialId,
+      apiKeyId: mcpAuth.apiKeyId,
+      oauthAuthorizationId: mcpAuth.oauthAuthorizationId,
+      scopes: mcpAuth.scopes ?? [],
       mode,
     };
 

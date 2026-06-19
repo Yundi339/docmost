@@ -120,6 +120,76 @@ export interface AuthProviders {
   workspaceId: string;
 }
 
+export interface OauthClients {
+  allowClientIdMetadataDocuments: Generated<boolean>;
+  allowedScopes: Generated<string[]>;
+  clientId: string | null;
+  createdAt: Generated<Timestamp>;
+  creatorId: string | null;
+  deletedAt: Timestamp | null;
+  id: Generated<string>;
+  isEnabled: Generated<boolean>;
+  name: string;
+  provider: string;
+  settings: Json | null;
+  trustedClientIdHost: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
+export interface OauthAuthorizations {
+  clientId: string;
+  clientName: string;
+  clientUri: string | null;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  lastUsedAt: Timestamp | null;
+  oauthClientId: string | null;
+  provider: string;
+  redirectUri: string;
+  resource: string;
+  revokedAt: Timestamp | null;
+  scopes: string[];
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+  workspaceId: string;
+}
+
+export interface OauthAuthorizationCodes {
+  authorizationId: string;
+  clientId: string;
+  codeChallenge: string;
+  codeChallengeMethod: string;
+  codeHash: string;
+  consumedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp;
+  id: Generated<string>;
+  oauthClientId: string | null;
+  redirectUri: string;
+  resource: string;
+  scopes: string[];
+  userId: string;
+  workspaceId: string;
+}
+
+export interface OauthRefreshTokens {
+  authorizationId: string;
+  clientId: string;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp;
+  id: Generated<string>;
+  lastUsedAt: Timestamp | null;
+  oauthClientId: string | null;
+  replacedById: string | null;
+  resource: string;
+  revokedAt: Timestamp | null;
+  scopes: string[];
+  tokenHash: string;
+  userId: string;
+  workspaceId: string;
+}
+
 export interface Backlinks {
   createdAt: Generated<Timestamp>;
   id: Generated<string>;
@@ -632,6 +702,10 @@ export interface DB {
   groupUsers: GroupUsers;
   labels: Labels;
   notifications: Notifications;
+  oauthAuthorizationCodes: OauthAuthorizationCodes;
+  oauthAuthorizations: OauthAuthorizations;
+  oauthClients: OauthClients;
+  oauthRefreshTokens: OauthRefreshTokens;
   pageAccess: PageAccess;
   pageLabels: PageLabels;
   pagePermissions: PagePermissions;

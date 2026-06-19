@@ -51,6 +51,13 @@ const Security = lazy(() => import("@/ee/security/pages/security.tsx"));
 const License = lazy(() => import("@/ee/licence/pages/license.tsx"));
 const UserApiKeys = lazy(() => import("@/ee/api-key/pages/user-api-keys"));
 const WorkspaceApiKeys = lazy(() => import("@/ee/api-key/pages/workspace-api-keys"));
+const UserOAuthSettings = lazy(
+  () => import("@/ee/oauth/pages/user-oauth-settings"),
+);
+const WorkspaceOAuthManagement = lazy(
+  () => import("@/ee/oauth/pages/workspace-oauth-management"),
+);
+const OAuthAuthorize = lazy(() => import("@/ee/oauth/pages/oauth-authorize"));
 const AiSettings = lazy(() => import("@/ee/ai/pages/ai-settings.tsx"));
 const AuditLogs = lazy(() => import("@/ee/audit/pages/audit-logs.tsx"));
 const VerifiedPages = lazy(() => import("@/ee/page-verification/pages/verified-pages.tsx"));
@@ -96,6 +103,7 @@ export default function App() {
 
         <Route path={"/share/:shareId"} element={<ShareRedirect />} />
         <Route path={"/p/:pageSlug"} element={<PageRedirect />} />
+        <Route path={"/oauth/authorize"} element={<OAuthAuthorize />} />
 
         <Route element={<Layout />}>
           <Route path={"/home"} element={<Home />} />
@@ -123,9 +131,11 @@ export default function App() {
               element={<AccountPreferences />}
             />
             <Route path={"account/api-keys"} element={<UserApiKeys />} />
+            <Route path={"account/oauth"} element={<UserOAuthSettings />} />
             <Route path={"workspace"} element={<WorkspaceSettings />} />
             <Route path={"members"} element={<WorkspaceMembers />} />
             <Route path={"api-keys"} element={<WorkspaceApiKeys />} />
+            <Route path={"oauth"} element={<WorkspaceOAuthManagement />} />
             <Route path={"groups"} element={<Groups />} />
             <Route path={"groups/:groupId"} element={<GroupInfo />} />
             <Route path={"spaces"} element={<Spaces />} />

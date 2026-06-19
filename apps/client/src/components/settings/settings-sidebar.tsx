@@ -15,6 +15,7 @@ import {
   IconSparkles,
   IconHistory,
   IconShieldCheck,
+  IconShieldLock,
   IconActivity,
 } from "@tabler/icons-react";
 import { Link, useLocation } from "react-router-dom";
@@ -33,6 +34,8 @@ import {
   prefetchWorkspaceMembers,
   prefetchAuditLogs,
   prefetchVerifiedPages,
+  prefetchOAuthManagement,
+  prefetchOAuthSettings,
 } from "@/components/settings/settings-queries.tsx";
 import AppVersion from "@/components/settings/app-version.tsx";
 import { useAtom } from "jotai";
@@ -68,6 +71,11 @@ const groupedData: DataGroup[] = [
         label: "API keys",
         icon: IconKey,
         path: "/settings/account/api-keys",
+      },
+      {
+        label: "OAuth settings",
+        icon: IconShieldLock,
+        path: "/settings/account/oauth",
       },
     ],
   },
@@ -111,6 +119,12 @@ const groupedData: DataGroup[] = [
         label: "API management",
         icon: IconKey,
         path: "/settings/api-keys",
+        role: "owner",
+      },
+      {
+        label: "OAuth management",
+        icon: IconShieldLock,
+        path: "/settings/oauth",
         role: "owner",
       },
       {
@@ -190,8 +204,14 @@ export default function SettingsSidebar() {
             case "API keys":
               prefetchHandler = prefetchApiKeys;
               break;
+            case "OAuth settings":
+              prefetchHandler = prefetchOAuthSettings;
+              break;
             case "API management":
               prefetchHandler = prefetchApiKeyManagement;
+              break;
+            case "OAuth management":
+              prefetchHandler = prefetchOAuthManagement;
               break;
             case "Audit log":
               prefetchHandler = prefetchAuditLogs;

@@ -6,10 +6,21 @@ import { SpaceModule } from '../../core/space/space.module';
 import { CommentModule } from '../../core/comment/comment.module';
 import { SearchModule } from '../../core/search/search.module';
 import { WorkspaceModule } from '../../core/workspace/workspace.module';
+import { ApiKeyModule } from '../../core/api-key/api-key.module';
+import { OAuthModule } from '../oauth/oauth.module';
+import { McpAuthGuard } from './mcp-auth.guard';
 
 @Module({
-  imports: [PageModule, SpaceModule, CommentModule, SearchModule, WorkspaceModule],
+  imports: [
+    PageModule,
+    SpaceModule,
+    CommentModule,
+    SearchModule,
+    WorkspaceModule,
+    ApiKeyModule,
+    OAuthModule,
+  ],
   controllers: [McpController],
-  providers: [McpService],
+  providers: [McpService, McpAuthGuard],
 })
 export class McpModule {}
