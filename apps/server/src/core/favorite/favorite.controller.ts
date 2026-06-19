@@ -17,6 +17,8 @@ import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
+import { ApiKeyScope } from '../api-key/api-key-scopes';
 import { Page, User, Workspace } from '@docmost/db/types/entity.types';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
 import { SpaceRepo } from '@docmost/db/repos/space/space.repo';
@@ -72,6 +74,7 @@ export class FavoriteController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('ids')
   async getFavoriteIds(
     @Body() dto: FavoriteIdsDto,
@@ -87,6 +90,7 @@ export class FavoriteController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post()
   async getUserFavorites(
     @Body() dto: ListFavoritesDto,

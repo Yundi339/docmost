@@ -1,18 +1,15 @@
-import { Divider, Stack, Text, Switch, Tooltip } from "@mantine/core";
+import { Divider, Stack, Text, Switch } from "@mantine/core";
 import { useAtom } from "jotai";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { updateWorkspace } from "@/features/workspace/services/workspace-service.ts";
 import { notifications } from "@mantine/notifications";
-import { useHasFeature } from "@/ee/hooks/use-feature";
-import { Feature } from "@/ee/features";
 import {
   ResponsiveSettingsRow,
   ResponsiveSettingsContent,
   ResponsiveSettingsControl,
 } from "@/components/ui/responsive-settings-row";
-import { useUpgradeLabel } from "@/ee/hooks/use-upgrade-label.ts";
 
 export default function RestrictApiToAdmins() {
   const { t } = useTranslation();
@@ -23,8 +20,6 @@ export default function RestrictApiToAdmins() {
   const [allowMemberAiSettings, setAllowMemberAiSettings] = useState(
     workspace?.settings?.ai?.allowMemberSettings !== false,
   );
-  const hasAccess = useHasFeature(Feature.API_KEYS);
-  const upgradeLabel = useUpgradeLabel();
 
   const updateSetting = async (
     payload: {
@@ -81,14 +76,11 @@ export default function RestrictApiToAdmins() {
         </ResponsiveSettingsContent>
 
         <ResponsiveSettingsControl>
-          <Tooltip label={upgradeLabel} disabled={hasAccess} refProp="rootRef">
-            <Switch
-              checked={allowMemberAiSettings}
-              onChange={handleAllowMemberAiSettingsChange}
-              disabled={!hasAccess}
-              aria-label={t("Toggle member AI settings")}
-            />
-          </Tooltip>
+          <Switch
+            checked={allowMemberAiSettings}
+            onChange={handleAllowMemberAiSettingsChange}
+            aria-label={t("Toggle member AI settings")}
+          />
         </ResponsiveSettingsControl>
       </ResponsiveSettingsRow>
 
@@ -105,14 +97,11 @@ export default function RestrictApiToAdmins() {
         </ResponsiveSettingsContent>
 
         <ResponsiveSettingsControl>
-          <Tooltip label={upgradeLabel} disabled={hasAccess} refProp="rootRef">
-            <Switch
-              checked={restrictToAdmins}
-              onChange={handleRestrictToAdminsChange}
-              disabled={!hasAccess}
-              aria-label={t("Toggle restrict API keys to admins")}
-            />
-          </Tooltip>
+          <Switch
+            checked={restrictToAdmins}
+            onChange={handleRestrictToAdminsChange}
+            aria-label={t("Toggle restrict API keys to admins")}
+          />
         </ResponsiveSettingsControl>
       </ResponsiveSettingsRow>
     </Stack>

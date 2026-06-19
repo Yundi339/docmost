@@ -14,6 +14,8 @@ import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator'
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { FastifyReply } from 'fastify';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
+import { ApiKeyScope } from '../../core/api-key/api-key-scopes';
 
 @UseGuards(JwtAuthGuard)
 @Controller('ai')
@@ -25,8 +27,14 @@ export class AiController {
 
   @HttpCode(HttpStatus.OK)
   @Post('generate')
-  async generate(@Body() body: { action?: string; content: string; prompt?: string }) {
-    return this.aiService.generate(body.action as any, body.content, body.prompt);
+  async generate(
+    @Body() body: { action?: string; content: string; prompt?: string },
+  ) {
+    return this.aiService.generate(
+      body.action as any,
+      body.content,
+      body.prompt,
+    );
   }
 
   @Post('generate/stream')
@@ -63,6 +71,7 @@ export class AiController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('chats')
   async listChats(
     @Body() body: { limit?: number; cursor?: string },
@@ -73,6 +82,7 @@ export class AiController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('chats/info')
   async getChatInfo(
     @Body() body: { chatId: string },
@@ -108,6 +118,7 @@ export class AiController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('chats/search')
   async searchChats(
     @Body() body: { query: string },

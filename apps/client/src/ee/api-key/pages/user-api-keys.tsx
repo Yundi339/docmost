@@ -29,7 +29,7 @@ export default function UserApiKeys() {
   const { data, isLoading } = useGetApiKeysQuery({ cursor });
   const [workspace] = useAtom(workspaceAtom);
   const { isAdmin } = useUserRole();
-  const mcpEnabled = workspace?.settings?.ai?.mcp === true;
+  const mcpEnabled = resolveMcpMode(workspace?.settings?.ai) !== "off";
   const restrictToAdmins = workspace?.settings?.api?.restrictToAdmins === true;
   const canCreate = !restrictToAdmins || isAdmin;
 
@@ -62,7 +62,13 @@ export default function UserApiKeys() {
       </Text>
 
       {mcpEnabled && canCreate && (
-        <Alert variant="light" color="blue" mb="md" p="sm" icon={<IconInfoCircle />}>
+        <Alert
+          variant="light"
+          color="blue"
+          mb="md"
+          p="sm"
+          icon={<IconInfoCircle />}
+        >
           <Text size="sm">
             {t(
               "Your workspace has MCP enabled. Use your API key to connect AI assistants.",
@@ -84,9 +90,17 @@ export default function UserApiKeys() {
           </Button>
         </Group>
       ) : restrictToAdmins ? (
-        <Alert variant="light" color="yellow" mb="md" p="sm" icon={<IconInfoCircle />}>
+        <Alert
+          variant="light"
+          color="yellow"
+          mb="md"
+          p="sm"
+          icon={<IconInfoCircle />}
+        >
           <Text size="sm">
-            {t("API key creation is restricted to admins by your workspace administrator.")}
+            {t(
+              "API key creation is restricted to admins by your workspace administrator.",
+            )}
           </Text>
         </Alert>
       ) : null}
@@ -140,4 +154,20 @@ export default function UserApiKeys() {
       />
     </>
   );
+}
+
+type McpMode = "off" | "read-only" | "read-write";
+
+function resolveMcpMode(aiSettings: any): McpMode {
+  if (
+    aiSettings?.mcpMode === "read-only" ||
+    aiSettings?.mcpMode === "read-write"
+  ) {
+    return aiSettings.mcpMode;
+  }
+  if (aiSettings?.mcpMode === "off") {
+    return "off";
+  }
+
+  return aiSettings?.mcp === true ? "read-write" : "off";
 }

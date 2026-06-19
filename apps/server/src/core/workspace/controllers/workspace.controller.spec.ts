@@ -115,4 +115,19 @@ describe('WorkspaceController', () => {
 
     expect(workspaceService.update).not.toHaveBeenCalled();
   });
+
+  it('blocks members from updating MCP mode even when member AI settings are enabled', async () => {
+    ability.cannot.mockReturnValue(true);
+
+    await expect(
+      controller.updateWorkspace(
+        response(),
+        dto({ mcpMode: 'read-write' }),
+        user(UserRole.MEMBER),
+        workspace({ ai: { allowMemberSettings: true } }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(workspaceService.update).not.toHaveBeenCalled();
+  });
 });

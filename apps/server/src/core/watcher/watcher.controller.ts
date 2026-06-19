@@ -11,6 +11,8 @@ import { WatcherService } from './watcher.service';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
+import { ApiKeyScope } from '../api-key/api-key-scopes';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { WatcherPageDto } from './dto/watcher.dto';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
@@ -70,6 +72,7 @@ export class WatcherController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('watch-status')
   async getWatchStatus(@Body() dto: WatcherPageDto, @AuthUser() user: User) {
     const page = await this.pageRepo.findById(dto.pageId);

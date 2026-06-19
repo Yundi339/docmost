@@ -10,6 +10,8 @@ import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
+import { ApiKeyScope } from '../../core/api-key/api-key-scopes';
 import { PagePermissionService } from './page-permission.service';
 
 @UseGuards(JwtAuthGuard)
@@ -18,6 +20,7 @@ export class PagePermissionController {
   constructor(private readonly service: PagePermissionService) {}
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('permission-info')
   async getInfo(
     @Body() body: { pageId: string },
@@ -28,6 +31,7 @@ export class PagePermissionController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('permissions')
   async listPermissions(
     @Body()

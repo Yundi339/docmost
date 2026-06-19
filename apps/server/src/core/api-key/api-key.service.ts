@@ -19,8 +19,6 @@ import {
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import { UserRole } from '../../common/helpers/types/permission';
 import { isUserDisabled } from '../../common/helpers';
-import { LicenseCheckService } from '../../integrations/environment/license-check.service';
-import { Feature } from '../../common/features';
 import {
   DEFAULT_API_KEY_SCOPES,
   LEGACY_API_KEY_SCOPES,
@@ -39,7 +37,6 @@ export class ApiKeyService {
     private readonly tokenService: TokenService,
     private readonly userRepo: UserRepo,
     private readonly workspaceRepo: WorkspaceRepo,
-    private readonly licenseCheckService: LicenseCheckService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -171,16 +168,6 @@ export class ApiKeyService {
     const workspace = await this.workspaceRepo.findById(payload.workspaceId);
     if (!workspace) {
       throw new ForbiddenException('Workspace not found');
-    }
-
-    if (
-      !this.licenseCheckService.hasFeature(
-        workspace.licenseKey,
-        Feature.API_KEYS,
-        workspace.plan,
-      )
-    ) {
-      throw new ForbiddenException('API keys are not enabled');
     }
 
     const user = await this.userRepo.findById(payload.sub, payload.workspaceId);

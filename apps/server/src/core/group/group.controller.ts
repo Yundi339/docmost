@@ -18,6 +18,8 @@ import { AddGroupUserDto } from './dto/add-group-user.dto';
 import { RemoveGroupUserDto } from './dto/remove-group-user.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
+import { ApiKeyScope } from '../api-key/api-key-scopes';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import WorkspaceAbilityFactory from '../casl/abilities/workspace-ability.factory';
 import {
@@ -35,6 +37,7 @@ export class GroupController {
   ) {}
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/')
   getWorkspaceGroups(
     @Body() pagination: PaginationOptions,
@@ -50,6 +53,7 @@ export class GroupController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/info')
   getGroup(
     @Body() groupIdDto: GroupIdDto,
@@ -101,6 +105,7 @@ export class GroupController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('members')
   getGroupMembers(
     @Body() groupIdDto: GroupIdDto,

@@ -126,6 +126,19 @@ export class McpService implements OnModuleDestroy {
           );
         return;
       }
+      if (
+        session.mode !== context.mode ||
+        !sameScopes(session.scopes, context.scopes)
+      ) {
+        await session.transport.close();
+        this.sessions.delete(sessionId);
+        res.writeHead(403, { 'Content-Type': 'application/json' }).end(
+          JSON.stringify({
+            error: 'MCP session permissions changed. Reconnect required.',
+          }),
+        );
+        return;
+      }
       await session.transport.handleRequest(req, res, body);
       return;
     }
@@ -1005,4 +1018,11 @@ function getMcpTargetMetadata(args: Record<string, any>) {
       .filter((key) => typeof args[key] !== 'undefined')
       .map((key) => [key, args[key]]),
   );
+}
+
+function sameScopes(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+
+  const leftSet = new Set(left);
+  return right.every((scope) => leftSet.has(scope));
 }

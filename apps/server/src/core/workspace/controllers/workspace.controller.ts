@@ -25,6 +25,7 @@ import {
 } from '../dto/invitation.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { SessionAuthGuard } from '../../../common/guards/session-auth.guard';
+import { RequireApiKeyScopes } from '../../../common/decorators/api-key-scope.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import WorkspaceAbilityFactory from '../../casl/abilities/workspace-ability.factory';
 import {
@@ -38,6 +39,7 @@ import { CheckHostnameDto } from '../dto/check-hostname.dto';
 import { RemoveWorkspaceUserDto } from '../dto/remove-workspace-user.dto';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { UserRole } from '../../../common/helpers/types/permission';
+import { ApiKeyScope } from '../../api-key/api-key-scopes';
 
 @UseGuards(JwtAuthGuard)
 @Controller('workspace')
@@ -59,12 +61,14 @@ export class WorkspaceController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/info')
   async getWorkspace(@AuthWorkspace() workspace: Workspace) {
     return this.workspaceService.getWorkspaceInfo(workspace.id);
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('entitlements')
   async getEntitlements(@AuthWorkspace() workspace: Workspace) {
     let { licenseKey } = workspace;
@@ -123,6 +127,7 @@ export class WorkspaceController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('members')
   async getWorkspaceMembers(
     @Body()
@@ -210,6 +215,7 @@ export class WorkspaceController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('invites')
   async getInvitations(
     @AuthUser() user: User,
@@ -343,6 +349,7 @@ export class WorkspaceController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('invites/link')
   async getInviteLink(
     @Body() inviteDto: InvitationIdDto,
@@ -372,8 +379,6 @@ export class WorkspaceController {
 const MEMBER_AI_SETTINGS_FIELDS = new Set([
   'aiSearch',
   'generativeAi',
-  'mcpEnabled',
-  'mcpMode',
   'aiChat',
 ]);
 

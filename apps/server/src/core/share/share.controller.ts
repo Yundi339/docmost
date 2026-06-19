@@ -26,6 +26,8 @@ import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo'
 import { PageAccessService } from '../page/page-access/page-access.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
+import { ApiKeyScope } from '../api-key/api-key-scopes';
 import { ShareRepo } from '@docmost/db/repos/share/share.repo';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { LicenseCheckService } from '../../integrations/environment/license-check.service';
@@ -49,6 +51,7 @@ export class ShareController {
   ) {}
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/')
   async getShares(
     @AuthUser() user: User,
@@ -111,6 +114,7 @@ export class ShareController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/for-page')
   async getShareForPage(
     @Body() dto: SharePageIdDto,

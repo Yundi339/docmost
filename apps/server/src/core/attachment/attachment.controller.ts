@@ -25,6 +25,7 @@ import * as bytes from 'bytes';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
 import { Attachment, User, Workspace } from '@docmost/db/types/entity.types';
 import { StorageService } from '../../integrations/storage/storage.service';
 import {
@@ -61,6 +62,7 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../integrations/audit/audit.service';
+import { ApiKeyScope } from '../api-key/api-key-scopes';
 
 @Controller()
 export class AttachmentController {
@@ -374,7 +376,11 @@ export class AttachmentController {
     }
 
     // Prevent path traversal attacks
-    if (fileName.includes('..') || fileName.includes('/') || fileName.includes('\\')) {
+    if (
+      fileName.includes('..') ||
+      fileName.includes('/') ||
+      fileName.includes('\\')
+    ) {
       throw new BadRequestException('Invalid filename');
     }
 
@@ -395,6 +401,7 @@ export class AttachmentController {
 
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('files/info')
   async getAttachmentInfo(
     @Body() dto: AttachmentInfoDto,

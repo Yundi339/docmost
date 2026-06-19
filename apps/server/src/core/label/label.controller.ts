@@ -14,6 +14,8 @@ import { FindPagesByLabelDto, ListLabelsDto } from './dto/label.dto';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
+import { ApiKeyScope } from '../api-key/api-key-scopes';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { LabelRepo, LabelType } from '@docmost/db/repos/label/label.repo';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
@@ -34,6 +36,7 @@ export class LabelController {
   ) {}
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/')
   async getLabels(
     @Body() dto: ListLabelsDto,
@@ -50,6 +53,7 @@ export class LabelController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('pages')
   async findPagesByLabel(
     @Body() dto: FindPagesByLabelDto,

@@ -15,7 +15,6 @@ describe('ApiKeyService', () => {
   let tokenService: { generateApiToken: jest.Mock };
   let userRepo: { findById: jest.Mock };
   let workspaceRepo: { findById: jest.Mock };
-  let licenseCheckService: { hasFeature: jest.Mock };
   let auditService: { log: jest.Mock };
 
   const workspace = (settings: Record<string, any> = {}) =>
@@ -52,9 +51,6 @@ describe('ApiKeyService', () => {
         plan: null,
       }),
     };
-    licenseCheckService = {
-      hasFeature: jest.fn().mockReturnValue(true),
-    };
     auditService = {
       log: jest.fn(),
     };
@@ -64,7 +60,6 @@ describe('ApiKeyService', () => {
       tokenService as any,
       userRepo as any,
       workspaceRepo as any,
-      licenseCheckService as any,
       auditService as any,
     );
   });

@@ -356,22 +356,8 @@ export class WorkspaceService {
       }
 
       if (
-        typeof updateWorkspaceDto.mcpEnabled !== 'undefined' ||
-        typeof updateWorkspaceDto.mcpMode !== 'undefined'
-      ) {
-        if (
-          !this.licenseCheckService.hasFeature(ws.licenseKey, 'mcp', ws.plan)
-        ) {
-          throw new ForbiddenException('This feature requires a valid license');
-        }
-      }
-
-      if (
         typeof updateWorkspaceDto.disablePublicSharing !== 'undefined' ||
         typeof updateWorkspaceDto.trashRetentionDays !== 'undefined' ||
-        typeof updateWorkspaceDto.restrictApiToAdmins !== 'undefined' ||
-        typeof updateWorkspaceDto.allowMemberApiManagement !== 'undefined' ||
-        typeof updateWorkspaceDto.allowMemberAiSettings !== 'undefined' ||
         typeof updateWorkspaceDto.allowMemberTemplates !== 'undefined'
       ) {
         if (

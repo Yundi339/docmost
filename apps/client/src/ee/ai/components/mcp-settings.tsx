@@ -6,7 +6,6 @@ import {
   ActionIcon,
   Tooltip,
   Stack,
-  Alert,
   SegmentedControl,
 } from "@mantine/core";
 import { useAtom } from "jotai";
@@ -15,19 +14,14 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { updateWorkspace } from "@/features/workspace/services/workspace-service.ts";
 import { notifications } from "@mantine/notifications";
-import { useHasFeature } from "@/ee/hooks/use-feature";
-import { Feature } from "@/ee/features";
-import { useUpgradeLabel } from "@/ee/hooks/use-upgrade-label";
 import { getAppUrl } from "@/lib/config.ts";
-import { IconCheck, IconCopy, IconInfoCircle } from "@tabler/icons-react";
+import { IconCheck, IconCopy } from "@tabler/icons-react";
 import { CopyButton } from "@/components/common/copy-button.tsx";
 
 export default function McpSettings() {
   const { t } = useTranslation();
   const [workspace, setWorkspace] = useAtom(workspaceAtom);
   const [mode, setMode] = useState(resolveMcpMode(workspace?.settings?.ai));
-  const hasAccess = useHasFeature(Feature.MCP);
-  const upgradeLabel = useUpgradeLabel();
 
   const mcpUrl = `${getAppUrl()}/mcp`;
 
@@ -46,12 +40,6 @@ export default function McpSettings() {
 
   return (
     <Stack gap="lg">
-      {!hasAccess && (
-        <Alert icon={<IconInfoCircle />} title={upgradeLabel} color="blue">
-          {t("MCP is only available in the enterprise edition.")}
-        </Alert>
-      )}
-
       <Group justify="space-between" wrap="nowrap" gap="xl">
         <div>
           <Text size="md">{t("Model Context Protocol (MCP)")}</Text>
@@ -62,18 +50,15 @@ export default function McpSettings() {
           </Text>
         </div>
 
-        <Tooltip label={upgradeLabel} disabled={hasAccess}>
-          <SegmentedControl
-            value={mode}
-            onChange={handleChange}
-            disabled={!hasAccess}
-            data={[
-              { value: "off", label: t("Off") },
-              { value: "read-only", label: t("Read-only") },
-              { value: "read-write", label: t("Read-write") },
-            ]}
-          />
-        </Tooltip>
+        <SegmentedControl
+          value={mode}
+          onChange={handleChange}
+          data={[
+            { value: "off", label: t("Off") },
+            { value: "read-only", label: t("Read-only") },
+            { value: "read-write", label: t("Read-write") },
+          ]}
+        />
       </Group>
 
       {mode !== "off" && (

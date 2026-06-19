@@ -11,6 +11,7 @@ import { EnvironmentService } from '../../integrations/environment/environment.s
 import { addDays } from 'date-fns';
 import { JwtType } from '../../core/auth/dto/jwt-payload';
 import { ApiKeyScope, hasApiKeyScope } from '../../core/api-key/api-key-scopes';
+import { API_KEY_SCOPES_KEY } from '../decorators/api-key-scope.decorator';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -50,12 +51,17 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       return;
     }
 
-    const requiredScope = isReadMethod(req.method)
-      ? ApiKeyScope.REST_READ
-      : ApiKeyScope.REST_WRITE;
+    const requiredScopes = this.reflector.getAllAndOverride<ApiKeyScope[]>(
+      API_KEY_SCOPES_KEY,
+      [ctx.getHandler(), ctx.getClass()],
+    ) ?? [
+      isReadMethod(req.method) ? ApiKeyScope.REST_READ : ApiKeyScope.REST_WRITE,
+    ];
 
-    if (!hasApiKeyScope(req.raw?.apiKey?.scopes, requiredScope)) {
-      throw new ForbiddenException(`Missing API key scope: ${requiredScope}`);
+    for (const requiredScope of requiredScopes) {
+      if (!hasApiKeyScope(req.raw?.apiKey?.scopes, requiredScope)) {
+        throw new ForbiddenException(`Missing API key scope: ${requiredScope}`);
+      }
     }
   }
 

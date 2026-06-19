@@ -191,4 +191,42 @@ describe('McpService access control', () => {
       JSON.stringify({ error: 'Session does not belong to this user' }),
     );
   });
+
+  it('closes existing sessions when MCP permissions change', async () => {
+    const end = jest.fn();
+    const close = jest.fn().mockResolvedValue(undefined);
+    const handleRequest = jest.fn();
+    const res = {
+      writeHead: jest.fn().mockReturnValue({ end }),
+    };
+    (service as any).sessions.set('session-id', {
+      userId: 'user-id',
+      workspaceId: 'workspace-id',
+      apiKeyId: 'api-key-id',
+      mode: 'read-write',
+      scopes: [ApiKeyScope.MCP_WRITE],
+      transport: { close, handleRequest },
+    });
+
+    await service.handleRequest(
+      { headers: { 'mcp-session-id': 'session-id' } } as any,
+      res as any,
+      {},
+      { id: 'user-id' } as any,
+      { id: 'workspace-id' } as any,
+      context('read-only', [ApiKeyScope.MCP_READ]),
+    );
+
+    expect(close).toHaveBeenCalled();
+    expect(handleRequest).not.toHaveBeenCalled();
+    expect((service as any).sessions.has('session-id')).toBe(false);
+    expect(res.writeHead).toHaveBeenCalledWith(403, {
+      'Content-Type': 'application/json',
+    });
+    expect(end).toHaveBeenCalledWith(
+      JSON.stringify({
+        error: 'MCP session permissions changed. Reconnect required.',
+      }),
+    );
+  });
 });

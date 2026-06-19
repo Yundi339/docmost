@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
+import { ApiKeyScope } from '../api-key/api-key-scopes';
 import { User } from '@docmost/db/types/entity.types';
 import { DatabaseService } from './database.service';
 import {
@@ -38,6 +40,7 @@ export class DatabaseController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('info')
   info(@Body() dto: DatabaseInfoDto, @AuthUser() user: User) {
     return this.databaseService.getDatabase(dto.databaseId, user);
@@ -68,6 +71,7 @@ export class DatabaseController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('records/list')
   listRecords(@Body() dto: ListDatabaseRecordsDto, @AuthUser() user: User) {
     return this.databaseService.listRecords(dto.databaseId, user);
@@ -99,14 +103,12 @@ export class DatabaseController {
 
   @HttpCode(HttpStatus.OK)
   @Post('records/reorder')
-  reorderRecord(
-    @Body() dto: ReorderDatabaseRecordDto,
-    @AuthUser() user: User,
-  ) {
+  reorderRecord(@Body() dto: ReorderDatabaseRecordDto, @AuthUser() user: User) {
     return this.databaseService.reorderRecord(dto, user);
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('embed-url')
   embedUrl(@Body() dto: DatabaseEmbedUrlDto, @AuthUser() user: User) {
     return this.databaseService.getEmbedUrl(dto.databaseId, dto.viewId, user);

@@ -31,6 +31,8 @@ import { PageVisitorService } from './services/page-visitor.service';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
+import { ApiKeyScope } from '../api-key/api-key-scopes';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { Page, User, Workspace } from '@docmost/db/types/entity.types';
 import { SidebarPageDto } from './dto/sidebar-page.dto';
@@ -75,6 +77,7 @@ export class PageController {
   ) {}
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/info')
   async getPage(@Body() dto: PageInfoDto, @AuthUser() user: User) {
     const page = await this.pageRepo.findById(dto.pageId, {
@@ -119,6 +122,7 @@ export class PageController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('labels')
   async getPageLabels(
     @Body() dto: PageIdDto,
@@ -149,19 +153,12 @@ export class PageController {
 
     await this.pageAccessService.validateCanEdit(page, user);
 
-    return this.labelService.addLabelsToPage(
-      page.id,
-      dto.names,
-      workspace.id,
-    );
+    return this.labelService.addLabelsToPage(page.id, dto.names, workspace.id);
   }
 
   @HttpCode(HttpStatus.OK)
   @Post('labels/remove')
-  async removePageLabel(
-    @Body() dto: RemoveLabelDto,
-    @AuthUser() user: User,
-  ) {
+  async removePageLabel(@Body() dto: RemoveLabelDto, @AuthUser() user: User) {
     const page = await this.pageRepo.findById(dto.pageId);
     if (!page || page.deletedAt) {
       throw new NotFoundException('Page not found');
@@ -177,6 +174,7 @@ export class PageController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('backlinks-count')
   async getBacklinksCount(
     @Body() dto: PageIdDto,
@@ -192,6 +190,7 @@ export class PageController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('backlinks')
   async getBacklinks(
     @Body() dto: BacklinksListDto,
@@ -427,6 +426,7 @@ export class PageController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('recent')
   async getRecentPages(
     @Body() recentPageDto: RecentPageDto,
@@ -454,6 +454,7 @@ export class PageController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('created-by-user')
   async getCreatedByPages(
     @Body() dto: CreatedByUserDto,
@@ -463,20 +464,23 @@ export class PageController {
     const targetUserId = dto.userId ?? user.id;
 
     if (dto.spaceId) {
-      const ability = await this.spaceAbility.createForUser(
-        user,
-        dto.spaceId,
-      );
+      const ability = await this.spaceAbility.createForUser(user, dto.spaceId);
 
       if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
         throw new ForbiddenException();
       }
     }
 
-    return this.pageService.getCreatedByPages(targetUserId, user.id, pagination, dto.spaceId);
+    return this.pageService.getCreatedByPages(
+      targetUserId,
+      user.id,
+      pagination,
+      dto.spaceId,
+    );
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('trash')
   async getDeletedPages(
     @Body() deletedPageDto: DeletedPageDto,
@@ -502,6 +506,7 @@ export class PageController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/history')
   async getPageHistory(
     @Body() dto: PageIdDto,
@@ -519,6 +524,7 @@ export class PageController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/history/info')
   async getPageHistoryInfo(
     @Body() dto: PageHistoryIdDto,
@@ -541,6 +547,7 @@ export class PageController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/visitors')
   async getPageVisitors(
     @Body() dto: PageIdDto,
@@ -564,6 +571,7 @@ export class PageController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/sidebar-pages')
   async getSidebarPages(
     @Body() dto: SidebarPageDto,
@@ -869,6 +877,7 @@ export class PageController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/breadcrumbs')
   async getPageBreadcrumbs(@Body() dto: PageIdDto, @AuthUser() user: User) {
     const page = await this.pageRepo.findById(dto.pageId);

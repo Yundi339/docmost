@@ -13,6 +13,8 @@ import { SpaceService } from './services/space.service';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RequireApiKeyScopes } from '../../common/decorators/api-key-scope.decorator';
+import { ApiKeyScope } from '../api-key/api-key-scopes';
 import { SpaceIdDto } from './dto/space-id.dto';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { SpaceMemberService } from './services/space-member.service';
@@ -47,6 +49,7 @@ export class SpaceController {
   ) {}
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('/')
   async getWorkspaceSpaces(
     @Body()
@@ -91,6 +94,7 @@ export class SpaceController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('info')
   async getSpaceInfo(
     @Body() spaceIdDto: SpaceIdDto,
@@ -178,6 +182,7 @@ export class SpaceController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('members')
   async getSpaceMembers(
     @Body() spaceIdDto: SpaceIdDto,
