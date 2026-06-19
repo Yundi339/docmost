@@ -35,6 +35,30 @@ const formSchema = z.object({
   expiresAt: z.string().optional(),
 });
 type FormValues = z.infer<typeof formSchema>;
+type ExpirationOption = "30" | "60" | "90" | "365" | "custom";
+
+function addDays(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
+function toEndOfDayIso(value?: string) {
+  if (!value) return null;
+
+  let date: Date;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    date = new Date(year, month - 1, day);
+  } else {
+    date = new Date(value);
+  }
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  date.setHours(23, 59, 59, 999);
+  return date.toISOString();
+}
 
 export function CreateApiKeyModal({
   opened,
@@ -42,7 +66,8 @@ export function CreateApiKeyModal({
   onSuccess,
 }: CreateApiKeyModalProps) {
   const { t, i18n } = useTranslation();
-  const [expirationOption, setExpirationOption] = useState<string>("30");
+  const [expirationOption, setExpirationOption] =
+    useState<ExpirationOption>("30");
   const [scopePreset, setScopePreset] = useState<string>("full");
   const [customScopes, setCustomScopes] = useState<ApiKeyScope[]>([
     "rest:read",
@@ -58,17 +83,12 @@ export function CreateApiKeyModal({
     },
   });
 
-  const getExpirationDate = (): string | undefined => {
-    if (expirationOption === "never") {
-      return undefined;
-    }
+  const getExpirationDate = (): string | null => {
     if (expirationOption === "custom") {
-      return form.values.expiresAt;
+      return toEndOfDayIso(form.values.expiresAt);
     }
     const days = parseInt(expirationOption);
-    const date = new Date();
-    date.setDate(date.getDate() + days);
-    return date.toISOString();
+    return addDays(days).toISOString();
   };
 
   const getExpirationLabel = (days: number) => {
@@ -88,7 +108,6 @@ export function CreateApiKeyModal({
     { value: "90", label: getExpirationLabel(90) },
     { value: "365", label: getExpirationLabel(365) },
     { value: "custom", label: t("Custom") },
-    { value: "never", label: t("No expiration") },
   ];
 
   const scopePresetOptions = API_KEY_SCOPE_PRESETS.map((preset) => ({
@@ -114,13 +133,16 @@ export function CreateApiKeyModal({
     );
   };
 
-  const handleSubmit = async (data: {
-    name?: string;
-    expiresAt?: string | Date;
-  }) => {
+  const handleSubmit = async (data: FormValues) => {
+    const expiresAt = getExpirationDate();
+    if (!expiresAt) {
+      form.setFieldError("expiresAt", "Expiration date is required");
+      return;
+    }
+
     const groupData = {
       name: data.name,
-      expiresAt: getExpirationDate(),
+      expiresAt,
       scopes: getScopes(),
     };
 
@@ -182,7 +204,9 @@ export function CreateApiKeyModal({
             label={t("Expiration")}
             data={expirationOptions}
             value={expirationOption}
-            onChange={(value) => setExpirationOption(value || "30")}
+            onChange={(value) =>
+              setExpirationOption((value as ExpirationOption) || "30")
+            }
             leftSection={<IconCalendar size={16} />}
             allowDeselect={false}
           />
@@ -192,7 +216,8 @@ export function CreateApiKeyModal({
               <DateInput
                 label={t("Custom expiration date")}
                 placeholder={t("Select expiration date")}
-                minDate={new Date()}
+                minDate={addDays(1)}
+                required
                 {...form.getInputProps("expiresAt")}
               />
             </Suspense>

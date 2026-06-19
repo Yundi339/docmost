@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { ApiKeyService } from './api-key.service';
 import { UserRole } from '../../common/helpers/types/permission';
 
@@ -28,6 +28,9 @@ describe('ApiKeyService', () => {
       id,
       role,
     }) as any;
+
+  const futureExpiration = () =>
+    new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   beforeEach(() => {
     apiKeyRepo = {
@@ -181,7 +184,7 @@ describe('ApiKeyService', () => {
   it('enforces admin-only API key creation when the workspace restricts it', async () => {
     await expect(
       service.create(
-        { name: 'Member key' },
+        { name: 'Member key', expiresAt: futureExpiration() },
         user(UserRole.MEMBER, 'member-id'),
         workspace({ api: { restrictToAdmins: true } }),
       ),
@@ -190,7 +193,35 @@ describe('ApiKeyService', () => {
     expect(apiKeyRepo.insertApiKey).not.toHaveBeenCalled();
   });
 
+  it('requires an expiration when creating API keys', async () => {
+    await expect(
+      service.create(
+        { name: 'Member key' } as any,
+        user(UserRole.MEMBER, 'member-id'),
+        workspace(),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(apiKeyRepo.insertApiKey).not.toHaveBeenCalled();
+  });
+
+  it('rejects API key expirations in the past', async () => {
+    await expect(
+      service.create(
+        {
+          name: 'Member key',
+          expiresAt: new Date(Date.now() - 1000).toISOString(),
+        },
+        user(UserRole.MEMBER, 'member-id'),
+        workspace(),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(apiKeyRepo.insertApiKey).not.toHaveBeenCalled();
+  });
+
   it('allows admins to create API keys when creation is admin-only', async () => {
+    const expiresAt = futureExpiration();
     apiKeyRepo.insertApiKey.mockResolvedValue({ id: 'api-key-id' });
     tokenService.generateApiToken.mockResolvedValue('api-token');
     apiKeyRepo.findById.mockResolvedValue({
@@ -200,7 +231,7 @@ describe('ApiKeyService', () => {
 
     await expect(
       service.create(
-        { name: 'Admin key', scopes: ['mcp:read'] },
+        { name: 'Admin key', expiresAt, scopes: ['mcp:read'] },
         user(UserRole.ADMIN, 'admin-id'),
         workspace({ api: { restrictToAdmins: true } }),
       ),
@@ -209,10 +240,16 @@ describe('ApiKeyService', () => {
       token: 'api-token',
     });
     expect(apiKeyRepo.insertApiKey).toHaveBeenCalledWith(
-      expect.objectContaining({ scopes: ['mcp:read'] }),
+      expect.objectContaining({
+        expiresAt: new Date(expiresAt),
+        scopes: ['mcp:read'],
+      }),
     );
     expect(tokenService.generateApiToken).toHaveBeenCalledWith(
-      expect.objectContaining({ scopes: ['mcp:read'] }),
+      expect.objectContaining({
+        expiresIn: expect.any(Number),
+        scopes: ['mcp:read'],
+      }),
     );
   });
 

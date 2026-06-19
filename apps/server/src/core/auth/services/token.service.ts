@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { StringValue } from 'ms';
-import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import {
   JwtApiKeyPayload,
   JwtAttachmentPayload,
@@ -20,10 +19,7 @@ import { isUserDisabled } from '../../../common/helpers';
 
 @Injectable()
 export class TokenService {
-  constructor(
-    private jwtService: JwtService,
-    private environmentService: EnvironmentService,
-  ) {}
+  constructor(private jwtService: JwtService) {}
 
   async generateAccessToken(user: User, sessionId: string): Promise<string> {
     if (isUserDisabled(user)) {
@@ -99,7 +95,7 @@ export class TokenService {
     user: User;
     workspaceId: string;
     scopes?: string[];
-    expiresIn?: StringValue | number;
+    expiresIn: StringValue | number;
   }): Promise<string> {
     const { apiKeyId, user, workspaceId, scopes, expiresIn } = opts;
     if (isUserDisabled(user)) {
@@ -114,22 +110,11 @@ export class TokenService {
       type: JwtType.API_KEY,
     };
 
-    if (expiresIn) {
-      return this.jwtService.sign(payload, { expiresIn });
-    }
-
-    const nonExpiringJwtService = new JwtService({
-      secret: this.environmentService.getAppSecret(),
-      signOptions: { issuer: 'Docmost' },
-    });
-
-    return nonExpiringJwtService.sign(payload);
+    return this.jwtService.sign(payload, { expiresIn });
   }
 
   async verifyJwt(token: string, tokenType: string) {
-    const payload = await this.jwtService.verifyAsync(token, {
-      secret: this.environmentService.getAppSecret(),
-    });
+    const payload = await this.jwtService.verifyAsync(token);
 
     if (payload.type !== tokenType) {
       throw new UnauthorizedException(

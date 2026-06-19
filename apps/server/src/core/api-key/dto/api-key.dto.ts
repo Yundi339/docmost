@@ -15,9 +15,8 @@ export class CreateApiKeyDto {
   @MaxLength(100)
   name: string;
 
-  @IsOptional()
   @IsDateString()
-  expiresAt?: string;
+  expiresAt: string;
 
   @IsOptional()
   @IsArray()

@@ -23,17 +23,16 @@ describe('TokenService', () => {
       },
     });
 
-    service = new TokenService(jwtService, {
-      getAppSecret: () => 'test-secret',
-    } as any);
+    service = new TokenService(jwtService);
   });
 
-  it('does not set an expiry for non-expiring API tokens', async () => {
+  it('sets an expiry for API tokens', async () => {
     const token = await service.generateApiToken({
       apiKeyId: 'api-key-id',
       user,
       workspaceId: 'workspace-id',
       scopes: ['mcp:read'],
+      expiresIn: 60,
     });
 
     const payload = jwtService.decode(token) as Record<string, any>;
@@ -45,18 +44,6 @@ describe('TokenService', () => {
       type: JwtType.API_KEY,
       iss: 'Docmost',
     });
-    expect(payload.exp).toBeUndefined();
-  });
-
-  it('sets an expiry for expiring API tokens', async () => {
-    const token = await service.generateApiToken({
-      apiKeyId: 'api-key-id',
-      user,
-      workspaceId: 'workspace-id',
-      expiresIn: 60,
-    });
-
-    const payload = jwtService.decode(token) as Record<string, any>;
     expect(payload.exp - payload.iat).toBe(60);
   });
 });

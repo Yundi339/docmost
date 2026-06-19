@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -64,7 +65,7 @@ export class ApiKeyService {
     }
 
     const scopes = normalizeApiKeyScopes(dto.scopes, DEFAULT_API_KEY_SCOPES);
-    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    const expiresAt = this.parseExpirationDate(dto.expiresAt);
 
     const apiKey = await this.apiKeyRepo.insertApiKey({
       name: dto.name,
@@ -74,9 +75,10 @@ export class ApiKeyService {
       scopes,
     });
 
-    const expiresInSec = expiresAt
-      ? Math.max(Math.floor((expiresAt.getTime() - Date.now()) / 1000), 60)
-      : undefined;
+    const expiresInSec = Math.max(
+      Math.floor((expiresAt.getTime() - Date.now()) / 1000),
+      60,
+    );
 
     const token = await this.tokenService.generateApiToken({
       apiKeyId: apiKey.id,
@@ -192,6 +194,23 @@ export class ApiKeyService {
 
   private canManageWorkspaceApiKeys(user: User) {
     return isWorkspaceOwner(user);
+  }
+
+  private parseExpirationDate(expiresAt: string | undefined) {
+    if (!expiresAt) {
+      throw new BadRequestException('API key expiration is required');
+    }
+
+    const date = new Date(expiresAt);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('API key expiration is invalid');
+    }
+
+    if (date <= new Date()) {
+      throw new BadRequestException('API key expiration must be in the future');
+    }
+
+    return date;
   }
 }
 
