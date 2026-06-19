@@ -840,7 +840,9 @@ function isSameDatabaseDrag(
 function shouldSkipRecordDrag(target: EventTarget | null) {
   return Boolean(
     target instanceof HTMLElement &&
-    target.closest("button, a, [data-no-row-drag]"),
+    target.closest(
+      "button, a, input, textarea, select, [contenteditable='true'], [data-no-row-drag]",
+    ),
   );
 }
 
@@ -866,8 +868,9 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [destinationAction, setDestinationAction] =
     useState<CardDestinationAction | null>(null);
-  const [boardMoveRecord, setBoardMoveRecord] =
-    useState<DatabaseRecord | null>(null);
+  const [boardMoveRecord, setBoardMoveRecord] = useState<DatabaseRecord | null>(
+    null,
+  );
   const [kanbanDraftStatus, setKanbanDraftStatus] = useState<string | null>(
     null,
   );
@@ -1628,6 +1631,58 @@ export default function DatabaseBlockView(props: NodeViewProps) {
                 options: nextOptions,
               });
             }}
+            onRenameColumn={(status, name) => {
+              const nextOption = uniqueOptionName(
+                name,
+                statuses.filter((option) => option !== status),
+              );
+              if (nextOption === status) return;
+
+              const nextOptions = statuses.map((option) =>
+                option === status ? nextOption : option,
+              );
+              if (statusField) {
+                updateFieldMutation.mutate({
+                  fieldName: statusField.name,
+                  options: nextOptions,
+                });
+              } else {
+                createFieldMutation.mutate({
+                  name: "Status",
+                  type: "status",
+                  options: nextOptions,
+                });
+              }
+
+              records
+                .filter((record) => record.status === status)
+                .forEach((record) =>
+                  updateRecord(record.id, { Status: nextOption }),
+                );
+            }}
+            onDeleteColumn={(status) => {
+              const nextOptions = statuses.filter(
+                (option) => option !== status,
+              );
+              if (
+                nextOptions.length === statuses.length ||
+                nextOptions.length === 0
+              )
+                return;
+
+              if (statusField) {
+                updateFieldMutation.mutate({
+                  fieldName: statusField.name,
+                  options: nextOptions,
+                });
+                return;
+              }
+              createFieldMutation.mutate({
+                name: "Status",
+                type: "status",
+                options: nextOptions,
+              });
+            }}
             onAttachPage={(payload, fields) =>
               attachPageFromPayload(payload, fields)
             }
@@ -1889,6 +1944,8 @@ function KanbanView({
   onDraftRequestHandled,
   onCreate,
   onCreateColumn,
+  onRenameColumn,
+  onDeleteColumn,
   onAttachPage,
   onMovePage,
   onMoveOut,
@@ -1908,6 +1965,8 @@ function KanbanView({
   onDraftRequestHandled: () => void;
   onCreate: (status: string, title?: string) => void;
   onCreateColumn: (name: string, afterStatus?: string) => void;
+  onRenameColumn: (status: string, name: string) => void;
+  onDeleteColumn: (status: string) => void;
   onAttachPage: (
     payload: DragPagePayload | null,
     fields?: Record<string, unknown>,
@@ -1930,6 +1989,9 @@ function KanbanView({
     null,
   );
   const [columnDraft, setColumnDraft] = useState("");
+  const [renamingColumn, setRenamingColumn] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const columnRenameCancelledRef = useRef(false);
   const [draftStatus, setDraftStatus] = useState<string | null>(null);
   const [dropColumnStatus, setDropColumnStatus] = useState<string | null>(null);
   const [dropTargetRecordId, setDropTargetRecordId] = useState<string | null>(
@@ -1981,6 +2043,24 @@ function KanbanView({
   const startAddingColumn = (afterStatus: string | null) => {
     setColumnDraft("");
     setAddingColumnAfter(afterStatus ?? ADD_COLUMN_AT_END);
+  };
+
+  const startRenamingColumn = (status: string) => {
+    columnRenameCancelledRef.current = false;
+    setRenameDraft(status);
+    setRenamingColumn(status);
+  };
+
+  const commitColumnRename = () => {
+    const current = renamingColumn;
+    const nextName = renameDraft.trim();
+    const cancelled = columnRenameCancelledRef.current;
+    columnRenameCancelledRef.current = false;
+    setRenamingColumn(null);
+    setRenameDraft("");
+    if (cancelled) return;
+    if (!current || !nextName || nextName === current) return;
+    onRenameColumn(current, nextName);
   };
 
   const startDraft = (status: string) => {
@@ -2050,13 +2130,84 @@ function KanbanView({
               }}
             >
               <Group justify="space-between" mb="xs" align="center">
-                <Badge className={classes.columnBadge} variant="light">
-                  {t(status)}
-                </Badge>
+                {renamingColumn === status ? (
+                  <input
+                    autoFocus
+                    className={classes.columnNameInput}
+                    value={renameDraft}
+                    onChange={(event) =>
+                      setRenameDraft(event.currentTarget.value)
+                    }
+                    onBlur={commitColumnRename}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      }
+                      if (event.key === "Escape") {
+                        columnRenameCancelledRef.current = true;
+                        event.preventDefault();
+                        setRenamingColumn(null);
+                        setRenameDraft("");
+                      }
+                    }}
+                  />
+                ) : (
+                  <Badge className={classes.columnBadge} variant="light">
+                    {t(status)}
+                  </Badge>
+                )}
                 <Group gap={3} className={classes.columnActions}>
-                  <ActionIcon variant="subtle" size="sm" aria-label={t("More")}>
-                    <IconDots size={15} />
-                  </ActionIcon>
+                  {canEdit && (
+                    <Menu
+                      shadow="md"
+                      width={190}
+                      position="bottom-end"
+                      withinPortal
+                    >
+                      <Menu.Target>
+                        <ActionIcon
+                          variant="subtle"
+                          size="sm"
+                          aria-label={t("Column actions")}
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <IconDots size={15} />
+                        </ActionIcon>
+                      </Menu.Target>
+                      <Menu.Dropdown
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <Menu.Item
+                          leftSection={<IconSettings size={15} />}
+                          onClick={() => startRenamingColumn(status)}
+                        >
+                          {t("Rename")}
+                        </Menu.Item>
+                        <Menu.Item
+                          leftSection={<IconArrowBarToRight size={15} />}
+                          onClick={() => startAddingColumn(status)}
+                        >
+                          {t("New group")}
+                        </Menu.Item>
+                        <Menu.Divider />
+                        <Menu.Item
+                          color="red"
+                          leftSection={<IconTrash size={15} />}
+                          disabled={
+                            columnRecords.length > 0 || statuses.length <= 1
+                          }
+                          onClick={() => onDeleteColumn(status)}
+                        >
+                          {t("Delete empty group")}
+                        </Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
+                  )}
                   {canEdit && (
                     <ActionIcon
                       variant="subtle"
@@ -2341,11 +2492,17 @@ function TaskCard({
             aria-label={t("Card actions")}
             data-no-row-drag
             onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
           >
             <IconDots size={16} />
           </ActionIcon>
         </Menu.Target>
-        <Menu.Dropdown onMouseDown={(event) => event.stopPropagation()}>
+        <Menu.Dropdown
+          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
           <Menu.Item
             leftSection={<IconArrowsMaximize size={15} />}
             onClick={() => onOpen(record)}
