@@ -171,10 +171,12 @@ export class PageRepo {
     pageId: string,
     deletedById: string,
     workspaceId: string,
+    trx?: KyselyTransaction,
   ): Promise<void> {
     const currentDate = new Date();
+    const db = dbOrTx(this.db, trx);
 
-    const descendants = await this.db
+    const descendants = await db
       .withRecursive('page_descendants', (db) =>
         db
           .selectFrom('pages')
@@ -196,19 +198,26 @@ export class PageRepo {
     const pageIds = descendants.map((d) => d.id);
 
     if (pageIds.length > 0) {
-      await executeTx(this.db, async (trx) => {
-        await trx
-          .updateTable('pages')
-          .set({
-            deletedById: deletedById,
-            deletedAt: currentDate,
-          })
-          .where('id', 'in', pageIds)
-          .where('deletedAt', 'is', null)
-          .execute();
+      await executeTx(
+        this.db,
+        async (activeTrx) => {
+          await activeTrx
+            .updateTable('pages')
+            .set({
+              deletedById: deletedById,
+              deletedAt: currentDate,
+            })
+            .where('id', 'in', pageIds)
+            .where('deletedAt', 'is', null)
+            .execute();
 
-        await trx.deleteFrom('shares').where('pageId', 'in', pageIds).execute();
-      });
+          await activeTrx
+            .deleteFrom('shares')
+            .where('pageId', 'in', pageIds)
+            .execute();
+        },
+        trx,
+      );
 
       this.eventEmitter.emit(EventName.PAGE_SOFT_DELETED, {
         pageIds: pageIds,
@@ -329,7 +338,12 @@ export class PageRepo {
     });
   }
 
-  async getCreatedByPages(creatorId: string, requestingUserId: string, pagination: PaginationOptions, spaceId?: string) {
+  async getCreatedByPages(
+    creatorId: string,
+    requestingUserId: string,
+    pagination: PaginationOptions,
+    spaceId?: string,
+  ) {
     let query = this.db
       .selectFrom('pages')
       .select(this.baseFields)
@@ -340,7 +354,11 @@ export class PageRepo {
     if (spaceId) {
       query = query.where('spaceId', '=', spaceId);
     } else {
-      query = query.where('spaceId', 'in', this.spaceMemberRepo.getUserSpaceIdsQuery(requestingUserId));
+      query = query.where(
+        'spaceId',
+        'in',
+        this.spaceMemberRepo.getUserSpaceIdsQuery(requestingUserId),
+      );
     }
 
     return executeWithCursorPagination(query, {

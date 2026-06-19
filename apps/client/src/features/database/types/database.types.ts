@@ -77,6 +77,11 @@ export interface DatabaseBlockInfo {
   metadata?: Record<string, unknown>;
 }
 
+export interface DatabaseBoardTarget extends DatabaseBlockInfo {
+  pageTitle?: string | null;
+  pageIcon?: string | null;
+}
+
 export interface DatabaseRecord {
   id: string;
   title: string;

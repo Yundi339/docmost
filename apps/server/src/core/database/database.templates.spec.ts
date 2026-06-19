@@ -56,6 +56,11 @@ describe('database templates', () => {
       priority: 'High',
       tags: ['Launch', 'Docs'],
       description: 'Prepare rollout notes',
+      pageId: null,
+      pageSlugId: null,
+      pageTitle: null,
+      pageIcon: null,
+      sortOrder: null,
       fields: {
         Title: 'Write launch plan',
         Status: 'In progress',

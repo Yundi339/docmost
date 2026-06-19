@@ -21,8 +21,10 @@ import {
   DatabaseEmbedUrlDto,
   DatabaseInfoDto,
   DetachDatabaseRecordDto,
+  ListDatabaseTargetsDto,
   ListDatabaseRecordsDto,
   ReorderDatabaseRecordDto,
+  TrashDatabaseRecordPageDto,
   UpdateDatabaseFieldDto,
   UpdateDatabaseRecordDto,
   UpdateDatabaseTitleDto,
@@ -44,6 +46,12 @@ export class DatabaseController {
   @Post('info')
   info(@Body() dto: DatabaseInfoDto, @AuthUser() user: User) {
     return this.databaseService.getDatabase(dto.databaseId, user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('targets/list')
+  listTargets(@Body() dto: ListDatabaseTargetsDto, @AuthUser() user: User) {
+    return this.databaseService.listTargets(dto, user);
   }
 
   @HttpCode(HttpStatus.OK)
@@ -99,6 +107,15 @@ export class DatabaseController {
   @Post('records/detach')
   detachRecord(@Body() dto: DetachDatabaseRecordDto, @AuthUser() user: User) {
     return this.databaseService.detachRecord(dto, user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('records/trash-page')
+  trashRecordPage(
+    @Body() dto: TrashDatabaseRecordPageDto,
+    @AuthUser() user: User,
+  ) {
+    return this.databaseService.trashRecordPage(dto, user);
   }
 
   @HttpCode(HttpStatus.OK)

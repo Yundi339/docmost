@@ -1,4 +1,4 @@
-import { type Editor, NodeViewProps, NodeViewWrapper } from '@tiptap/react';
+import { type Editor, NodeViewProps, NodeViewWrapper } from "@tiptap/react";
 import {
   ActionIcon,
   Badge,
@@ -6,14 +6,15 @@ import {
   Group,
   Loader,
   Menu,
+  Modal,
   Popover,
   Stack,
   Switch,
   Text,
   TextInput,
   Tooltip,
-} from '@mantine/core';
-import { DatePicker } from '@mantine/dates';
+} from "@mantine/core";
+import { DatePicker } from "@mantine/dates";
 import {
   IconAdjustmentsHorizontal,
   IconAlignLeft,
@@ -71,8 +72,8 @@ import {
   IconUsers,
   IconX,
   IconForms,
-} from '@tabler/icons-react';
-import clsx from 'clsx';
+} from "@tabler/icons-react";
+import clsx from "clsx";
 import {
   ComponentType,
   DragEvent as ReactDragEvent,
@@ -83,44 +84,48 @@ import {
   useMemo,
   useRef,
   useState,
-} from 'react';
-import { createPortal } from 'react-dom';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
-import { CustomAvatar } from '@/components/ui/custom-avatar';
+} from "react";
+import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
+import { CustomAvatar } from "@/components/ui/custom-avatar";
 import {
   useCreateDatabaseFieldMutation,
   useCreateDatabaseRecordMutation,
   useCreateDatabaseViewMutation,
   useAttachDatabasePageMutation,
+  useAttachDatabasePageToDatabaseMutation,
+  useDatabaseBoardTargetsQuery,
   useDatabaseInfoQuery,
   useDatabaseRecordsQuery,
   useDetachDatabaseRecordMutation,
   useReorderDatabaseRecordMutation,
+  useTrashDatabaseRecordPageMutation,
   useUpdateDatabaseFieldMutation,
   useUpdateDatabaseRecordMutation,
   useUpdateDatabaseTitleMutation,
-} from '@/features/database/queries/database-query';
+} from "@/features/database/queries/database-query";
 import {
+  DatabaseBoardTarget,
   DatabaseFieldDefinition,
   DatabaseRecord,
   DatabaseUser,
   DatabaseViewDefinition,
   DatabaseViewType,
-} from '@/features/database/types/database.types';
-import { buildPageUrl } from '@/features/page/page.utils';
-import { PageActionMenu } from '@/features/page/components/header/page-header-menu';
+} from "@/features/database/types/database.types";
+import { buildPageUrl } from "@/features/page/page.utils";
+import { PageActionMenu } from "@/features/page/components/header/page-header-menu";
 import {
   useMovePageUnderMutation,
   usePageQuery,
-  useRemovePageMutation,
-} from '@/features/page/queries/page-query';
-import { useSearchSuggestionsQuery } from '@/features/search/queries/search-query';
-import { DestinationPickerModal } from '@/components/ui/destination-picker/destination-picker-modal';
-import type { DestinationSelection } from '@/components/ui/destination-picker/destination-picker.types';
-import { PageShareModal } from '@/ee/page-permission';
-import { notifications } from '@mantine/notifications';
-import { EmbeddedRecordPageEditor } from './embedded-record-page-editor';
+  useRestorePageMutation,
+} from "@/features/page/queries/page-query";
+import { useSearchSuggestionsQuery } from "@/features/search/queries/search-query";
+import { DestinationPickerModal } from "@/components/ui/destination-picker/destination-picker-modal";
+import type { DestinationSelection } from "@/components/ui/destination-picker/destination-picker.types";
+import { PageShareModal } from "@/ee/page-permission";
+import { notifications } from "@mantine/notifications";
+import { EmbeddedRecordPageEditor } from "./embedded-record-page-editor";
 import {
   clearDocmostDragPayloads,
   DocmostPageDragPayload,
@@ -129,73 +134,81 @@ import {
   parseDocmostPageDragPayload,
   setDocmostDatabaseRecordDragData,
   setDocmostPageDragData,
-} from '@/features/database/utils/database-drag';
-import classes from './database-block-view.module.css';
+} from "@/features/database/utils/database-drag";
+import classes from "./database-block-view.module.css";
 
-const DEFAULT_STATUSES = ['Todo', 'In progress', 'Done'];
-const DEFAULT_DATABASE_TITLE = 'New database';
-const TITLE_FIELD = 'Title';
+const DEFAULT_STATUSES = ["Todo", "In progress", "Done"];
+const DEFAULT_DATABASE_TITLE = "New database";
+const TITLE_FIELD = "Title";
 
 const FIELD_LABELS: Record<string, string> = {
-  Title: 'Name',
-  Status: 'Status',
-  Assignee: 'Assignee',
-  'Due date': 'Due date',
-  Priority: 'Priority',
-  Tags: 'Tags',
-  Description: 'Description',
+  Title: "Name",
+  Status: "Status",
+  Assignee: "Assignee",
+  "Due date": "Due date",
+  Priority: "Priority",
+  Tags: "Tags",
+  Description: "Description",
 };
 
-const FIELD_TYPE_LABELS: Record<DatabaseFieldDefinition['type'], string> = {
-  text: 'Text',
-  longText: 'Text',
-  number: 'Number',
-  select: 'Select',
-  singleSelect: 'Select',
-  multiSelect: 'Multi-select',
-  status: 'Status',
-  date: 'Date',
-  user: 'Person',
-  person: 'Person',
-  attachment: 'Files & media',
-  checkbox: 'Checkbox',
-  url: 'URL',
-  email: 'Email',
-  phone: 'Phone',
-  relation: 'Relation',
-  rollup: 'Rollup',
-  formula: 'Formula',
-  button: 'Button',
-  id: 'ID',
-  place: 'Place',
+const FIELD_TYPE_LABELS: Record<DatabaseFieldDefinition["type"], string> = {
+  text: "Text",
+  longText: "Text",
+  number: "Number",
+  select: "Select",
+  singleSelect: "Select",
+  multiSelect: "Multi-select",
+  status: "Status",
+  date: "Date",
+  user: "Person",
+  person: "Person",
+  attachment: "Files & media",
+  checkbox: "Checkbox",
+  url: "URL",
+  email: "Email",
+  phone: "Phone",
+  relation: "Relation",
+  rollup: "Rollup",
+  formula: "Formula",
+  button: "Button",
+  id: "ID",
+  place: "Place",
 };
 
 type FieldTypeOption = {
-  type: DatabaseFieldDefinition['type'];
+  type: DatabaseFieldDefinition["type"];
   label: string;
-  icon: ComponentType<{ size?: string | number; stroke?: string | number; className?: string }>;
+  icon: ComponentType<{
+    size?: string | number;
+    stroke?: string | number;
+    className?: string;
+  }>;
   disabled?: boolean;
 };
 
 const PROPERTY_TYPES: FieldTypeOption[] = [
-  { type: 'text', label: 'Text', icon: IconAlignLeft },
-  { type: 'number', label: 'Number', icon: IconHash },
-  { type: 'singleSelect', label: 'Select', icon: IconCircleDot },
-  { type: 'multiSelect', label: 'Multi-select', icon: IconListDetails },
-  { type: 'status', label: 'Status', icon: IconSparkles },
-  { type: 'date', label: 'Date', icon: IconCalendar },
-  { type: 'user', label: 'Person', icon: IconUsers },
-  { type: 'attachment', label: 'Files & media', icon: IconPaperclip },
-  { type: 'checkbox', label: 'Checkbox', icon: IconCheckbox },
-  { type: 'url', label: 'URL', icon: IconLink },
-  { type: 'phone', label: 'Phone', icon: IconPhone },
-  { type: 'email', label: 'Email', icon: IconAt },
-  { type: 'relation', label: 'Relation', icon: IconRelationOneToOne, disabled: true },
-  { type: 'rollup', label: 'Rollup', icon: IconSearch, disabled: true },
-  { type: 'formula', label: 'Formula', icon: IconFunction, disabled: true },
-  { type: 'button', label: 'Button', icon: IconHandClick, disabled: true },
-  { type: 'id', label: 'ID', icon: IconId },
-  { type: 'place', label: 'Place', icon: IconMapPin, disabled: true },
+  { type: "text", label: "Text", icon: IconAlignLeft },
+  { type: "number", label: "Number", icon: IconHash },
+  { type: "singleSelect", label: "Select", icon: IconCircleDot },
+  { type: "multiSelect", label: "Multi-select", icon: IconListDetails },
+  { type: "status", label: "Status", icon: IconSparkles },
+  { type: "date", label: "Date", icon: IconCalendar },
+  { type: "user", label: "Person", icon: IconUsers },
+  { type: "checkbox", label: "Checkbox", icon: IconCheckbox },
+  { type: "url", label: "URL", icon: IconLink },
+  { type: "phone", label: "Phone", icon: IconPhone },
+  { type: "email", label: "Email", icon: IconAt },
+  {
+    type: "relation",
+    label: "Relation",
+    icon: IconRelationOneToOne,
+    disabled: true,
+  },
+  { type: "rollup", label: "Rollup", icon: IconSearch, disabled: true },
+  { type: "formula", label: "Formula", icon: IconFunction, disabled: true },
+  { type: "button", label: "Button", icon: IconHandClick, disabled: true },
+  { type: "id", label: "ID", icon: IconId },
+  { type: "place", label: "Place", icon: IconMapPin, disabled: true },
 ];
 
 type PeopleOption = {
@@ -207,28 +220,29 @@ type PeopleOption = {
 
 type CreateFieldInput = {
   name?: string;
-  type: DatabaseFieldDefinition['type'];
+  type: DatabaseFieldDefinition["type"];
   options?: string[];
-  position?: 'left' | 'right' | 'end';
+  position?: "left" | "right" | "end";
   anchorFieldName?: string;
 };
 
 type UpdateFieldInput = {
   fieldName: string;
   name?: string;
-  type?: DatabaseFieldDefinition['type'];
+  type?: DatabaseFieldDefinition["type"];
   options?: string[];
 };
 
 type CardDestinationAction = {
-  type: 'move-page' | 'move-out';
+  type: "move-page" | "move-out";
   record: DatabaseRecord;
 };
 
 function valueAsString(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return '';
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value);
+  return "";
 }
 
 function valueAsStringArray(value: unknown): string[] {
@@ -241,31 +255,39 @@ function fieldLabel(fieldName: string, t: (key: string) => string) {
   return t(FIELD_LABELS[fieldName] ?? fieldName);
 }
 
-function fieldTypeLabel(type: DatabaseFieldDefinition['type'], t: (key: string) => string) {
-  return t(FIELD_TYPE_LABELS[type] ?? 'Text');
+function fieldTypeLabel(
+  type: DatabaseFieldDefinition["type"],
+  t: (key: string) => string,
+) {
+  return t(FIELD_TYPE_LABELS[type] ?? "Text");
 }
 
 function translatedValue(value: unknown, t: (key: string) => string): string {
   const stringValue = valueAsString(value);
-  return stringValue ? t(stringValue) : '';
+  return stringValue ? t(stringValue) : "";
 }
 
-function supportsOptions(type: DatabaseFieldDefinition['type']) {
-  return ['select', 'singleSelect', 'multiSelect', 'status'].includes(type);
+function supportsOptions(type: DatabaseFieldDefinition["type"]) {
+  return ["select", "singleSelect", "multiSelect", "status"].includes(type);
 }
 
-function defaultOptionsForType(type: DatabaseFieldDefinition['type']): string[] | undefined {
-  if (type === 'status') return DEFAULT_STATUSES;
-  if (type === 'select' || type === 'singleSelect' || type === 'multiSelect') return ['Option'];
+function defaultOptionsForType(
+  type: DatabaseFieldDefinition["type"],
+): string[] | undefined {
+  if (type === "status") return DEFAULT_STATUSES;
+  if (type === "select" || type === "singleSelect" || type === "multiSelect")
+    return ["Option"];
   return undefined;
 }
 
 function normalizeOptions(options: string[]) {
-  return Array.from(new Set(options.map((option) => option.trim()).filter(Boolean)));
+  return Array.from(
+    new Set(options.map((option) => option.trim()).filter(Boolean)),
+  );
 }
 
 function uniqueOptionName(rawName: string, options: string[]) {
-  const baseName = rawName.trim() || 'New group';
+  const baseName = rawName.trim() || "New group";
   const existing = new Set(options);
   if (!existing.has(baseName)) return baseName;
 
@@ -287,68 +309,82 @@ function datePickerToStorage(value: string | Date | null): string | null {
 
 function optionTone(option: string, index = 0) {
   const normalized = option.toLowerCase();
-  if (['todo', 'not started', 'not start', '未开始', '待办'].some((item) => normalized.includes(item))) {
-    return 'gray';
+  if (
+    ["todo", "not started", "not start", "未开始", "待办"].some((item) =>
+      normalized.includes(item),
+    )
+  ) {
+    return "gray";
   }
-  if (['progress', 'doing', '进行中'].some((item) => normalized.includes(item))) {
-    return 'blue';
+  if (
+    ["progress", "doing", "进行中"].some((item) => normalized.includes(item))
+  ) {
+    return "blue";
   }
-  if (['done', 'complete', 'completed', '已完成', '完成'].some((item) => normalized.includes(item))) {
-    return 'green';
+  if (
+    ["done", "complete", "completed", "已完成", "完成"].some((item) =>
+      normalized.includes(item),
+    )
+  ) {
+    return "green";
   }
-  if (['block', 'blocked', '阻塞', 'high', '高'].some((item) => normalized.includes(item))) {
-    return 'red';
+  if (
+    ["block", "blocked", "阻塞", "high", "高"].some((item) =>
+      normalized.includes(item),
+    )
+  ) {
+    return "red";
   }
-  if (['medium', '中'].some((item) => normalized.includes(item))) {
-    return 'yellow';
+  if (["medium", "中"].some((item) => normalized.includes(item))) {
+    return "yellow";
   }
-  if (['low', '低'].some((item) => normalized.includes(item))) {
-    return 'gray';
+  if (["low", "低"].some((item) => normalized.includes(item))) {
+    return "gray";
   }
-  return ['gray', 'blue', 'green', 'yellow', 'purple', 'pink'][index % 6];
+  return ["gray", "blue", "green", "yellow", "purple", "pink"][index % 6];
 }
 
 function viewLabel(view: DatabaseViewDefinition, t: (key: string) => string) {
-  if (view.type === 'kanban') return t(view.name || 'Board');
-  if (view.type === 'table') return t(view.name || 'Table');
-  if (view.type === 'calendar') return t(view.name || 'Calendar');
-  if (view.type === 'gallery') return t(view.name || 'Gallery');
-  if (view.type === 'list') return t(view.name || 'List');
-  if (view.type === 'timeline') return t(view.name || 'Timeline');
-  if (view.type === 'chart') return t(view.name || 'Chart');
-  if (view.type === 'dashboard') return t(view.name || 'Dashboard');
-  if (view.type === 'feed') return t(view.name || 'Feed');
-  if (view.type === 'map') return t(view.name || 'Map');
-  if (view.type === 'form') return t(view.name || 'Form');
+  if (view.type === "kanban") return t(view.name || "Board");
+  if (view.type === "table") return t(view.name || "Table");
+  if (view.type === "calendar") return t(view.name || "Calendar");
+  if (view.type === "gallery") return t(view.name || "Gallery");
+  if (view.type === "list") return t(view.name || "List");
+  if (view.type === "timeline") return t(view.name || "Timeline");
+  if (view.type === "chart") return t(view.name || "Chart");
+  if (view.type === "dashboard") return t(view.name || "Dashboard");
+  if (view.type === "feed") return t(view.name || "Feed");
+  if (view.type === "map") return t(view.name || "Map");
+  if (view.type === "form") return t(view.name || "Form");
   return t(view.name);
 }
 
 function ViewIcon({ type }: { type: DatabaseViewType }) {
-  if (type === 'kanban') return <IconLayoutBoard size={15} />;
-  if (type === 'calendar') return <IconCalendar size={15} />;
-  if (type === 'gallery') return <IconLayoutGrid size={15} />;
-  if (type === 'list') return <IconLayoutList size={15} />;
-  if (type === 'timeline') return <IconTimeline size={15} />;
-  if (type === 'chart') return <IconChartBar size={15} />;
-  if (type === 'dashboard') return <IconLayoutDashboard size={15} />;
-  if (type === 'feed') return <IconRss size={15} />;
-  if (type === 'map') return <IconMap size={15} />;
-  if (type === 'form') return <IconForms size={15} />;
+  if (type === "kanban") return <IconLayoutBoard size={15} />;
+  if (type === "calendar") return <IconCalendar size={15} />;
+  if (type === "gallery") return <IconLayoutGrid size={15} />;
+  if (type === "list") return <IconLayoutList size={15} />;
+  if (type === "timeline") return <IconTimeline size={15} />;
+  if (type === "chart") return <IconChartBar size={15} />;
+  if (type === "dashboard") return <IconLayoutDashboard size={15} />;
+  if (type === "feed") return <IconRss size={15} />;
+  if (type === "map") return <IconMap size={15} />;
+  if (type === "form") return <IconForms size={15} />;
   return <IconTable size={15} />;
 }
 
 function viewNameForType(type: DatabaseViewType) {
-  if (type === 'kanban') return 'Board';
-  if (type === 'calendar') return 'Calendar';
-  if (type === 'gallery') return 'Gallery';
-  if (type === 'list') return 'List';
-  if (type === 'timeline') return 'Timeline';
-  if (type === 'chart') return 'Chart';
-  if (type === 'dashboard') return 'Dashboard';
-  if (type === 'feed') return 'Feed';
-  if (type === 'map') return 'Map';
-  if (type === 'form') return 'Form';
-  return 'Table';
+  if (type === "kanban") return "Board";
+  if (type === "calendar") return "Calendar";
+  if (type === "gallery") return "Gallery";
+  if (type === "list") return "List";
+  if (type === "timeline") return "Timeline";
+  if (type === "chart") return "Chart";
+  if (type === "dashboard") return "Dashboard";
+  if (type === "feed") return "Feed";
+  if (type === "map") return "Map";
+  if (type === "form") return "Form";
+  return "Table";
 }
 
 const VIEW_TYPES: Array<{
@@ -356,17 +392,21 @@ const VIEW_TYPES: Array<{
   description: string;
   groupBy?: string;
 }> = [
-  { type: 'table', description: 'Rows and properties' },
-  { type: 'kanban', description: 'Cards grouped by status', groupBy: 'Status' },
-  { type: 'timeline', description: 'Pages arranged by date', groupBy: 'Due date' },
-  { type: 'calendar', description: 'Pages on a calendar', groupBy: 'Due date' },
-  { type: 'list', description: 'Compact page list' },
-  { type: 'gallery', description: 'Visual page cards' },
-  { type: 'chart', description: 'Summaries and charts' },
-  { type: 'dashboard', description: 'Metrics overview' },
-  { type: 'feed', description: 'Activity-like feed' },
-  { type: 'map', description: 'Location-based records' },
-  { type: 'form', description: 'Collect new pages' },
+  { type: "table", description: "Rows and properties" },
+  { type: "kanban", description: "Cards grouped by status", groupBy: "Status" },
+  {
+    type: "timeline",
+    description: "Pages arranged by date",
+    groupBy: "Due date",
+  },
+  { type: "calendar", description: "Pages on a calendar", groupBy: "Due date" },
+  { type: "list", description: "Compact page list" },
+  { type: "gallery", description: "Visual page cards" },
+  { type: "chart", description: "Summaries and charts" },
+  { type: "dashboard", description: "Metrics overview" },
+  { type: "feed", description: "Activity-like feed" },
+  { type: "map", description: "Location-based records" },
+  { type: "form", description: "Collect new pages" },
 ];
 
 function AddViewMenu({
@@ -374,17 +414,24 @@ function AddViewMenu({
   onCreateView,
 }: {
   existingViews: DatabaseViewDefinition[];
-  onCreateView: (view: { name: string; type: DatabaseViewType; groupBy?: string }) => void;
+  onCreateView: (view: {
+    name: string;
+    type: DatabaseViewType;
+    groupBy?: string;
+  }) => void;
 }) {
   const { t } = useTranslation();
   const [opened, setOpened] = useState(false);
-  const [selectedType, setSelectedType] = useState<DatabaseViewType>('table');
+  const [selectedType, setSelectedType] = useState<DatabaseViewType>("table");
   const existingTypeCount = (type: DatabaseViewType) =>
     existingViews.filter((view) => view.type === type).length;
-  const selectedView = VIEW_TYPES.find((view) => view.type === selectedType) ?? VIEW_TYPES[0];
+  const selectedView =
+    VIEW_TYPES.find((view) => view.type === selectedType) ?? VIEW_TYPES[0];
   const selectedName = (() => {
     const count = existingTypeCount(selectedType);
-    return count > 0 ? `${viewNameForType(selectedType)} ${count + 1}` : viewNameForType(selectedType);
+    return count > 0
+      ? `${viewNameForType(selectedType)} ${count + 1}`
+      : viewNameForType(selectedType);
   })();
 
   return (
@@ -405,11 +452,14 @@ function AddViewMenu({
           <IconPlus size={15} />
         </button>
       </Popover.Target>
-      <Popover.Dropdown className={classes.addViewPopover} onMouseDown={(event) => event.stopPropagation()}>
+      <Popover.Dropdown
+        className={classes.addViewPopover}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className={classes.addViewHeader}>
-          <Text fw={650}>{t('Add a new view')}</Text>
+          <Text fw={650}>{t("Add a new view")}</Text>
           <Text size="xs" c="dimmed">
-            {t('Choose how this database should appear.')}
+            {t("Choose how this database should appear.")}
           </Text>
         </div>
         <div className={classes.addViewGrid}>
@@ -431,7 +481,7 @@ function AddViewMenu({
         </div>
         <div className={classes.addDataSourceRow}>
           <IconDatabase size={16} />
-          <span>{t('Uses current database source')}</span>
+          <span>{t("Uses current database source")}</span>
         </div>
         <div className={classes.addViewFooter}>
           <div className={classes.addViewSelected}>
@@ -450,7 +500,7 @@ function AddViewMenu({
               setOpened(false);
             }}
           >
-            {t('Add view')}
+            {t("Add view")}
           </Button>
         </div>
       </Popover.Dropdown>
@@ -479,7 +529,7 @@ function FieldPickerPopover({
 }) {
   const { t } = useTranslation();
   const [opened, setOpened] = useState(false);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const visibleFields = fields.filter((field) => {
     const labelText = fieldLabel(field.name, t).toLowerCase();
     return labelText.includes(query.trim().toLowerCase());
@@ -497,14 +547,20 @@ function FieldPickerPopover({
       <Popover.Target>
         <button
           type="button"
-          className={clsx(classes.toolbarButton, active && classes.toolbarButtonActive)}
+          className={clsx(
+            classes.toolbarButton,
+            active && classes.toolbarButtonActive,
+          )}
           onClick={() => setOpened((value) => !value)}
         >
           {icon}
           <span>{t(label)}</span>
         </button>
       </Popover.Target>
-      <Popover.Dropdown className={classes.notionPopover} onMouseDown={(event) => event.stopPropagation()}>
+      <Popover.Dropdown
+        className={classes.notionPopover}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <label className={classes.popoverSearch}>
           <IconSearch size={15} />
           <input
@@ -533,7 +589,7 @@ function FieldPickerPopover({
             );
           })}
           {visibleFields.length === 0 && (
-            <div className={classes.popoverEmpty}>{t('No options')}</div>
+            <div className={classes.popoverEmpty}>{t("No options")}</div>
           )}
         </div>
         {footer && (
@@ -574,7 +630,7 @@ function ViewSettingsPopover({
   filterField: string | null;
   filterText: string;
   sortField: string | null;
-  sortDirection: 'asc' | 'desc';
+  sortDirection: "asc" | "desc";
   onFilterFieldChange: (fieldName: string | null) => void;
   onFilterTextChange: (value: string) => void;
   onClearFilter: () => void;
@@ -586,11 +642,14 @@ function ViewSettingsPopover({
   return (
     <Popover width={360} shadow="md" position="bottom-end" withinPortal>
       <Popover.Target>
-        <ActionIcon variant="subtle" aria-label={t('View settings')}>
+        <ActionIcon variant="subtle" aria-label={t("View settings")}>
           <IconAdjustmentsHorizontal size={17} />
         </ActionIcon>
       </Popover.Target>
-      <Popover.Dropdown className={classes.viewSettingsPopover} onMouseDown={(event) => event.stopPropagation()}>
+      <Popover.Dropdown
+        className={classes.viewSettingsPopover}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className={classes.viewSettingsHeader}>
           <ViewIcon type={activeView.type} />
           <div>
@@ -606,13 +665,15 @@ function ViewSettingsPopover({
         <div className={classes.settingsSection}>
           <div className={classes.settingsSectionTitle}>
             <IconFilter size={15} />
-            <span>{t('Filter')}</span>
+            <span>{t("Filter")}</span>
           </div>
           <select
-            value={filterField ?? ''}
-            onChange={(event) => onFilterFieldChange(event.currentTarget.value || null)}
+            value={filterField ?? ""}
+            onChange={(event) =>
+              onFilterFieldChange(event.currentTarget.value || null)
+            }
           >
-            <option value="">{t('All properties')}</option>
+            <option value="">{t("All properties")}</option>
             {fields.map((field) => (
               <option key={field.name} value={field.name}>
                 {fieldLabel(field.name, t)}
@@ -621,13 +682,17 @@ function ViewSettingsPopover({
           </select>
           <input
             value={filterText}
-            placeholder={t('Filter value...')}
+            placeholder={t("Filter value...")}
             onChange={(event) => onFilterTextChange(event.currentTarget.value)}
           />
           {(filterField || filterText) && (
-            <button type="button" className={classes.settingsInlineButton} onClick={onClearFilter}>
+            <button
+              type="button"
+              className={classes.settingsInlineButton}
+              onClick={onClearFilter}
+            >
               <IconX size={14} />
-              {t('Clear')}
+              {t("Clear")}
             </button>
           )}
         </div>
@@ -635,7 +700,7 @@ function ViewSettingsPopover({
         <div className={classes.settingsSection}>
           <div className={classes.settingsSectionTitle}>
             <IconArrowsSort size={15} />
-            <span>{t('Sort')}</span>
+            <span>{t("Sort")}</span>
           </div>
           <div className={classes.viewSettingsList}>
             {fields.map((field) => {
@@ -645,19 +710,32 @@ function ViewSettingsPopover({
                 <button
                   key={field.name}
                   type="button"
-                  className={clsx(classes.viewSettingsItem, active && classes.viewSettingsItemActive)}
+                  className={clsx(
+                    classes.viewSettingsItem,
+                    active && classes.viewSettingsItemActive,
+                  )}
                   onClick={() => onSortFieldChange(field.name)}
                 >
                   <Icon size={16} />
                   <span>{fieldLabel(field.name, t)}</span>
-                  {active && <em>{sortDirection === 'asc' ? t('Ascending') : t('Descending')}</em>}
+                  {active && (
+                    <em>
+                      {sortDirection === "asc"
+                        ? t("Ascending")
+                        : t("Descending")}
+                    </em>
+                  )}
                 </button>
               );
             })}
             {sortField && (
-              <button type="button" className={classes.viewSettingsItem} onClick={onClearSort}>
+              <button
+                type="button"
+                className={classes.viewSettingsItem}
+                onClick={onClearSort}
+              >
                 <IconX size={16} />
-                <span>{t('Clear sort')}</span>
+                <span>{t("Clear sort")}</span>
               </button>
             )}
           </div>
@@ -666,11 +744,11 @@ function ViewSettingsPopover({
         <div className={classes.settingsSection}>
           <div className={classes.settingsSectionTitle}>
             <IconDatabaseCog size={15} />
-            <span>{t('Source')}</span>
+            <span>{t("Source")}</span>
           </div>
           <div className={classes.sourceCard}>
             <IconDatabase size={16} />
-            <span>{sourceTitle || t('Current database')}</span>
+            <span>{sourceTitle || t("Current database")}</span>
           </div>
         </div>
       </Popover.Dropdown>
@@ -678,34 +756,40 @@ function ViewSettingsPopover({
   );
 }
 
-function fieldTypeIcon(type: DatabaseFieldDefinition['type']) {
-  if (type === 'number') return IconHash;
-  if (type === 'singleSelect' || type === 'select') return IconCircleDot;
-  if (type === 'multiSelect') return IconListDetails;
-  if (type === 'status') return IconSparkles;
-  if (type === 'date') return IconCalendar;
-  if (type === 'user' || type === 'person') return IconUsers;
-  if (type === 'attachment') return IconPaperclip;
-  if (type === 'checkbox') return IconCheckbox;
-  if (type === 'url') return IconLink;
-  if (type === 'email') return IconAt;
-  if (type === 'phone') return IconPhone;
-  if (type === 'relation') return IconRelationOneToOne;
-  if (type === 'rollup') return IconSearch;
-  if (type === 'formula') return IconFunction;
-  if (type === 'button') return IconHandClick;
-  if (type === 'id') return IconId;
-  if (type === 'place') return IconMapPin;
+function fieldTypeIcon(type: DatabaseFieldDefinition["type"]) {
+  if (type === "number") return IconHash;
+  if (type === "singleSelect" || type === "select") return IconCircleDot;
+  if (type === "multiSelect") return IconListDetails;
+  if (type === "status") return IconSparkles;
+  if (type === "date") return IconCalendar;
+  if (type === "user" || type === "person") return IconUsers;
+  if (type === "attachment") return IconPaperclip;
+  if (type === "checkbox") return IconCheckbox;
+  if (type === "url") return IconLink;
+  if (type === "email") return IconAt;
+  if (type === "phone") return IconPhone;
+  if (type === "relation") return IconRelationOneToOne;
+  if (type === "rollup") return IconSearch;
+  if (type === "formula") return IconFunction;
+  if (type === "button") return IconHandClick;
+  if (type === "id") return IconId;
+  if (type === "place") return IconMapPin;
   return IconAlignLeft;
 }
 
 function isSelectField(field: DatabaseFieldDefinition) {
-  return ['singleSelect', 'select', 'status'].includes(field.type) || field.name === 'Status' || field.name === 'Priority';
+  return (
+    ["singleSelect", "select", "status"].includes(field.type) ||
+    field.name === "Status" ||
+    field.name === "Priority"
+  );
 }
 
 type DragPagePayload = DocmostPageDragPayload;
 
-function pagePayloadFromDrag(dataTransfer: DataTransfer): DragPagePayload | null {
+function pagePayloadFromDrag(
+  dataTransfer: DataTransfer,
+): DragPagePayload | null {
   return parseDocmostPageDragPayload(dataTransfer);
 }
 
@@ -714,7 +798,10 @@ function setRecordDragData(
   record: DatabaseRecord,
   sourceDatabaseId?: string,
 ) {
-  setDocmostDatabaseRecordDragData(dataTransfer, { recordId: record.id, sourceDatabaseId });
+  setDocmostDatabaseRecordDragData(dataTransfer, {
+    recordId: record.id,
+    sourceDatabaseId,
+  });
   if (record.pageId && record.pageSlugId) {
     setDocmostPageDragData(dataTransfer, {
       pageId: record.pageId,
@@ -728,7 +815,7 @@ function setRecordDragData(
 }
 
 function getDraggedRecordId(dataTransfer: DataTransfer) {
-  return parseDocmostDatabaseRecordDragPayload(dataTransfer)?.recordId ?? '';
+  return parseDocmostDatabaseRecordDragPayload(dataTransfer)?.recordId ?? "";
 }
 
 function getDraggedRecordSourceDatabaseId(dataTransfer: DataTransfer) {
@@ -744,7 +831,8 @@ function isSameDatabaseDrag(
   databaseId?: string,
   dataTransfer?: DataTransfer,
 ) {
-  const sourceDatabaseId = payload?.sourceDatabaseId ||
+  const sourceDatabaseId =
+    payload?.sourceDatabaseId ||
     (dataTransfer ? getDraggedRecordSourceDatabaseId(dataTransfer) : undefined);
   return Boolean(sourceDatabaseId && sourceDatabaseId === databaseId);
 }
@@ -752,7 +840,7 @@ function isSameDatabaseDrag(
 function shouldSkipRecordDrag(target: EventTarget | null) {
   return Boolean(
     target instanceof HTMLElement &&
-      target.closest('button, a, [data-no-row-drag]'),
+    target.closest("button, a, [data-no-row-drag]"),
   );
 }
 
@@ -762,25 +850,32 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const { spaceSlug } = useParams();
   const { node, selected, editor, updateAttributes } = props;
   const databaseId = node.attrs.databaseId as string | undefined;
-  const fallbackTitle = (node.attrs.title as string | undefined) || DEFAULT_DATABASE_TITLE;
-  const fallbackViewType = (node.attrs.viewType as DatabaseViewType | undefined) || 'table';
+  const fallbackTitle =
+    (node.attrs.title as string | undefined) || DEFAULT_DATABASE_TITLE;
+  const fallbackViewType =
+    (node.attrs.viewType as DatabaseViewType | undefined) || "table";
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [openedRecord, setOpenedRecord] = useState<DatabaseRecord | null>(null);
   const [filterVisible, setFilterVisible] = useState(false);
   const [filterField, setFilterField] = useState<string | null>(null);
-  const [filterText, setFilterText] = useState('');
+  const [filterText, setFilterText] = useState("");
   const [sortField, setSortField] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [userSearch, setUserSearch] = useState('');
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [userSearch, setUserSearch] = useState("");
   const [titleDraft, setTitleDraft] = useState(fallbackTitle);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [destinationAction, setDestinationAction] =
     useState<CardDestinationAction | null>(null);
-  const [kanbanDraftStatus, setKanbanDraftStatus] = useState<string | null>(null);
+  const [boardMoveRecord, setBoardMoveRecord] =
+    useState<DatabaseRecord | null>(null);
+  const [kanbanDraftStatus, setKanbanDraftStatus] = useState<string | null>(
+    null,
+  );
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const databaseQuery = useDatabaseInfoQuery(databaseId);
   const recordsQuery = useDatabaseRecordsQuery(databaseId);
+  const boardTargetsQuery = useDatabaseBoardTargetsQuery(databaseId);
   const createRecordMutation = useCreateDatabaseRecordMutation(databaseId);
   const updateRecordMutation = useUpdateDatabaseRecordMutation(databaseId);
   const updateTitleMutation = useUpdateDatabaseTitleMutation(databaseId);
@@ -789,9 +884,13 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const createViewMutation = useCreateDatabaseViewMutation(databaseId);
   const reorderRecordMutation = useReorderDatabaseRecordMutation(databaseId);
   const attachPageMutation = useAttachDatabasePageMutation(databaseId);
+  const attachPageToDatabaseMutation =
+    useAttachDatabasePageToDatabaseMutation();
   const detachRecordMutation = useDetachDatabaseRecordMutation(databaseId);
+  const trashRecordPageMutation =
+    useTrashDatabaseRecordPageMutation(databaseId);
   const movePageUnderMutation = useMovePageUnderMutation();
-  const removePageMutation = useRemovePageMutation();
+  const restorePageMutation = useRestorePageMutation();
   const userSuggestionsQuery = useSearchSuggestionsQuery({
     query: userSearch,
     includeUsers: true,
@@ -803,24 +902,42 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const records = recordsQuery.data ?? [];
   const views = database?.views?.length
     ? database.views
-    : [{ id: fallbackViewType, name: fallbackViewType, type: fallbackViewType }];
+    : [
+        {
+          id: fallbackViewType,
+          name: fallbackViewType,
+          type: fallbackViewType,
+        },
+      ];
   const activeView =
-    views.find((view) => view.id === (activeViewId || database?.activeViewId)) || views[0];
-  const statusField = database?.fields?.find((field) => field.name === 'Status');
-  const statuses = statusField?.options?.length ? statusField.options : DEFAULT_STATUSES;
-  const fields = database?.fields?.length ? database.fields : [{ name: TITLE_FIELD, type: 'text' as const }];
+    views.find(
+      (view) => view.id === (activeViewId || database?.activeViewId),
+    ) || views[0];
+  const statusField = database?.fields?.find(
+    (field) => field.name === "Status",
+  );
+  const statuses = statusField?.options?.length
+    ? statusField.options
+    : DEFAULT_STATUSES;
+  const fields = database?.fields?.length
+    ? database.fields
+    : [{ name: TITLE_FIELD, type: "text" as const }];
   const hasQueryError = databaseQuery.isError || recordsQuery.isError;
   const isInitialLoading = databaseQuery.isLoading || recordsQuery.isLoading;
+  const manualReorderDisabled = Boolean(sortField || filterText.trim());
 
   const users = useMemo(
     () =>
-      ((userSuggestionsQuery.data?.users ?? []) as DatabaseUser[]).filter((user) =>
-        Boolean(user?.id),
+      ((userSuggestionsQuery.data?.users ?? []) as DatabaseUser[]).filter(
+        (user) => Boolean(user?.id),
       ),
     [userSuggestionsQuery.data],
   );
 
-  const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
+  const userById = useMemo(
+    () => new Map(users.map((user) => [user.id, user])),
+    [users],
+  );
 
   const userOptions: PeopleOption[] = users.map((user) => ({
     value: user.id,
@@ -834,7 +951,11 @@ export default function DatabaseBlockView(props: NodeViewProps) {
     const filteredRecords = normalizedFilter
       ? records.filter((record) => {
           const searchableValues = filterField
-            ? [filterField === TITLE_FIELD ? record.title : record.fields[filterField]]
+            ? [
+                filterField === TITLE_FIELD
+                  ? record.title
+                  : record.fields[filterField],
+              ]
             : [record.title, ...Object.values(record.fields)];
 
           return searchableValues.some((value) =>
@@ -846,13 +967,17 @@ export default function DatabaseBlockView(props: NodeViewProps) {
     if (!sortField) return filteredRecords;
 
     return [...filteredRecords].sort((left, right) => {
-      const leftValue = renderCell(sortField === TITLE_FIELD ? left.title : left.fields[sortField]).toLowerCase();
-      const rightValue = renderCell(sortField === TITLE_FIELD ? right.title : right.fields[sortField]).toLowerCase();
+      const leftValue = renderCell(
+        sortField === TITLE_FIELD ? left.title : left.fields[sortField],
+      ).toLowerCase();
+      const rightValue = renderCell(
+        sortField === TITLE_FIELD ? right.title : right.fields[sortField],
+      ).toLowerCase();
       const result = leftValue.localeCompare(rightValue, undefined, {
         numeric: true,
-        sensitivity: 'base',
+        sensitivity: "base",
       });
-      return sortDirection === 'asc' ? result : -result;
+      return sortDirection === "asc" ? result : -result;
     });
   }, [filterField, filterText, records, sortDirection, sortField]);
 
@@ -863,19 +988,21 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   useEffect(() => {
     if (!openedRecord) return;
 
-    const latestRecord = records.find((record) => record.id === openedRecord.id);
+    const latestRecord = records.find(
+      (record) => record.id === openedRecord.id,
+    );
     if (latestRecord) setOpenedRecord(latestRecord);
   }, [openedRecord?.id, records]);
 
   const createRecordWithFields = (fields: Record<string, unknown> = {}) => {
     createRecordMutation.mutate({
-      Title: '',
-      Status: statuses[0] || 'Todo',
+      Title: "",
+      Status: statuses[0] || "Todo",
       Assignee: [],
-      'Due date': null,
+      "Due date": null,
       Priority: null,
       Tags: [],
-      Description: '',
+      Description: "",
       ...fields,
     });
   };
@@ -883,7 +1010,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const createRecord = (status?: string, title?: string) => {
     const nextTitle = title?.trim();
     createRecordWithFields({
-      Status: status || statuses[0] || 'Todo',
+      Status: status || statuses[0] || "Todo",
       ...(nextTitle ? { Title: nextTitle } : {}),
     });
   };
@@ -894,17 +1021,74 @@ export default function DatabaseBlockView(props: NodeViewProps) {
 
   const openFullPage = (record: DatabaseRecord | null) => {
     if (!record?.pageSlugId) return;
-    navigate(buildPageUrl(spaceSlug, record.pageSlugId, record.pageTitle || record.title));
+    navigate(
+      buildPageUrl(
+        spaceSlug,
+        record.pageSlugId,
+        record.pageTitle || record.title,
+      ),
+    );
+  };
+
+  const notifyManualReorderDisabled = () => {
+    notifications.show({
+      message: t("Clear sort and filter to reorder records manually"),
+      color: "yellow",
+    });
+  };
+
+  const showUndoNotification = (
+    message: string,
+    onUndo: () => void | Promise<void>,
+  ) => {
+    notifications.show({
+      message: (
+        <Group gap="xs" wrap="nowrap">
+          <Text size="sm">{message}</Text>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            onClick={() => void onUndo()}
+          >
+            {t("Undo")}
+          </Button>
+        </Group>
+      ),
+    });
+  };
+
+  const reattachRecordToCurrentBoard = async (
+    record: DatabaseRecord,
+    source?: { databaseId: string; recordId: string },
+  ) => {
+    if (!databaseId || !record.pageId) return;
+
+    await attachPageToDatabaseMutation.mutateAsync({
+      databaseId,
+      pageId: record.pageId,
+      fields: record.fields,
+      sourceDatabaseId: source?.databaseId,
+      sourceRecordId: source?.recordId,
+    });
   };
 
   const reorderRecord = (recordId: string, beforeRecordId?: string) => {
     if (!editor.isEditable) return;
-    const visibleRecords = displayedRecords.filter((record) => record.id !== recordId);
+    if (manualReorderDisabled) {
+      notifyManualReorderDisabled();
+      return;
+    }
+
+    const visibleRecords = displayedRecords.filter(
+      (record) => record.id !== recordId,
+    );
     const beforeIndex = beforeRecordId
       ? visibleRecords.findIndex((record) => record.id === beforeRecordId)
       : visibleRecords.length;
     const afterRecord =
-      visibleRecords[(beforeIndex < 0 ? visibleRecords.length : beforeIndex) - 1];
+      visibleRecords[
+        (beforeIndex < 0 ? visibleRecords.length : beforeIndex) - 1
+      ];
 
     reorderRecordMutation.mutate({
       recordId,
@@ -938,30 +1122,78 @@ export default function DatabaseBlockView(props: NodeViewProps) {
     if (!record.pageId) return;
 
     const target =
-      selection.type === 'page'
+      selection.type === "page"
         ? { targetPageId: selection.pageId }
         : { targetSpaceId: selection.spaceId };
 
     try {
-      if (type === 'move-page') {
+      if (type === "move-page") {
         await movePageUnderMutation.mutateAsync({
           pageId: record.pageId,
           ...target,
         });
+        notifications.show({ message: t("Page moved successfully") });
       } else {
-        await movePageUnderMutation.mutateAsync({
-          pageId: record.pageId,
+        await detachRecordMutation.mutateAsync({
+          recordId: record.id,
           ...target,
         });
-        await detachRecordMutation.mutateAsync({ recordId: record.id });
+        if (openedRecord?.id === record.id) setOpenedRecord(null);
+        showUndoNotification(t("Moved out of board"), async () => {
+          try {
+            await reattachRecordToCurrentBoard(record);
+            notifications.show({ message: t("Restored to board") });
+          } catch {
+            notifications.show({
+              message: t("Failed to restore to board"),
+              color: "red",
+            });
+          }
+        });
       }
 
-      notifications.show({ message: t('Page moved successfully') });
       setDestinationAction(null);
     } catch {
       notifications.show({
-        message: t('Failed to move page'),
-        color: 'red',
+        message: t("Failed to move page"),
+        color: "red",
+      });
+    }
+  };
+
+  const moveRecordToBoard = async (target: DatabaseBoardTarget) => {
+    const record = boardMoveRecord;
+    if (!databaseId || !record?.pageId) return;
+
+    try {
+      const targetRecord = await attachPageToDatabaseMutation.mutateAsync({
+        databaseId: target.id,
+        pageId: record.pageId,
+        fields: record.fields,
+        sourceDatabaseId: databaseId,
+        sourceRecordId: record.id,
+      });
+
+      if (openedRecord?.id === record.id) setOpenedRecord(null);
+      setBoardMoveRecord(null);
+      showUndoNotification(t("Moved to another board"), async () => {
+        try {
+          await reattachRecordToCurrentBoard(record, {
+            databaseId: target.id,
+            recordId: targetRecord.id,
+          });
+          notifications.show({ message: t("Restored to board") });
+        } catch {
+          notifications.show({
+            message: t("Failed to restore to board"),
+            color: "red",
+          });
+        }
+      });
+    } catch {
+      notifications.show({
+        message: t("Failed to move to another board"),
+        color: "red",
       });
     }
   };
@@ -969,12 +1201,49 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const moveRecordPageToTrash = (record: DatabaseRecord) => {
     if (!record.pageId) return;
 
-    removePageMutation.mutate(record.pageId, {
-      onSuccess: () => {
-        void recordsQuery.refetch();
-        if (openedRecord?.id === record.id) setOpenedRecord(null);
+    trashRecordPageMutation.mutate(
+      { recordId: record.id },
+      {
+        onSuccess: () => {
+          if (openedRecord?.id === record.id) setOpenedRecord(null);
+          showUndoNotification(t("Moved to trash"), async () => {
+            try {
+              await restorePageMutation.mutateAsync(record.pageId!);
+              await reattachRecordToCurrentBoard(record);
+              notifications.show({ message: t("Restored to board") });
+            } catch {
+              notifications.show({
+                message: t("Failed to restore to board"),
+                color: "red",
+              });
+            }
+          });
+        },
       },
-    });
+    );
+  };
+
+  const removeRecordFromBoard = async (record: DatabaseRecord) => {
+    try {
+      await detachRecordMutation.mutateAsync({ recordId: record.id });
+      if (openedRecord?.id === record.id) setOpenedRecord(null);
+      showUndoNotification(t("Removed from board"), async () => {
+        try {
+          await reattachRecordToCurrentBoard(record);
+          notifications.show({ message: t("Restored to board") });
+        } catch {
+          notifications.show({
+            message: t("Failed to restore to board"),
+            color: "red",
+          });
+        }
+      });
+    } catch {
+      notifications.show({
+        message: t("Failed to remove from board"),
+        color: "red",
+      });
+    }
   };
 
   const commitTitle = () => {
@@ -991,7 +1260,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
       const root = rootRef.current;
       if (!root) return false;
       const target = event.target as HTMLElement | null;
-      if (target?.closest?.('[data-record-side-page]')) return false;
+      if (target?.closest?.("[data-record-side-page]")) return false;
       if (target && root.contains(target)) return true;
       const rect = root.getBoundingClientRect();
       return (
@@ -1012,13 +1281,17 @@ export default function DatabaseBlockView(props: NodeViewProps) {
       if (!event.dataTransfer || !isInsideThisDatabase(event)) return;
       const recordId = getDraggedRecordId(event.dataTransfer);
       const pagePayload = parseDocmostPageDragPayload(event.dataTransfer);
-      if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) return;
+      if (
+        recordId &&
+        isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+      )
+        return;
       if (!pagePayload?.pageId) return;
 
       const target = event.target as HTMLElement | null;
       const kanbanStatus = target
-        ?.closest?.('[data-database-kanban-status]')
-        ?.getAttribute('data-database-kanban-status');
+        ?.closest?.("[data-database-kanban-status]")
+        ?.getAttribute("data-database-kanban-status");
 
       event.preventDefault();
       event.stopPropagation();
@@ -1028,11 +1301,11 @@ export default function DatabaseBlockView(props: NodeViewProps) {
       );
     };
 
-    document.addEventListener('dragover', handleDocumentDragOver, true);
-    document.addEventListener('drop', handleDocumentDrop, true);
+    document.addEventListener("dragover", handleDocumentDragOver, true);
+    document.addEventListener("drop", handleDocumentDrop, true);
     return () => {
-      document.removeEventListener('dragover', handleDocumentDragOver, true);
-      document.removeEventListener('drop', handleDocumentDrop, true);
+      document.removeEventListener("dragover", handleDocumentDragOver, true);
+      document.removeEventListener("drop", handleDocumentDrop, true);
     };
   }, [databaseId, editor.isEditable, attachPageMutation]);
 
@@ -1043,7 +1316,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
           <IconDatabase size={24} />
           <Text fw={600}>{t(fallbackTitle)}</Text>
           <Text size="sm" c="dimmed">
-            {t('This database block is not connected yet.')}
+            {t("This database block is not connected yet.")}
           </Text>
         </div>
       </NodeViewWrapper>
@@ -1055,41 +1328,64 @@ export default function DatabaseBlockView(props: NodeViewProps) {
       ref={rootRef}
       data-docmost-database-block="true"
       className={clsx(
-        'node-databaseBlock',
+        "node-databaseBlock",
         classes.databaseBlock,
         selected && classes.selected,
         isFullscreen && classes.databaseBlockFullscreen,
       )}
       onDragOverCapture={(event) => {
-        if ((event.target as HTMLElement | null)?.closest?.('[data-record-side-page]')) return;
-        if (!editor.isEditable || !hasDocmostDatabaseDrag(event.dataTransfer)) return;
+        if (
+          (event.target as HTMLElement | null)?.closest?.(
+            "[data-record-side-page]",
+          )
+        )
+          return;
+        if (!editor.isEditable || !hasDocmostDatabaseDrag(event.dataTransfer))
+          return;
         event.preventDefault();
       }}
       onDropCapture={(event) => {
-        if ((event.target as HTMLElement | null)?.closest?.('[data-record-side-page]')) return;
-        if (!editor.isEditable || !hasDocmostDatabaseDrag(event.dataTransfer)) return;
+        if (
+          (event.target as HTMLElement | null)?.closest?.(
+            "[data-record-side-page]",
+          )
+        )
+          return;
+        if (!editor.isEditable || !hasDocmostDatabaseDrag(event.dataTransfer))
+          return;
         const target = event.target as HTMLElement;
-        if (target.closest('[data-database-drop-zone]')) return;
+        if (target.closest("[data-database-drop-zone]")) return;
         const recordId = getDraggedRecordId(event.dataTransfer);
         const pagePayload = pagePayloadFromDrag(event.dataTransfer);
         if (!recordId && !pagePayload) return;
         event.preventDefault();
         event.stopPropagation();
-        if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+        if (
+          recordId &&
+          isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+        ) {
           reorderRecord(recordId);
           return;
         }
         if (pagePayload) attachPageFromPayload(pagePayload);
       }}
       onDrop={(event) => {
-        if ((event.target as HTMLElement | null)?.closest?.('[data-record-side-page]')) return;
+        if (
+          (event.target as HTMLElement | null)?.closest?.(
+            "[data-record-side-page]",
+          )
+        )
+          return;
         const recordId = getDraggedRecordId(event.dataTransfer);
         const pagePayload = pagePayloadFromDrag(event.dataTransfer);
         if (recordId || pagePayload) {
           event.preventDefault();
           event.stopPropagation();
         }
-        if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+        if (
+          recordId &&
+          isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+        ) {
           reorderRecord(recordId);
           return;
         }
@@ -1101,7 +1397,8 @@ export default function DatabaseBlockView(props: NodeViewProps) {
           <input
             className={clsx(
               classes.titleInput,
-              (!titleDraft || titleDraft === DEFAULT_DATABASE_TITLE) && classes.titlePlaceholder,
+              (!titleDraft || titleDraft === DEFAULT_DATABASE_TITLE) &&
+                classes.titlePlaceholder,
             )}
             value={titleDraft}
             placeholder={t(DEFAULT_DATABASE_TITLE)}
@@ -1110,7 +1407,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             onChange={(event) => setTitleDraft(event.currentTarget.value)}
             onBlur={commitTitle}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') {
+              if (event.key === "Enter") {
                 event.currentTarget.blur();
               }
             }}
@@ -1118,15 +1415,23 @@ export default function DatabaseBlockView(props: NodeViewProps) {
           <Group gap={6} wrap="nowrap">
             <ActionIcon
               variant="subtle"
-              aria-label={isFullscreen ? t('Exit fullscreen') : t('Open full page')}
+              aria-label={
+                isFullscreen ? t("Exit fullscreen") : t("Open full page")
+              }
               onClick={() => setIsFullscreen((value) => !value)}
             >
-              {isFullscreen ? <IconX size={16} /> : <IconArrowsMaximize size={16} />}
+              {isFullscreen ? (
+                <IconX size={16} />
+              ) : (
+                <IconArrowsMaximize size={16} />
+              )}
             </ActionIcon>
             <ViewSettingsPopover
               activeView={activeView}
               fields={fields}
-              sourceTitle={titleDraft || database?.title || DEFAULT_DATABASE_TITLE}
+              sourceTitle={
+                titleDraft || database?.title || DEFAULT_DATABASE_TITLE
+              }
               filterField={filterField}
               filterText={filterText}
               sortField={sortField}
@@ -1141,20 +1446,22 @@ export default function DatabaseBlockView(props: NodeViewProps) {
               }}
               onClearFilter={() => {
                 setFilterField(null);
-                setFilterText('');
+                setFilterText("");
                 setFilterVisible(false);
               }}
               onSortFieldChange={(fieldName) => {
                 if (sortField === fieldName) {
-                  setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+                  setSortDirection((direction) =>
+                    direction === "asc" ? "desc" : "asc",
+                  );
                 } else {
                   setSortField(fieldName);
-                  setSortDirection('asc');
+                  setSortDirection("asc");
                 }
               }}
               onClearSort={() => {
                 setSortField(null);
-                setSortDirection('asc');
+                setSortDirection("asc");
               }}
             />
             {editor.isEditable && (
@@ -1166,14 +1473,14 @@ export default function DatabaseBlockView(props: NodeViewProps) {
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();
-                  if (activeView.type === 'kanban') {
-                    setKanbanDraftStatus(statuses[0] || 'Todo');
+                  if (activeView.type === "kanban") {
+                    setKanbanDraftStatus(statuses[0] || "Todo");
                     return;
                   }
                   createRecord();
                 }}
               >
-                {t('New')}
+                {t("New")}
               </Button>
             )}
           </Group>
@@ -1186,7 +1493,10 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             <button
               key={view.id}
               type="button"
-              className={clsx(classes.viewTab, view.id === activeView.id && classes.activeViewTab)}
+              className={clsx(
+                classes.viewTab,
+                view.id === activeView.id && classes.activeViewTab,
+              )}
               onClick={() => setActiveViewId(view.id)}
             >
               <ViewIcon type={view.type} />
@@ -1218,30 +1528,43 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             }}
           />
           <FieldPickerPopover
-            icon={sortField && sortDirection === 'desc' ? <IconSortDescending size={16} /> : <IconArrowsSort size={16} />}
+            icon={
+              sortField && sortDirection === "desc" ? (
+                <IconSortDescending size={16} />
+              ) : (
+                <IconArrowsSort size={16} />
+              )
+            }
             label="Sort"
             placeholder="Sort by..."
             fields={fields}
             active={Boolean(sortField)}
             onSelect={(field) => {
               if (sortField === field.name) {
-                setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+                setSortDirection((direction) =>
+                  direction === "asc" ? "desc" : "asc",
+                );
                 return;
               }
               setSortField(field.name);
-              setSortDirection('asc');
+              setSortDirection("asc");
             }}
           />
         </Group>
       </Group>
 
       {filterVisible && (
-        <div className={classes.filterBar} onMouseDown={(event) => event.stopPropagation()}>
+        <div
+          className={classes.filterBar}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
           <IconFilter size={15} />
-          <span>{filterField ? fieldLabel(filterField, t) : t('All properties')}</span>
+          <span>
+            {filterField ? fieldLabel(filterField, t) : t("All properties")}
+          </span>
           <input
             value={filterText}
-            placeholder={t('Filter value...')}
+            placeholder={t("Filter value...")}
             onChange={(event) => setFilterText(event.currentTarget.value)}
             autoFocus
           />
@@ -1249,7 +1572,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             type="button"
             onClick={() => {
               setFilterField(null);
-              setFilterText('');
+              setFilterText("");
               setFilterVisible(false);
             }}
           >
@@ -1261,16 +1584,16 @@ export default function DatabaseBlockView(props: NodeViewProps) {
       <div className={classes.body}>
         {hasQueryError ? (
           <div className={classes.empty}>
-            <Text fw={600}>{t('Database unavailable')}</Text>
+            <Text fw={600}>{t("Database unavailable")}</Text>
             <Text size="sm" c="dimmed">
-              {t('Check the APITable connection or try refreshing this page.')}
+              {t("Check the APITable connection or try refreshing this page.")}
             </Text>
           </div>
         ) : isInitialLoading ? (
           <Group justify="center" p="xl">
             <Loader size="sm" />
           </Group>
-        ) : activeView.type === 'kanban' ? (
+        ) : activeView.type === "kanban" ? (
           <KanbanView
             records={displayedRecords}
             statuses={statuses}
@@ -1284,8 +1607,14 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             onCreateColumn={(name, afterStatus) => {
               const nextOption = uniqueOptionName(name, statuses);
               const nextOptions = [...statuses];
-              const anchorIndex = afterStatus ? nextOptions.indexOf(afterStatus) : -1;
-              nextOptions.splice(anchorIndex >= 0 ? anchorIndex + 1 : nextOptions.length, 0, nextOption);
+              const anchorIndex = afterStatus
+                ? nextOptions.indexOf(afterStatus)
+                : -1;
+              nextOptions.splice(
+                anchorIndex >= 0 ? anchorIndex + 1 : nextOptions.length,
+                0,
+                nextOption,
+              );
               if (statusField) {
                 updateFieldMutation.mutate({
                   fieldName: statusField.name,
@@ -1294,22 +1623,42 @@ export default function DatabaseBlockView(props: NodeViewProps) {
                 return;
               }
               createFieldMutation.mutate({
-                name: 'Status',
-                type: 'status',
+                name: "Status",
+                type: "status",
                 options: nextOptions,
               });
             }}
-            onAttachPage={(payload, fields) => attachPageFromPayload(payload, fields)}
-            onMovePage={(record) => setDestinationAction({ type: 'move-page', record })}
-            onMoveOut={(record) => setDestinationAction({ type: 'move-out', record })}
+            onAttachPage={(payload, fields) =>
+              attachPageFromPayload(payload, fields)
+            }
+            onMovePage={(record) =>
+              setDestinationAction({ type: "move-page", record })
+            }
+            onMoveOut={(record) =>
+              setDestinationAction({ type: "move-out", record })
+            }
+            onMoveToBoard={setBoardMoveRecord}
+            onRemoveFromBoard={removeRecordFromBoard}
             onMoveToTrash={moveRecordPageToTrash}
             onMoveRecord={(recordId, status, beforeRecordId) => {
-              updateRecord(recordId, { Status: status });
+              const record = records.find((item) => item.id === recordId);
+              const statusChanged = record?.status !== status;
+              if (statusChanged) updateRecord(recordId, { Status: status });
+
+              if (manualReorderDisabled) {
+                if (beforeRecordId || !statusChanged) {
+                  notifyManualReorderDisabled();
+                }
+                return;
+              }
+
               reorderRecord(recordId, beforeRecordId);
             }}
-            onUpdateTitle={(recordId, title) => updateRecord(recordId, { Title: title })}
+            onUpdateTitle={(recordId, title) =>
+              updateRecord(recordId, { Title: title })
+            }
           />
-        ) : activeView.type === 'gallery' ? (
+        ) : activeView.type === "gallery" ? (
           <GalleryView
             records={displayedRecords}
             canEdit={editor.isEditable}
@@ -1318,7 +1667,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             onAttachPage={attachPageFromPayload}
             onReorderRecord={reorderRecord}
           />
-        ) : activeView.type === 'calendar' ? (
+        ) : activeView.type === "calendar" ? (
           <CalendarView
             records={displayedRecords}
             canEdit={editor.isEditable}
@@ -1328,7 +1677,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             onReorderRecord={reorderRecord}
             onUpdateRecord={updateRecord}
           />
-        ) : activeView.type === 'list' ? (
+        ) : activeView.type === "list" ? (
           <ListView
             records={displayedRecords}
             canEdit={editor.isEditable}
@@ -1338,7 +1687,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             onAttachPage={attachPageFromPayload}
             onReorderRecord={reorderRecord}
           />
-        ) : activeView.type === 'timeline' ? (
+        ) : activeView.type === "timeline" ? (
           <TimelineView
             records={displayedRecords}
             canEdit={editor.isEditable}
@@ -1348,7 +1697,9 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             onReorderRecord={reorderRecord}
             onUpdateRecord={updateRecord}
           />
-        ) : ['chart', 'dashboard', 'feed', 'map', 'form'].includes(activeView.type) ? (
+        ) : ["chart", "dashboard", "feed", "map", "form"].includes(
+            activeView.type,
+          ) ? (
           <SecondaryView
             type={activeView.type}
             records={displayedRecords}
@@ -1380,10 +1731,12 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             }}
             onSortField={(fieldName) => {
               if (sortField === fieldName) {
-                setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+                setSortDirection((direction) =>
+                  direction === "asc" ? "desc" : "asc",
+                );
               } else {
                 setSortField(fieldName);
-                setSortDirection('asc');
+                setSortDirection("asc");
               }
             }}
             onCreateField={(input) => createFieldMutation.mutate(input)}
@@ -1396,14 +1749,26 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         opened={Boolean(destinationAction)}
         onClose={() => setDestinationAction(null)}
         title={
-          destinationAction?.type === 'move-out'
-            ? t('Move out of board to...')
-            : t('Move page to...')
+          destinationAction?.type === "move-out"
+            ? t("Move out of board to...")
+            : t("Move page to...")
         }
-        actionLabel={t('Move')}
+        actionLabel={t("Move")}
         onSelect={selectDestination}
-        loading={movePageUnderMutation.isPending || detachRecordMutation.isPending}
+        loading={
+          movePageUnderMutation.isPending || detachRecordMutation.isPending
+        }
         excludePageId={destinationAction?.record.pageId ?? undefined}
+      />
+
+      <BoardPickerModal
+        opened={Boolean(boardMoveRecord)}
+        onClose={() => setBoardMoveRecord(null)}
+        targets={boardTargetsQuery.data ?? []}
+        loading={
+          boardTargetsQuery.isLoading || attachPageToDatabaseMutation.isPending
+        }
+        onSelect={moveRecordToBoard}
       />
 
       <RecordSidePage
@@ -1424,6 +1789,95 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   );
 }
 
+function BoardPickerModal({
+  opened,
+  onClose,
+  targets,
+  loading,
+  onSelect,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  targets: DatabaseBoardTarget[];
+  loading: boolean;
+  onSelect: (target: DatabaseBoardTarget) => void | Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!opened) setQuery("");
+  }, [opened]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredTargets = normalizedQuery
+    ? targets.filter((target) =>
+        [target.title, target.pageTitle]
+          .filter(Boolean)
+          .some((value) => value!.toLowerCase().includes(normalizedQuery)),
+      )
+    : targets;
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={t("Move to another board...")}
+      size={520}
+      yOffset="10vh"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <Stack gap="sm">
+        <TextInput
+          value={query}
+          leftSection={<IconSearch size={15} />}
+          placeholder={t("Search boards...")}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+          autoFocus
+        />
+        <Stack gap={4}>
+          {loading ? (
+            <Group justify="center" p="md">
+              <Loader size="sm" />
+            </Group>
+          ) : filteredTargets.length === 0 ? (
+            <Text size="sm" c="dimmed" ta="center" py="md">
+              {t("No editable boards found")}
+            </Text>
+          ) : (
+            filteredTargets.map((target) => (
+              <Button
+                key={target.id}
+                variant="subtle"
+                color="gray"
+                justify="flex-start"
+                leftSection={<IconLayoutBoard size={16} />}
+                onClick={() => void onSelect(target)}
+              >
+                <Stack gap={0} align="flex-start">
+                  <Text size="sm" fw={500}>
+                    {target.title || t("Untitled")}
+                  </Text>
+                  {target.pageTitle && (
+                    <Text size="xs" c="dimmed">
+                      {target.pageTitle}
+                    </Text>
+                  )}
+                </Stack>
+              </Button>
+            ))
+          )}
+        </Stack>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            {t("Close")}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 function KanbanView({
   records,
   statuses,
@@ -1438,6 +1892,8 @@ function KanbanView({
   onAttachPage,
   onMovePage,
   onMoveOut,
+  onMoveToBoard,
+  onRemoveFromBoard,
   onMoveToTrash,
   onMoveRecord,
   onUpdateTitle,
@@ -1452,20 +1908,33 @@ function KanbanView({
   onDraftRequestHandled: () => void;
   onCreate: (status: string, title?: string) => void;
   onCreateColumn: (name: string, afterStatus?: string) => void;
-  onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
+  onAttachPage: (
+    payload: DragPagePayload | null,
+    fields?: Record<string, unknown>,
+  ) => void;
   onMovePage: (record: DatabaseRecord) => void;
   onMoveOut: (record: DatabaseRecord) => void;
+  onMoveToBoard: (record: DatabaseRecord) => void;
+  onRemoveFromBoard: (record: DatabaseRecord) => void;
   onMoveToTrash: (record: DatabaseRecord) => void;
-  onMoveRecord: (recordId: string, status: string, beforeRecordId?: string) => void;
+  onMoveRecord: (
+    recordId: string,
+    status: string,
+    beforeRecordId?: string,
+  ) => void;
   onUpdateTitle: (recordId: string, title: string) => void;
 }) {
   const { t } = useTranslation();
-  const ADD_COLUMN_AT_END = '__end__';
-  const [addingColumnAfter, setAddingColumnAfter] = useState<string | null>(null);
-  const [columnDraft, setColumnDraft] = useState('');
+  const ADD_COLUMN_AT_END = "__end__";
+  const [addingColumnAfter, setAddingColumnAfter] = useState<string | null>(
+    null,
+  );
+  const [columnDraft, setColumnDraft] = useState("");
   const [draftStatus, setDraftStatus] = useState<string | null>(null);
   const [dropColumnStatus, setDropColumnStatus] = useState<string | null>(null);
-  const [dropTargetRecordId, setDropTargetRecordId] = useState<string | null>(null);
+  const [dropTargetRecordId, setDropTargetRecordId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!requestedDraftStatus) return;
@@ -1481,9 +1950,11 @@ function KanbanView({
     }
     onCreateColumn(
       nextName,
-      addingColumnAfter === ADD_COLUMN_AT_END ? undefined : addingColumnAfter ?? undefined,
+      addingColumnAfter === ADD_COLUMN_AT_END
+        ? undefined
+        : (addingColumnAfter ?? undefined),
     );
-    setColumnDraft('');
+    setColumnDraft("");
     setAddingColumnAfter(null);
   };
 
@@ -1493,13 +1964,13 @@ function KanbanView({
         autoFocus
         className={classes.addColumnInput}
         value={columnDraft}
-        placeholder={t('New group')}
+        placeholder={t("New group")}
         onChange={(event) => setColumnDraft(event.currentTarget.value)}
         onBlur={commitColumn}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') commitColumn();
-          if (event.key === 'Escape') {
-            setColumnDraft('');
+          if (event.key === "Enter") commitColumn();
+          if (event.key === "Escape") {
+            setColumnDraft("");
             setAddingColumnAfter(null);
           }
         }}
@@ -1508,7 +1979,7 @@ function KanbanView({
   );
 
   const startAddingColumn = (afterStatus: string | null) => {
-    setColumnDraft('');
+    setColumnDraft("");
     setAddingColumnAfter(afterStatus ?? ADD_COLUMN_AT_END);
   };
 
@@ -1519,140 +1990,158 @@ function KanbanView({
   return (
     <div className={classes.board}>
       {statuses.map((status, index) => {
-        const columnRecords = records.filter((record) => record.status === status);
+        const columnRecords = records.filter(
+          (record) => record.status === status,
+        );
         return (
           <Fragment key={status}>
-          <div
-            data-database-drop-zone="true"
-            data-database-kanban-status={status}
-            className={clsx(
-              classes.column,
-              classes[`columnTone${(index % 4) + 1}`],
-              dropColumnStatus === status && classes.columnDropTarget,
-            )}
-            onDragOver={(event) => {
-              if (!canEdit) return;
-              if (!hasDocmostDatabaseDrag(event.dataTransfer)) return;
-              event.preventDefault();
-              event.stopPropagation();
-              setDropColumnStatus(status);
-            }}
-            onDragLeave={(event) => {
-              if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-              setDropColumnStatus((value) => (value === status ? null : value));
-            }}
-            onDrop={(event) => {
-              if (!canEdit) return;
-              const recordId = getDraggedRecordId(event.dataTransfer);
-              const pagePayload = pagePayloadFromDrag(event.dataTransfer);
-              if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+            <div
+              data-database-drop-zone="true"
+              data-database-kanban-status={status}
+              className={clsx(
+                classes.column,
+                classes[`columnTone${(index % 4) + 1}`],
+                dropColumnStatus === status && classes.columnDropTarget,
+              )}
+              onDragOver={(event) => {
+                if (!canEdit) return;
+                if (!hasDocmostDatabaseDrag(event.dataTransfer)) return;
                 event.preventDefault();
                 event.stopPropagation();
-                setDropColumnStatus(null);
-                setDropTargetRecordId(null);
-                onMoveRecord(recordId, status);
-                return;
-              }
-              if (pagePayload) {
-                event.preventDefault();
-                event.stopPropagation();
-                setDropColumnStatus(null);
-                setDropTargetRecordId(null);
-                onAttachPage(pagePayload, { Status: status });
-              }
-            }}
-          >
-            <Group justify="space-between" mb="xs" align="center">
-              <Badge className={classes.columnBadge} variant="light">
-                {t(status)}
-              </Badge>
-              <Group gap={3} className={classes.columnActions}>
-                <ActionIcon variant="subtle" size="sm" aria-label={t('More')}>
-                  <IconDots size={15} />
-                </ActionIcon>
-                {canEdit && (
-                  <ActionIcon
-                    variant="subtle"
-                    size="sm"
-                    aria-label={t('New group')}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      startAddingColumn(status);
-                    }}
-                  >
-                    <IconArrowBarToRight size={15} />
+                setDropColumnStatus(status);
+              }}
+              onDragLeave={(event) => {
+                if (
+                  event.currentTarget.contains(
+                    event.relatedTarget as Node | null,
+                  )
+                )
+                  return;
+                setDropColumnStatus((value) =>
+                  value === status ? null : value,
+                );
+              }}
+              onDrop={(event) => {
+                if (!canEdit) return;
+                const recordId = getDraggedRecordId(event.dataTransfer);
+                const pagePayload = pagePayloadFromDrag(event.dataTransfer);
+                if (
+                  recordId &&
+                  isSameDatabaseDrag(
+                    pagePayload,
+                    databaseId,
+                    event.dataTransfer,
+                  )
+                ) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setDropColumnStatus(null);
+                  setDropTargetRecordId(null);
+                  onMoveRecord(recordId, status);
+                  return;
+                }
+                if (pagePayload) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setDropColumnStatus(null);
+                  setDropTargetRecordId(null);
+                  onAttachPage(pagePayload, { Status: status });
+                }
+              }}
+            >
+              <Group justify="space-between" mb="xs" align="center">
+                <Badge className={classes.columnBadge} variant="light">
+                  {t(status)}
+                </Badge>
+                <Group gap={3} className={classes.columnActions}>
+                  <ActionIcon variant="subtle" size="sm" aria-label={t("More")}>
+                    <IconDots size={15} />
                   </ActionIcon>
+                  {canEdit && (
+                    <ActionIcon
+                      variant="subtle"
+                      size="sm"
+                      aria-label={t("New group")}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        startAddingColumn(status);
+                      }}
+                    >
+                      <IconArrowBarToRight size={15} />
+                    </ActionIcon>
+                  )}
+                  {canEdit && (
+                    <ActionIcon
+                      variant="subtle"
+                      size="sm"
+                      aria-label={t("New")}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        startDraft(status);
+                      }}
+                    >
+                      <IconPlus size={15} />
+                    </ActionIcon>
+                  )}
+                </Group>
+              </Group>
+              <Stack gap="xs">
+                {columnRecords.map((record) => (
+                  <TaskCard
+                    key={record.id}
+                    record={record}
+                    userById={userById}
+                    status={status}
+                    databaseId={databaseId}
+                    onOpen={onOpen}
+                    onMovePage={onMovePage}
+                    onMoveOut={onMoveOut}
+                    onMoveToBoard={onMoveToBoard}
+                    onRemoveFromBoard={onRemoveFromBoard}
+                    onMoveToTrash={onMoveToTrash}
+                    onUpdateTitle={(title) => onUpdateTitle(record.id, title)}
+                    onMoveRecord={onMoveRecord}
+                    onAttachPage={onAttachPage}
+                    isDropTarget={dropTargetRecordId === record.id}
+                    onDragOverRecord={() => {
+                      setDropTargetRecordId(record.id);
+                      setDropColumnStatus(status);
+                    }}
+                    onClearDropTarget={() => {
+                      setDropTargetRecordId(null);
+                      setDropColumnStatus(null);
+                    }}
+                    canEdit={canEdit}
+                  />
+                ))}
+                {canEdit && draftStatus === status && (
+                  <DraftTaskCard
+                    onCreate={(title) => {
+                      onCreate(status, title);
+                      setDraftStatus(null);
+                    }}
+                    onCancel={() => setDraftStatus(null)}
+                  />
                 )}
                 {canEdit && (
-                  <ActionIcon
-                    variant="subtle"
-                    size="sm"
-                    aria-label={t('New')}
+                  <button
+                    type="button"
+                    className={classes.newPageButton}
                     onMouseDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.stopPropagation();
                       startDraft(status);
                     }}
                   >
-                    <IconPlus size={15} />
-                  </ActionIcon>
+                    <IconPlus size={16} />
+                    {t("New task")}
+                  </button>
                 )}
-              </Group>
-            </Group>
-            <Stack gap="xs">
-              {columnRecords.map((record) => (
-                <TaskCard
-                  key={record.id}
-                  record={record}
-                  userById={userById}
-                  status={status}
-                  databaseId={databaseId}
-                  onOpen={onOpen}
-                  onMovePage={onMovePage}
-                  onMoveOut={onMoveOut}
-                  onMoveToTrash={onMoveToTrash}
-                  onUpdateTitle={(title) => onUpdateTitle(record.id, title)}
-                  onMoveRecord={onMoveRecord}
-                  onAttachPage={onAttachPage}
-                  isDropTarget={dropTargetRecordId === record.id}
-                  onDragOverRecord={() => {
-                    setDropTargetRecordId(record.id);
-                    setDropColumnStatus(status);
-                  }}
-                  onClearDropTarget={() => {
-                    setDropTargetRecordId(null);
-                    setDropColumnStatus(null);
-                  }}
-                  canEdit={canEdit}
-                />
-              ))}
-              {canEdit && draftStatus === status && (
-                <DraftTaskCard
-                  onCreate={(title) => {
-                    onCreate(status, title);
-                    setDraftStatus(null);
-                  }}
-                  onCancel={() => setDraftStatus(null)}
-                />
-              )}
-              {canEdit && (
-                <button
-                  type="button"
-                  className={classes.newPageButton}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    startDraft(status);
-                  }}
-                >
-                  <IconPlus size={16} />
-                  {t('New page')}
-                </button>
-              )}
-            </Stack>
-          </div>
-          {addingColumnAfter === status && renderAddColumnInput(status)}
+              </Stack>
+            </div>
+            {addingColumnAfter === status && renderAddColumnInput(status)}
           </Fragment>
         );
       })}
@@ -1667,7 +2156,7 @@ function KanbanView({
               onClick={() => startAddingColumn(null)}
             >
               <IconPlus size={16} />
-              {t('New group')}
+              {t("New group")}
             </button>
           </div>
         ))}
@@ -1683,7 +2172,7 @@ function DraftTaskCard({
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState("");
 
   const commit = () => {
     const nextTitle = title.trim();
@@ -1698,17 +2187,17 @@ function DraftTaskCard({
           autoFocus
           className={classes.cardTitleInput}
           value={title}
-          placeholder={t('Task name...')}
+          placeholder={t("Task name...")}
           onChange={(event) => setTitle(event.currentTarget.value)}
           onBlur={() => {
             if (!title.trim()) onCancel();
           }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') {
+            if (event.key === "Enter") {
               event.preventDefault();
               commit();
             }
-            if (event.key === 'Escape') {
+            if (event.key === "Escape") {
               event.preventDefault();
               onCancel();
             }
@@ -1727,6 +2216,8 @@ function TaskCard({
   onOpen,
   onMovePage,
   onMoveOut,
+  onMoveToBoard,
+  onRemoveFromBoard,
   onMoveToTrash,
   onUpdateTitle,
   onMoveRecord,
@@ -1743,10 +2234,19 @@ function TaskCard({
   onOpen: (record: DatabaseRecord) => void;
   onMovePage: (record: DatabaseRecord) => void;
   onMoveOut: (record: DatabaseRecord) => void;
+  onMoveToBoard: (record: DatabaseRecord) => void;
+  onRemoveFromBoard: (record: DatabaseRecord) => void;
   onMoveToTrash: (record: DatabaseRecord) => void;
   onUpdateTitle: (title: string) => void;
-  onMoveRecord: (recordId: string, status: string, beforeRecordId?: string) => void;
-  onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
+  onMoveRecord: (
+    recordId: string,
+    status: string,
+    beforeRecordId?: string,
+  ) => void;
+  onAttachPage: (
+    payload: DragPagePayload | null,
+    fields?: Record<string, unknown>,
+  ) => void;
   isDropTarget: boolean;
   onDragOverRecord: () => void;
   onClearDropTarget: () => void;
@@ -1771,7 +2271,7 @@ function TaskCard({
           return;
         }
         event.stopPropagation();
-        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.effectAllowed = "move";
         setRecordDragData(event.dataTransfer, record, databaseId);
       }}
       onDragEnd={clearDocmostDragPayloads}
@@ -1783,7 +2283,8 @@ function TaskCard({
         onDragOverRecord();
       }}
       onDragLeave={(event) => {
-        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        if (event.currentTarget.contains(event.relatedTarget as Node | null))
+          return;
         onClearDropTarget();
       }}
       onDrop={(event) => {
@@ -1794,7 +2295,10 @@ function TaskCard({
         event.preventDefault();
         event.stopPropagation();
         onClearDropTarget();
-        if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+        if (
+          recordId &&
+          isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+        ) {
           if (recordId !== record.id) onMoveRecord(recordId, status, record.id);
           return;
         }
@@ -1805,14 +2309,14 @@ function TaskCard({
         <input
           className={classes.cardTitleInput}
           value={title}
-          placeholder={t('Type a name...')}
+          placeholder={t("Type a name...")}
           disabled={!canEdit}
           onChange={(event) => setTitle(event.currentTarget.value)}
           onBlur={() => {
             if (title !== record.title) onUpdateTitle(title);
           }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur();
+            if (event.key === "Enter") event.currentTarget.blur();
           }}
         />
         <Group gap={6} mt={8}>
@@ -1834,7 +2338,7 @@ function TaskCard({
             className={classes.cardMenuButton}
             variant="subtle"
             size="sm"
-            aria-label={t('Card actions')}
+            aria-label={t("Card actions")}
             data-no-row-drag
             onMouseDown={(event) => event.stopPropagation()}
           >
@@ -1846,27 +2350,35 @@ function TaskCard({
             leftSection={<IconArrowsMaximize size={15} />}
             onClick={() => onOpen(record)}
           >
-            {t('Open page')}
+            {t("Open page")}
           </Menu.Item>
           <Menu.Item
             leftSection={<IconFileText size={15} />}
             disabled={!record.pageId || !canEdit}
             onClick={() => onMovePage(record)}
           >
-            {t('Move page to...')}
+            {t("Move page to...")}
           </Menu.Item>
           <Menu.Item
             leftSection={<IconArrowBarToRight size={15} />}
             disabled={!record.pageId || !canEdit}
             onClick={() => onMoveOut(record)}
           >
-            {t('Move out of board to...')}
+            {t("Move out of board to...")}
           </Menu.Item>
           <Menu.Item
             leftSection={<IconLayoutBoard size={15} />}
-            disabled
+            disabled={!record.pageId || !canEdit}
+            onClick={() => onMoveToBoard(record)}
           >
-            {t('Move to another board...')}
+            {t("Move to another board...")}
+          </Menu.Item>
+          <Menu.Item
+            leftSection={<IconArrowBarToLeft size={15} />}
+            disabled={!record.pageId || !canEdit}
+            onClick={() => onRemoveFromBoard(record)}
+          >
+            {t("Remove from board")}
           </Menu.Item>
           <Menu.Divider />
           <Menu.Item
@@ -1875,7 +2387,7 @@ function TaskCard({
             disabled={!record.pageId || !canEdit}
             onClick={() => onMoveToTrash(record)}
           >
-            {t('Move to trash')}
+            {t("Move to trash")}
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
@@ -1885,7 +2397,11 @@ function TaskCard({
             const user = userById.get(id);
             return (
               <span key={id} className={classes.assigneeChip}>
-                <CustomAvatar size="xs" name={user?.name || id} avatarUrl={user?.avatarUrl} />
+                <CustomAvatar
+                  size="xs"
+                  name={user?.name || id}
+                  avatarUrl={user?.avatarUrl}
+                />
                 <span>{user?.name || user?.email || id}</span>
               </span>
             );
@@ -1923,7 +2439,10 @@ function TableView({
   onOpen: (record: DatabaseRecord) => void;
   onOpenFullPage: (record: DatabaseRecord) => void;
   onCreate: (fields?: Record<string, unknown>) => void;
-  onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
+  onAttachPage: (
+    payload: DragPagePayload | null,
+    fields?: Record<string, unknown>,
+  ) => void;
   onAssigneeSearch: (query: string) => void;
   onUpdateRecord: (recordId: string, fields: Record<string, unknown>) => void;
   onReorderRecord: (recordId: string, beforeRecordId?: string) => void;
@@ -1934,19 +2453,29 @@ function TableView({
   canEdit: boolean;
 }) {
   const { t } = useTranslation();
-  const visibleFields = fields.length ? fields : [{ name: TITLE_FIELD, type: 'text' as const }];
+  const visibleFields = fields.length
+    ? fields
+    : [{ name: TITLE_FIELD, type: "text" as const }];
   const defaultWidths = useMemo<number[]>(
-    () => visibleFields.map((field, index) => (index === 0 || field.name === TITLE_FIELD ? 300 : 170)),
+    () =>
+      visibleFields.map((field, index) =>
+        index === 0 || field.name === TITLE_FIELD ? 300 : 170,
+      ),
     [visibleFields],
   );
   const [columnWidths, setColumnWidths] = useState(defaultWidths);
-  const [dropTargetRecordId, setDropTargetRecordId] = useState<string | null>(null);
+  const [dropTargetRecordId, setDropTargetRecordId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     setColumnWidths(defaultWidths);
   }, [defaultWidths]);
 
-  const startColumnResize = (index: number, event: ReactMouseEvent<HTMLSpanElement>) => {
+  const startColumnResize = (
+    index: number,
+    event: ReactMouseEvent<HTMLSpanElement>,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
@@ -1955,17 +2484,19 @@ function TableView({
     const onMouseMove = (moveEvent: MouseEvent) => {
       const nextWidth = Math.max(120, startWidth + moveEvent.clientX - startX);
       setColumnWidths((widths) =>
-        widths.map((width, widthIndex) => (widthIndex === index ? nextWidth : width)),
+        widths.map((width, widthIndex) =>
+          widthIndex === index ? nextWidth : width,
+        ),
       );
     };
 
     const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
     };
 
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
   };
 
   return (
@@ -1973,7 +2504,7 @@ function TableView({
       data-database-drop-zone="true"
       className={classes.tableWrap}
       role="table"
-      aria-label={t('Database')}
+      aria-label={t("Database")}
       onDragOver={(event) => {
         if (!canEdit || !hasDocmostDatabaseDrag(event.dataTransfer)) return;
         event.preventDefault();
@@ -1985,7 +2516,10 @@ function TableView({
         event.stopPropagation();
         const recordId = getDraggedRecordId(event.dataTransfer);
         const pagePayload = pagePayloadFromDrag(event.dataTransfer);
-        if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+        if (
+          recordId &&
+          isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+        ) {
           setDropTargetRecordId(null);
           onReorderRecord(recordId);
           return;
@@ -1999,7 +2533,7 @@ function TableView({
       <div
         className={classes.tableGrid}
         style={{
-          gridTemplateColumns: `${columnWidths.map((width) => `${width}px`).join(' ')} minmax(190px, .8fr)`,
+          gridTemplateColumns: `${columnWidths.map((width) => `${width}px`).join(" ")} minmax(190px, .8fr)`,
         }}
       >
         {visibleFields.map((field, index) => (
@@ -2050,7 +2584,7 @@ function TableView({
           }}
         >
           <IconPlus size={16} />
-          {t('New page')}
+          {t("New page")}
         </button>
       )}
     </div>
@@ -2085,7 +2619,10 @@ function RecordRow({
   onOpen: (record: DatabaseRecord) => void;
   onOpenFullPage: (record: DatabaseRecord) => void;
   onCreate: (fields?: Record<string, unknown>) => void;
-  onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
+  onAttachPage: (
+    payload: DragPagePayload | null,
+    fields?: Record<string, unknown>,
+  ) => void;
   onAssigneeSearch: (query: string) => void;
   onUpdateRecord: (recordId: string, fields: Record<string, unknown>) => void;
   onReorderRecord: (recordId: string, beforeRecordId?: string) => void;
@@ -2095,14 +2632,17 @@ function RecordRow({
   const handleRowDragStart = (event: ReactDragEvent<HTMLElement>) => {
     if (!canEdit) return;
     event.stopPropagation();
-    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.effectAllowed = "move";
     setRecordDragData(event.dataTransfer, record, databaseId);
   };
 
   return (
     <>
       <div
-        className={clsx(classes.rowDragDropZone, isDropTarget && classes.rowDragDropZoneActive)}
+        className={clsx(
+          classes.rowDragDropZone,
+          isDropTarget && classes.rowDragDropZoneActive,
+        )}
         onDragOver={(event) => {
           if (!canEdit) return;
           if (!hasDocmostDatabaseDrag(event.dataTransfer)) return;
@@ -2118,7 +2658,10 @@ function RecordRow({
           event.preventDefault();
           event.stopPropagation();
           onClearDropTarget();
-          if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+          if (
+            recordId &&
+            isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+          ) {
             if (recordId !== record.id) onReorderRecord(recordId, record.id);
             return;
           }
@@ -2143,13 +2686,21 @@ function RecordRow({
           onClearDropTarget={onClearDropTarget}
           onRowDragStart={handleRowDragStart}
           onDropRecord={(draggedRecordId) => {
-            if (draggedRecordId !== record.id) onReorderRecord(draggedRecordId, record.id);
+            if (draggedRecordId !== record.id)
+              onReorderRecord(draggedRecordId, record.id);
           }}
           onAttachPage={(payload) => onAttachPage(payload)}
-          onUpdate={(value) => onUpdateRecord(record.id, { [field.name]: value })}
+          onUpdate={(value) =>
+            onUpdateRecord(record.id, { [field.name]: value })
+          }
         />
       ))}
-      <div className={clsx(classes.tableCellFiller, isDropTarget && classes.tableCellRowDrop)} />
+      <div
+        className={clsx(
+          classes.tableCellFiller,
+          isDropTarget && classes.tableCellRowDrop,
+        )}
+      />
     </>
   );
 }
@@ -2174,15 +2725,30 @@ function PropertyHeader({
   onResizeStart: (event: ReactMouseEvent<HTMLSpanElement>) => void;
 }) {
   const { t } = useTranslation();
-  const Icon = field.name === TITLE_FIELD ? IconFileText : fieldTypeIcon(field.type);
+  const Icon =
+    field.name === TITLE_FIELD ? IconFileText : fieldTypeIcon(field.type);
 
   return (
-    <Popover width={420} shadow="md" position="bottom-start" disabled={!canEdit} withinPortal>
+    <Popover
+      width={420}
+      shadow="md"
+      position="bottom-start"
+      disabled={!canEdit}
+      withinPortal
+    >
       <Popover.Target>
-        <button type="button" className={classes.tableHeaderCell} role="columnheader" style={{ width }}>
+        <button
+          type="button"
+          className={classes.tableHeaderCell}
+          role="columnheader"
+          style={{ width }}
+        >
           <Icon size={15} />
           <span>{fieldLabel(field.name, t)}</span>
-          <span className={classes.columnResizeHandle} onMouseDown={onResizeStart} />
+          <span
+            className={classes.columnResizeHandle}
+            onMouseDown={onResizeStart}
+          />
         </button>
       </Popover.Target>
       <Popover.Dropdown className={classes.propertyPopover}>
@@ -2214,7 +2780,7 @@ function AddPropertyHeader({
       <Popover.Target>
         <button type="button" className={classes.addPropertyHeader}>
           <IconPlus size={18} />
-          {t('Add property')}
+          {t("Add property")}
         </button>
       </Popover.Target>
       <Popover.Dropdown className={classes.propertyPopover}>
@@ -2238,18 +2804,26 @@ function PropertyEditor({
   onSortField?: (fieldName: string) => void;
 }) {
   const { t } = useTranslation();
-  const [name, setName] = useState(field?.name && field.name !== TITLE_FIELD ? field.name : '');
-  const [selectedType, setSelectedType] = useState<DatabaseFieldDefinition['type']>(field?.type || 'text');
-  const [typeQuery, setTypeQuery] = useState('');
-  const [options, setOptions] = useState<string[]>(field?.options ?? defaultOptionsForType(field?.type || 'text') ?? []);
-  const [optionDraft, setOptionDraft] = useState('');
+  const [name, setName] = useState(
+    field?.name && field.name !== TITLE_FIELD ? field.name : "",
+  );
+  const [selectedType, setSelectedType] = useState<
+    DatabaseFieldDefinition["type"]
+  >(field?.type || "text");
+  const [typeQuery, setTypeQuery] = useState("");
+  const [options, setOptions] = useState<string[]>(
+    field?.options ?? defaultOptionsForType(field?.type || "text") ?? [],
+  );
+  const [optionDraft, setOptionDraft] = useState("");
   const SelectedIcon = field ? fieldTypeIcon(field.type) : IconMoodSmile;
 
   useEffect(() => {
-    setName(field?.name && field.name !== TITLE_FIELD ? field.name : '');
-    setSelectedType(field?.type || 'text');
-    setOptions(field?.options ?? defaultOptionsForType(field?.type || 'text') ?? []);
-    setOptionDraft('');
+    setName(field?.name && field.name !== TITLE_FIELD ? field.name : "");
+    setSelectedType(field?.type || "text");
+    setOptions(
+      field?.options ?? defaultOptionsForType(field?.type || "text") ?? [],
+    );
+    setOptionDraft("");
   }, [field?.name, field?.options, field?.type]);
 
   const filteredPropertyTypes = PROPERTY_TYPES.filter((typeOption) =>
@@ -2264,7 +2838,10 @@ function PropertyEditor({
     }
   };
 
-  const handleTypeClick = (type: DatabaseFieldDefinition['type'], disabled?: boolean) => {
+  const handleTypeClick = (
+    type: DatabaseFieldDefinition["type"],
+    disabled?: boolean,
+  ) => {
     if (disabled) return;
     setSelectedType(type);
     setOptions(defaultOptionsForType(type) ?? []);
@@ -2281,7 +2858,7 @@ function PropertyEditor({
       name: name.trim() || undefined,
       type,
       options: defaultOptionsForType(type),
-      position: 'end',
+      position: "end",
     });
   };
 
@@ -2297,18 +2874,21 @@ function PropertyEditor({
     const nextOption = optionDraft.trim();
     if (!nextOption) return;
     commitOptions([...options, nextOption]);
-    setOptionDraft('');
+    setOptionDraft("");
   };
 
   return (
-    <div className={classes.propertyMenu} onMouseDown={(event) => event.stopPropagation()}>
+    <div
+      className={classes.propertyMenu}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
       <div className={classes.propertyNameInputWrap}>
         <SelectedIcon size={20} />
         <input
           className={classes.propertyNameInput}
-          value={field?.name === TITLE_FIELD ? t('Name') : name}
+          value={field?.name === TITLE_FIELD ? t("Name") : name}
           disabled={field?.name === TITLE_FIELD}
-          placeholder={t('Type property name...')}
+          placeholder={t("Type property name...")}
           onChange={(event) => setName(event.currentTarget.value)}
           onBlur={commitExisting}
           autoFocus={!field}
@@ -2318,7 +2898,7 @@ function PropertyEditor({
       {field?.name === TITLE_FIELD && (
         <div className={classes.propertySwitch}>
           <IconMoodSmile size={17} />
-          <span>{t('Show page icon')}</span>
+          <span>{t("Show page icon")}</span>
           <Switch checked readOnly size="sm" />
         </div>
       )}
@@ -2332,7 +2912,7 @@ function PropertyEditor({
             onClick={() => onFilterField?.(field.name)}
           >
             <IconFilter size={20} />
-            {t('Filter')}
+            {t("Filter")}
           </button>
           <button
             type="button"
@@ -2340,19 +2920,19 @@ function PropertyEditor({
             onClick={() => onSortField?.(field.name)}
           >
             <IconArrowsSort size={20} />
-            {t('Sort')}
+            {t("Sort")}
             <IconChevronRight size={18} className={classes.menuChevron} />
           </button>
         </>
       )}
 
       <div className={classes.propertySeparator} />
-      <div className={classes.propertyMenuLabel}>{t('Select type')}</div>
+      <div className={classes.propertyMenuLabel}>{t("Select type")}</div>
       <label className={classes.propertyTypeSearch}>
         <IconSearch size={15} />
         <input
           value={typeQuery}
-          placeholder={t('Search property type...')}
+          placeholder={t("Search property type...")}
           onChange={(event) => setTypeQuery(event.currentTarget.value)}
         />
       </label>
@@ -2365,10 +2945,13 @@ function PropertyEditor({
               type="button"
               className={clsx(
                 classes.propertyTypeButton,
-                selectedType === typeOption.type && classes.propertyTypeButtonActive,
+                selectedType === typeOption.type &&
+                  classes.propertyTypeButtonActive,
               )}
               disabled={typeOption.disabled}
-              onClick={() => handleTypeClick(typeOption.type, typeOption.disabled)}
+              onClick={() =>
+                handleTypeClick(typeOption.type, typeOption.disabled)
+              }
             >
               <TypeIcon size={20} />
               <span>{t(typeOption.label)}</span>
@@ -2380,11 +2963,17 @@ function PropertyEditor({
       {field && field.name !== TITLE_FIELD && supportsOptions(selectedType) && (
         <>
           <div className={classes.propertySeparator} />
-          <div className={classes.propertyMenuLabel}>{t('Options')}</div>
+          <div className={classes.propertyMenuLabel}>{t("Options")}</div>
           <div className={classes.optionEditorList}>
             {options.map((option, index) => (
-              <div key={`${option}-${index}`} className={classes.optionEditorRow}>
-                <span className={classes.optionColorDot} data-tone={optionTone(option, index)} />
+              <div
+                key={`${option}-${index}`}
+                className={classes.optionEditorRow}
+              >
+                <span
+                  className={classes.optionColorDot}
+                  data-tone={optionTone(option, index)}
+                />
                 <input
                   value={option}
                   onChange={(event) =>
@@ -2398,8 +2987,12 @@ function PropertyEditor({
                 />
                 <button
                   type="button"
-                  aria-label={t('Delete option')}
-                  onClick={() => commitOptions(options.filter((_, itemIndex) => itemIndex !== index))}
+                  aria-label={t("Delete option")}
+                  onClick={() =>
+                    commitOptions(
+                      options.filter((_, itemIndex) => itemIndex !== index),
+                    )
+                  }
                 >
                   <IconTrash size={15} />
                 </button>
@@ -2409,10 +3002,10 @@ function PropertyEditor({
           <div className={classes.optionAddRow}>
             <input
               value={optionDraft}
-              placeholder={t('Add option')}
+              placeholder={t("Add option")}
               onChange={(event) => setOptionDraft(event.currentTarget.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') addOption();
+                if (event.key === "Enter") addOption();
               }}
             />
             <button type="button" onClick={addOption}>
@@ -2428,18 +3021,30 @@ function PropertyEditor({
           <button
             type="button"
             className={classes.propertyMenuItem}
-            onClick={() => onCreateField?.({ type: 'text', position: 'left', anchorFieldName: field.name })}
+            onClick={() =>
+              onCreateField?.({
+                type: "text",
+                position: "left",
+                anchorFieldName: field.name,
+              })
+            }
           >
             <IconArrowBarToLeft size={20} />
-            {t('Insert left')}
+            {t("Insert left")}
           </button>
           <button
             type="button"
             className={classes.propertyMenuItem}
-            onClick={() => onCreateField?.({ type: 'text', position: 'right', anchorFieldName: field.name })}
+            onClick={() =>
+              onCreateField?.({
+                type: "text",
+                position: "right",
+                anchorFieldName: field.name,
+              })
+            }
           >
             <IconArrowBarToRight size={20} />
-            {t('Insert right')}
+            {t("Insert right")}
           </button>
         </>
       )}
@@ -2451,7 +3056,7 @@ function PeoplePicker({
   value,
   users,
   canEdit,
-  placeholder = 'Select people',
+  placeholder = "Select people",
   onSearch,
   onChange,
 }: {
@@ -2464,12 +3069,12 @@ function PeoplePicker({
 }) {
   const { t } = useTranslation();
   const selectedIds = valueAsStringArray(value);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
 
   const visibleUsers = users.filter((user) => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return true;
-    return [user.label, user.email ?? ''].some((item) =>
+    return [user.label, user.email ?? ""].some((item) =>
       item.toLowerCase().includes(normalizedQuery),
     );
   });
@@ -2489,14 +3094,28 @@ function PeoplePicker({
   };
 
   return (
-    <Popover width={280} shadow="md" position="bottom-start" disabled={!canEdit} withinPortal>
+    <Popover
+      width={280}
+      shadow="md"
+      position="bottom-start"
+      disabled={!canEdit}
+      withinPortal
+    >
       <Popover.Target>
-        <button type="button" className={classes.peopleTarget} disabled={!canEdit}>
+        <button
+          type="button"
+          className={classes.peopleTarget}
+          disabled={!canEdit}
+        >
           {selectedUsers.length > 0 ? (
             <span className={classes.peopleChips}>
               {selectedUsers.map((user) => (
                 <span key={user.value} className={classes.assigneeChip}>
-                  <CustomAvatar size={18} name={user.label} avatarUrl={user.avatarUrl ?? undefined} />
+                  <CustomAvatar
+                    size={18}
+                    name={user.label}
+                    avatarUrl={user.avatarUrl ?? undefined}
+                  />
                   <span>{user.label}</span>
                 </span>
               ))}
@@ -2506,12 +3125,15 @@ function PeoplePicker({
           )}
         </button>
       </Popover.Target>
-      <Popover.Dropdown className={classes.notionPopover} onMouseDown={(event) => event.stopPropagation()}>
+      <Popover.Dropdown
+        className={classes.notionPopover}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <label className={classes.popoverSearch}>
           <IconSearch size={15} />
           <input
             value={query}
-            placeholder={t('Search people...')}
+            placeholder={t("Search people...")}
             onChange={(event) => {
               setQuery(event.currentTarget.value);
               onSearch(event.currentTarget.value);
@@ -2529,17 +3151,23 @@ function PeoplePicker({
                 className={classes.personOption}
                 onClick={() => toggleUser(user.value)}
               >
-                <CustomAvatar size={22} name={user.label} avatarUrl={user.avatarUrl ?? undefined} />
+                <CustomAvatar
+                  size={22}
+                  name={user.label}
+                  avatarUrl={user.avatarUrl ?? undefined}
+                />
                 <span>
                   <strong>{user.label}</strong>
                   {user.email && <em>{user.email}</em>}
                 </span>
-                {selected && <IconCheck size={16} className={classes.optionCheck} />}
+                {selected && (
+                  <IconCheck size={16} className={classes.optionCheck} />
+                )}
               </button>
             );
           })}
           {visibleUsers.length === 0 && (
-            <div className={classes.popoverEmpty}>{t('No options')}</div>
+            <div className={classes.popoverEmpty}>{t("No options")}</div>
           )}
         </div>
       </Popover.Dropdown>
@@ -2552,7 +3180,7 @@ function SelectValuePicker({
   options,
   multiple = false,
   canEdit,
-  placeholder = 'Empty',
+  placeholder = "Empty",
   clearable = true,
   onChange,
 }: {
@@ -2565,7 +3193,11 @@ function SelectValuePicker({
   onChange: (value: string | string[] | null) => void;
 }) {
   const { t } = useTranslation();
-  const selectedValues = multiple ? valueAsStringArray(value) : valueAsString(value) ? [valueAsString(value)] : [];
+  const selectedValues = multiple
+    ? valueAsStringArray(value)
+    : valueAsString(value)
+      ? [valueAsString(value)]
+      : [];
 
   const toggleOption = (option: string) => {
     if (!canEdit) return;
@@ -2581,9 +3213,19 @@ function SelectValuePicker({
   };
 
   return (
-    <Popover width={240} shadow="md" position="bottom-start" disabled={!canEdit} withinPortal>
+    <Popover
+      width={240}
+      shadow="md"
+      position="bottom-start"
+      disabled={!canEdit}
+      withinPortal
+    >
       <Popover.Target>
-        <button type="button" className={classes.selectTarget} disabled={!canEdit}>
+        <button
+          type="button"
+          className={classes.selectTarget}
+          disabled={!canEdit}
+        >
           {selectedValues.length > 0 ? (
             <span className={classes.optionPillGroup}>
               {selectedValues.map((option, index) => (
@@ -2602,12 +3244,19 @@ function SelectValuePicker({
           )}
         </button>
       </Popover.Target>
-      <Popover.Dropdown className={classes.notionPopover} onMouseDown={(event) => event.stopPropagation()}>
+      <Popover.Dropdown
+        className={classes.notionPopover}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className={classes.popoverList}>
           {clearable && (
-            <button type="button" className={classes.popoverListItem} onClick={() => onChange(multiple ? [] : null)}>
+            <button
+              type="button"
+              className={classes.popoverListItem}
+              onClick={() => onChange(multiple ? [] : null)}
+            >
               <span className={classes.optionPill} data-tone="gray">
-                {t('Empty')}
+                {t("Empty")}
               </span>
             </button>
           )}
@@ -2620,15 +3269,22 @@ function SelectValuePicker({
                 className={classes.popoverListItem}
                 onClick={() => toggleOption(option)}
               >
-                <span className={classes.optionPill} data-tone={optionTone(option, index)}>
+                <span
+                  className={classes.optionPill}
+                  data-tone={optionTone(option, index)}
+                >
                   <span className={classes.optionDot} />
                   {t(option)}
                 </span>
-                {selected && <IconCheck size={16} className={classes.optionCheck} />}
+                {selected && (
+                  <IconCheck size={16} className={classes.optionCheck} />
+                )}
               </button>
             );
           })}
-          {options.length === 0 && <div className={classes.popoverEmpty}>{t('No options')}</div>}
+          {options.length === 0 && (
+            <div className={classes.popoverEmpty}>{t("No options")}</div>
+          )}
         </div>
       </Popover.Dropdown>
     </Popover>
@@ -2648,23 +3304,40 @@ function DateCell({
   const currentValue = datePickerValue(value);
 
   return (
-    <Popover width={320} shadow="md" position="bottom-start" disabled={!canEdit} withinPortal>
+    <Popover
+      width={320}
+      shadow="md"
+      position="bottom-start"
+      disabled={!canEdit}
+      withinPortal
+    >
       <Popover.Target>
-        <button type="button" className={classes.dateTarget} disabled={!canEdit}>
+        <button
+          type="button"
+          className={classes.dateTarget}
+          disabled={!canEdit}
+        >
           {currentValue ? (
             <>
               <IconCalendar size={15} />
               <span>{currentValue}</span>
             </>
           ) : (
-            <span className={classes.cellEmpty}>{t('Empty')}</span>
+            <span className={classes.cellEmpty}>{t("Empty")}</span>
           )}
         </button>
       </Popover.Target>
-      <Popover.Dropdown className={classes.datePopover} onMouseDown={(event) => event.stopPropagation()}>
+      <Popover.Dropdown
+        className={classes.datePopover}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className={classes.dateInputRow}>
           <IconCalendar size={16} />
-          <input readOnly value={currentValue || ''} placeholder={t('Select date')} />
+          <input
+            readOnly
+            value={currentValue || ""}
+            placeholder={t("Select date")}
+          />
         </div>
         <DatePicker
           value={currentValue}
@@ -2672,23 +3345,27 @@ function DateCell({
         />
         <div className={classes.dateSettings}>
           <div className={classes.dateSettingRow}>
-            <span>{t('End date')}</span>
+            <span>{t("End date")}</span>
             <Switch size="xs" />
           </div>
           <button type="button" className={classes.dateSettingRow}>
-            <span>{t('Date format')}</span>
-            <em>{t('Full date')}</em>
+            <span>{t("Date format")}</span>
+            <em>{t("Full date")}</em>
           </button>
           <div className={classes.dateSettingRow}>
-            <span>{t('Include time')}</span>
+            <span>{t("Include time")}</span>
             <Switch size="xs" />
           </div>
           <button type="button" className={classes.dateSettingRow}>
-            <span>{t('Remind')}</span>
-            <em>{t('None')}</em>
+            <span>{t("Remind")}</span>
+            <em>{t("None")}</em>
           </button>
-          <button type="button" className={classes.dateClearButton} onClick={() => onChange(null)}>
-            {t('Clear')}
+          <button
+            type="button"
+            className={classes.dateClearButton}
+            onClick={() => onChange(null)}
+          >
+            {t("Clear")}
           </button>
         </div>
       </Popover.Dropdown>
@@ -2734,7 +3411,8 @@ function EditableTableCell({
   onUpdate: (value: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const rawValue = field.name === TITLE_FIELD ? record.title : record.fields[field.name];
+  const rawValue =
+    field.name === TITLE_FIELD ? record.title : record.fields[field.name];
   const [draft, setDraft] = useState(renderCell(rawValue));
 
   useEffect(() => {
@@ -2750,7 +3428,7 @@ function EditableTableCell({
             return;
           }
           event.stopPropagation();
-          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.effectAllowed = "move";
           setRecordDragData(event.dataTransfer, record, databaseId);
         },
         onDragEnd: () => {
@@ -2771,7 +3449,10 @@ function EditableTableCell({
           event.preventDefault();
           event.stopPropagation();
           onClearDropTarget();
-          if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+          if (
+            recordId &&
+            isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+          ) {
             onDropRecord(recordId);
             return;
           }
@@ -2782,14 +3463,14 @@ function EditableTableCell({
 
   const commit = () => {
     if (!canEdit) return;
-    if (field.type === 'number') {
+    if (field.type === "number") {
       onUpdate(draft.trim() ? Number(draft) : null);
       return;
     }
-    if (field.type === 'multiSelect') {
+    if (field.type === "multiSelect") {
       onUpdate(
         draft
-          .split(',')
+          .split(",")
           .map((item) => item.trim())
           .filter(Boolean),
       );
@@ -2800,14 +3481,21 @@ function EditableTableCell({
 
   if (field.name === TITLE_FIELD) {
     return (
-      <div className={clsx(classes.tableCell, isDropTarget && classes.tableCellRowDrop)} role="cell" {...dragProps}>
+      <div
+        className={clsx(
+          classes.tableCell,
+          isDropTarget && classes.tableCellRowDrop,
+        )}
+        role="cell"
+        {...dragProps}
+      >
         <div className={classes.rowOverlayControls}>
           {canEdit && (
             <button
               type="button"
               data-no-row-drag
               className={classes.rowPlusButton}
-              aria-label={t('New page')}
+              aria-label={t("New page")}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
@@ -2821,8 +3509,8 @@ function EditableTableCell({
             <Tooltip
               label={
                 <>
-                  <div>{t('Drag to move')}</div>
-                  <div>{t('Click or Cmd+/ to open menu')}</div>
+                  <div>{t("Drag to move")}</div>
+                  <div>{t("Click or Cmd+/ to open menu")}</div>
                 </>
               }
               withArrow
@@ -2831,7 +3519,7 @@ function EditableTableCell({
               <button
                 type="button"
                 className={classes.rowGripButton}
-                aria-label={t('Drag to move')}
+                aria-label={t("Drag to move")}
                 draggable
                 onDragStart={onRowDragStart}
                 onDragEnd={clearDocmostDragPayloads}
@@ -2844,7 +3532,7 @@ function EditableTableCell({
             type="button"
             data-no-row-drag
             className={classes.rowSelectButton}
-            aria-label={t('Select row')}
+            aria-label={t("Select row")}
           >
             <IconCheck size={15} />
           </button>
@@ -2853,20 +3541,30 @@ function EditableTableCell({
         <input
           className={classes.cellInput}
           value={draft}
-          placeholder={t('Type a name...')}
+          placeholder={t("Type a name...")}
           disabled={!canEdit}
           onChange={(event) => setDraft(event.currentTarget.value)}
           onBlur={commit}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur();
+            if (event.key === "Enter") event.currentTarget.blur();
           }}
         />
-        <button type="button" data-no-row-drag className={classes.inlineOpenButton} onClick={() => onOpen(record)}>
+        <button
+          type="button"
+          data-no-row-drag
+          className={classes.inlineOpenButton}
+          onClick={() => onOpen(record)}
+        >
           <IconArrowsMaximize size={13} />
-          {t('Open page')}
+          {t("Open page")}
         </button>
-        <Tooltip label={t('Open full page')} withArrow openDelay={250}>
-          <button type="button" data-no-row-drag className={classes.inlineFullPageButton} onClick={() => onOpenFullPage(record)}>
+        <Tooltip label={t("Open full page")} withArrow openDelay={250}>
+          <button
+            type="button"
+            data-no-row-drag
+            className={classes.inlineFullPageButton}
+            onClick={() => onOpenFullPage(record)}
+          >
             <IconArrowBarToRight size={13} />
           </button>
         </Tooltip>
@@ -2874,9 +3572,20 @@ function EditableTableCell({
     );
   }
 
-  if (field.name === 'Assignee' || field.type === 'user' || field.type === 'person') {
+  if (
+    field.name === "Assignee" ||
+    field.type === "user" ||
+    field.type === "person"
+  ) {
     return (
-      <div className={clsx(classes.tableCell, isDropTarget && classes.tableCellRowDrop)} role="cell" {...dragProps}>
+      <div
+        className={clsx(
+          classes.tableCell,
+          isDropTarget && classes.tableCellRowDrop,
+        )}
+        role="cell"
+        {...dragProps}
+      >
         <PeoplePicker
           value={valueAsStringArray(rawValue)}
           users={users}
@@ -2889,9 +3598,16 @@ function EditableTableCell({
     );
   }
 
-  if (field.type === 'checkbox') {
+  if (field.type === "checkbox") {
     return (
-      <label className={clsx(classes.tableCell, isDropTarget && classes.tableCellRowDrop)} role="cell" {...dragProps}>
+      <label
+        className={clsx(
+          classes.tableCell,
+          isDropTarget && classes.tableCellRowDrop,
+        )}
+        role="cell"
+        {...dragProps}
+      >
         <input
           type="checkbox"
           checked={Boolean(rawValue)}
@@ -2902,9 +3618,16 @@ function EditableTableCell({
     );
   }
 
-  if (field.type === 'multiSelect') {
+  if (field.type === "multiSelect") {
     return (
-      <div className={clsx(classes.tableCell, isDropTarget && classes.tableCellRowDrop)} role="cell" {...dragProps}>
+      <div
+        className={clsx(
+          classes.tableCell,
+          isDropTarget && classes.tableCellRowDrop,
+        )}
+        role="cell"
+        {...dragProps}
+      >
         <SelectValuePicker
           value={rawValue}
           options={field.options ?? []}
@@ -2917,30 +3640,51 @@ function EditableTableCell({
   }
 
   if (isSelectField(field)) {
-    const options = field.name === 'Status' ? statuses : field.options ?? [];
+    const options = field.name === "Status" ? statuses : (field.options ?? []);
     return (
-      <div className={clsx(classes.tableCell, isDropTarget && classes.tableCellRowDrop)} role="cell" {...dragProps}>
+      <div
+        className={clsx(
+          classes.tableCell,
+          isDropTarget && classes.tableCellRowDrop,
+        )}
+        role="cell"
+        {...dragProps}
+      >
         <SelectValuePicker
           value={rawValue}
           options={options}
           canEdit={canEdit}
-          clearable={field.name !== 'Status'}
+          clearable={field.name !== "Status"}
           onChange={onUpdate}
         />
       </div>
     );
   }
 
-  if (field.type === 'date') {
+  if (field.type === "date") {
     return (
-      <div className={clsx(classes.tableCell, isDropTarget && classes.tableCellRowDrop)} role="cell" {...dragProps}>
+      <div
+        className={clsx(
+          classes.tableCell,
+          isDropTarget && classes.tableCellRowDrop,
+        )}
+        role="cell"
+        {...dragProps}
+      >
         <DateCell value={rawValue} canEdit={canEdit} onChange={onUpdate} />
       </div>
     );
   }
 
   return (
-    <div className={clsx(classes.tableCell, isDropTarget && classes.tableCellRowDrop)} role="cell" {...dragProps}>
+    <div
+      className={clsx(
+        classes.tableCell,
+        isDropTarget && classes.tableCellRowDrop,
+      )}
+      role="cell"
+      {...dragProps}
+    >
       <input
         className={classes.cellInput}
         value={draft}
@@ -2949,7 +3693,7 @@ function EditableTableCell({
         onChange={(event) => setDraft(event.currentTarget.value)}
         onBlur={commit}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') event.currentTarget.blur();
+          if (event.key === "Enter") event.currentTarget.blur();
         }}
       />
     </div>
@@ -2968,7 +3712,10 @@ function GalleryView({
   canEdit: boolean;
   databaseId?: string;
   onOpen: (record: DatabaseRecord) => void;
-  onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
+  onAttachPage: (
+    payload: DragPagePayload | null,
+    fields?: Record<string, unknown>,
+  ) => void;
   onReorderRecord: (recordId: string, beforeRecordId?: string) => void;
 }) {
   const { t } = useTranslation();
@@ -2979,7 +3726,10 @@ function GalleryView({
     event.stopPropagation();
     const recordId = getDraggedRecordId(event.dataTransfer);
     const pagePayload = pagePayloadFromDrag(event.dataTransfer);
-    if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+    if (
+      recordId &&
+      isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+    ) {
       onReorderRecord(recordId);
       return;
     }
@@ -3000,7 +3750,7 @@ function GalleryView({
       {records.length === 0 ? (
         <div className={clsx(classes.empty, classes.emptyWide)}>
           <Text size="sm" c="dimmed">
-            {t('No records yet.')}
+            {t("No records yet.")}
           </Text>
         </div>
       ) : (
@@ -3013,7 +3763,7 @@ function GalleryView({
             draggable={canEdit}
             onClick={() => onOpen(record)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') onOpen(record);
+              if (event.key === "Enter") onOpen(record);
             }}
             onDragStart={(event) => {
               if (!canEdit || shouldSkipRecordDrag(event.target)) {
@@ -3021,11 +3771,12 @@ function GalleryView({
                 return;
               }
               event.stopPropagation();
-              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.effectAllowed = "move";
               setRecordDragData(event.dataTransfer, record, databaseId);
             }}
             onDragOver={(event) => {
-              if (!canEdit || !hasDocmostDatabaseDrag(event.dataTransfer)) return;
+              if (!canEdit || !hasDocmostDatabaseDrag(event.dataTransfer))
+                return;
               event.preventDefault();
               event.stopPropagation();
             }}
@@ -3036,17 +3787,21 @@ function GalleryView({
               if (!recordId && !pagePayload) return;
               event.preventDefault();
               event.stopPropagation();
-              if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
-                if (recordId !== record.id) onReorderRecord(recordId, record.id);
+              if (
+                recordId &&
+                isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+              ) {
+                if (recordId !== record.id)
+                  onReorderRecord(recordId, record.id);
                 return;
               }
               if (pagePayload) onAttachPage(pagePayload);
             }}
           >
             <IconFileText size={18} />
-            <Text fw={600}>{record.title || t('Untitled')}</Text>
+            <Text fw={600}>{record.title || t("Untitled")}</Text>
             <Text size="sm" c="dimmed" lineClamp={3}>
-              {record.description || t('Empty')}
+              {record.description || t("Empty")}
             </Text>
           </div>
         ))
@@ -3068,45 +3823,62 @@ function CalendarView({
   canEdit: boolean;
   databaseId?: string;
   onOpen: (record: DatabaseRecord) => void;
-  onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
+  onAttachPage: (
+    payload: DragPagePayload | null,
+    fields?: Record<string, unknown>,
+  ) => void;
   onReorderRecord: (recordId: string, beforeRecordId?: string) => void;
   onUpdateRecord: (recordId: string, fields: Record<string, unknown>) => void;
 }) {
   const { t } = useTranslation();
   const firstDate = records.find((record) => record.dueDate)?.dueDate;
-  const referenceDate = firstDate ? new Date(`${firstDate}T00:00:00`) : new Date();
+  const referenceDate = firstDate
+    ? new Date(`${firstDate}T00:00:00`)
+    : new Date();
   const year = referenceDate.getFullYear();
   const month = referenceDate.getMonth();
   const firstOfMonth = new Date(year, month, 1);
   const startOffset = firstOfMonth.getDay();
-  const monthLabel = firstOfMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthLabel = firstOfMonth.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const days = Array.from({ length: 42 }, (_, index) => {
     const date = new Date(year, month, index - startOffset + 1);
     return {
       date,
-      key: datePickerToStorage(date) || '',
+      key: datePickerToStorage(date) || "",
       isCurrentMonth: date.getMonth() === month,
     };
   });
-  const recordsByDate = records.reduce<Record<string, DatabaseRecord[]>>((result, record) => {
-    if (!record.dueDate) return result;
-    result[record.dueDate] = [...(result[record.dueDate] ?? []), record];
-    return result;
-  }, {});
+  const recordsByDate = records.reduce<Record<string, DatabaseRecord[]>>(
+    (result, record) => {
+      if (!record.dueDate) return result;
+      result[record.dueDate] = [...(result[record.dueDate] ?? []), record];
+      return result;
+    },
+    {},
+  );
 
-  const handleDropOnDate = (event: ReactDragEvent<HTMLElement>, dateKey: string) => {
+  const handleDropOnDate = (
+    event: ReactDragEvent<HTMLElement>,
+    dateKey: string,
+  ) => {
     if (!canEdit || !hasDocmostDatabaseDrag(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
     const recordId = getDraggedRecordId(event.dataTransfer);
     const pagePayload = pagePayloadFromDrag(event.dataTransfer);
-    if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
-      onUpdateRecord(recordId, { 'Due date': dateKey });
+    if (
+      recordId &&
+      isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+    ) {
+      onUpdateRecord(recordId, { "Due date": dateKey });
       onReorderRecord(recordId);
       return;
     }
-    if (pagePayload) onAttachPage(pagePayload, { 'Due date': dateKey });
+    if (pagePayload) onAttachPage(pagePayload, { "Due date": dateKey });
   };
 
   return (
@@ -3122,9 +3894,13 @@ function CalendarView({
           <div
             key={key}
             data-database-drop-zone="true"
-            className={clsx(classes.calendarCell, !isCurrentMonth && classes.calendarCellMuted)}
+            className={clsx(
+              classes.calendarCell,
+              !isCurrentMonth && classes.calendarCellMuted,
+            )}
             onDragOver={(event) => {
-              if (!canEdit || !hasDocmostDatabaseDrag(event.dataTransfer)) return;
+              if (!canEdit || !hasDocmostDatabaseDrag(event.dataTransfer))
+                return;
               event.preventDefault();
               event.stopPropagation();
             }}
@@ -3145,11 +3921,11 @@ function CalendarView({
                     return;
                   }
                   event.stopPropagation();
-                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.effectAllowed = "move";
                   setRecordDragData(event.dataTransfer, record, databaseId);
                 }}
               >
-                {record.title || t('Untitled')}
+                {record.title || t("Untitled")}
               </button>
             ))}
           </div>
@@ -3173,7 +3949,10 @@ function ListView({
   databaseId?: string;
   onOpen: (record: DatabaseRecord) => void;
   onOpenFullPage: (record: DatabaseRecord) => void;
-  onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
+  onAttachPage: (
+    payload: DragPagePayload | null,
+    fields?: Record<string, unknown>,
+  ) => void;
   onReorderRecord: (recordId: string, beforeRecordId?: string) => void;
 }) {
   const { t } = useTranslation();
@@ -3193,7 +3972,10 @@ function ListView({
         event.stopPropagation();
         const recordId = getDraggedRecordId(event.dataTransfer);
         const pagePayload = pagePayloadFromDrag(event.dataTransfer);
-        if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+        if (
+          recordId &&
+          isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+        ) {
           onReorderRecord(recordId);
           return;
         }
@@ -3211,7 +3993,7 @@ function ListView({
               return;
             }
             event.stopPropagation();
-            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.effectAllowed = "move";
             setRecordDragData(event.dataTransfer, record, databaseId);
           }}
           onDragOver={(event) => {
@@ -3226,7 +4008,10 @@ function ListView({
             if (!recordId && !pagePayload) return;
             event.preventDefault();
             event.stopPropagation();
-            if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+            if (
+              recordId &&
+              isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+            ) {
               if (recordId !== record.id) onReorderRecord(recordId, record.id);
               return;
             }
@@ -3234,25 +4019,40 @@ function ListView({
           }}
         >
           <IconFileText size={17} className={classes.pageIcon} />
-          <button type="button" data-no-row-drag className={classes.listTitle} onClick={() => onOpen(record)}>
-            {record.title || t('Untitled')}
+          <button
+            type="button"
+            data-no-row-drag
+            className={classes.listTitle}
+            onClick={() => onOpen(record)}
+          >
+            {record.title || t("Untitled")}
           </button>
           {record.status && (
-            <span className={classes.optionPill} data-tone={optionTone(record.status)}>
+            <span
+              className={classes.optionPill}
+              data-tone={optionTone(record.status)}
+            >
               {t(record.status)}
             </span>
           )}
-          {record.dueDate && <span className={classes.listMeta}>{record.dueDate}</span>}
-          <button type="button" data-no-row-drag className={classes.inlineOpenButton} onClick={() => onOpenFullPage(record)}>
+          {record.dueDate && (
+            <span className={classes.listMeta}>{record.dueDate}</span>
+          )}
+          <button
+            type="button"
+            data-no-row-drag
+            className={classes.inlineOpenButton}
+            onClick={() => onOpenFullPage(record)}
+          >
             <IconArrowsMaximize size={13} />
-            {t('Open full page')}
+            {t("Open full page")}
           </button>
         </div>
       ))}
       {records.length === 0 && (
         <div className={classes.empty}>
           <Text size="sm" c="dimmed">
-            {t('No records yet.')}
+            {t("No records yet.")}
           </Text>
         </div>
       )}
@@ -3273,7 +4073,10 @@ function TimelineView({
   canEdit: boolean;
   databaseId?: string;
   onOpen: (record: DatabaseRecord) => void;
-  onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
+  onAttachPage: (
+    payload: DragPagePayload | null,
+    fields?: Record<string, unknown>,
+  ) => void;
   onReorderRecord: (recordId: string, beforeRecordId?: string) => void;
   onUpdateRecord: (recordId: string, fields: Record<string, unknown>) => void;
 }) {
@@ -3282,13 +4085,19 @@ function TimelineView({
     ? records.filter((record) => record.dueDate)
     : records;
   const referenceDate = visibleRecords.find((record) => record.dueDate)?.dueDate
-    ? new Date(`${visibleRecords.find((record) => record.dueDate)?.dueDate}T00:00:00`)
+    ? new Date(
+        `${visibleRecords.find((record) => record.dueDate)?.dueDate}T00:00:00`,
+      )
     : new Date();
   const months = Array.from({ length: 5 }, (_, index) => {
-    const date = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + index, 1);
+    const date = new Date(
+      referenceDate.getFullYear(),
+      referenceDate.getMonth() + index,
+      1,
+    );
     return {
-      label: date.toLocaleDateString(undefined, { month: 'short' }),
-      dateKey: datePickerToStorage(date) || '',
+      label: date.toLocaleDateString(undefined, { month: "short" }),
+      dateKey: datePickerToStorage(date) || "",
     };
   });
 
@@ -3307,7 +4116,10 @@ function TimelineView({
         event.stopPropagation();
         const recordId = getDraggedRecordId(event.dataTransfer);
         const pagePayload = pagePayloadFromDrag(event.dataTransfer);
-        if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+        if (
+          recordId &&
+          isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+        ) {
           onReorderRecord(recordId);
           return;
         }
@@ -3315,13 +4127,14 @@ function TimelineView({
       }}
     >
       <div className={classes.timelineGrid}>
-        <div className={classes.timelineRowsHeader}>{t('Name')}</div>
+        <div className={classes.timelineRowsHeader}>{t("Name")}</div>
         <div className={classes.timelineMonths}>
           {months.map((month) => (
             <span
               key={month.dateKey}
               onDragOver={(event) => {
-                if (!canEdit || !hasDocmostDatabaseDrag(event.dataTransfer)) return;
+                if (!canEdit || !hasDocmostDatabaseDrag(event.dataTransfer))
+                  return;
                 event.preventDefault();
                 event.stopPropagation();
               }}
@@ -3331,12 +4144,20 @@ function TimelineView({
                 event.stopPropagation();
                 const recordId = getDraggedRecordId(event.dataTransfer);
                 const pagePayload = pagePayloadFromDrag(event.dataTransfer);
-                if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
-                  onUpdateRecord(recordId, { 'Due date': month.dateKey });
+                if (
+                  recordId &&
+                  isSameDatabaseDrag(
+                    pagePayload,
+                    databaseId,
+                    event.dataTransfer,
+                  )
+                ) {
+                  onUpdateRecord(recordId, { "Due date": month.dateKey });
                   onReorderRecord(recordId);
                   return;
                 }
-                if (pagePayload) onAttachPage(pagePayload, { 'Due date': month.dateKey });
+                if (pagePayload)
+                  onAttachPage(pagePayload, { "Due date": month.dateKey });
               }}
             >
               {month.label}
@@ -3349,7 +4170,11 @@ function TimelineView({
                 5,
                 Math.max(
                   1,
-                  (new Date(`${record.dueDate}T00:00:00`).getMonth() - referenceDate.getMonth() + 12) % 12 + 1,
+                  ((new Date(`${record.dueDate}T00:00:00`).getMonth() -
+                    referenceDate.getMonth() +
+                    12) %
+                    12) +
+                    1,
                 ),
               )
             : (index % 4) + 1;
@@ -3363,7 +4188,7 @@ function TimelineView({
               draggable={canEdit}
               onClick={() => onOpen(record)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') onOpen(record);
+                if (event.key === "Enter") onOpen(record);
               }}
               onDragStart={(event) => {
                 if (!canEdit || shouldSkipRecordDrag(event.target)) {
@@ -3371,11 +4196,12 @@ function TimelineView({
                   return;
                 }
                 event.stopPropagation();
-                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.effectAllowed = "move";
                 setRecordDragData(event.dataTransfer, record, databaseId);
               }}
               onDragOver={(event) => {
-                if (!canEdit || !hasDocmostDatabaseDrag(event.dataTransfer)) return;
+                if (!canEdit || !hasDocmostDatabaseDrag(event.dataTransfer))
+                  return;
                 event.preventDefault();
                 event.stopPropagation();
               }}
@@ -3386,16 +4212,25 @@ function TimelineView({
                 if (!recordId && !pagePayload) return;
                 event.preventDefault();
                 event.stopPropagation();
-                if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
-                  if (recordId !== record.id) onReorderRecord(recordId, record.id);
+                if (
+                  recordId &&
+                  isSameDatabaseDrag(
+                    pagePayload,
+                    databaseId,
+                    event.dataTransfer,
+                  )
+                ) {
+                  if (recordId !== record.id)
+                    onReorderRecord(recordId, record.id);
                   return;
                 }
-                if (pagePayload) onAttachPage(pagePayload, { 'Due date': record.dueDate });
+                if (pagePayload)
+                  onAttachPage(pagePayload, { "Due date": record.dueDate });
               }}
             >
               <span className={classes.timelineName}>
                 <IconFileText size={15} />
-                {record.title || t('Untitled')}
+                {record.title || t("Untitled")}
               </span>
               <span className={classes.timelineTrack}>
                 <span
@@ -3403,7 +4238,7 @@ function TimelineView({
                   data-tone={optionTone(record.status, index)}
                   style={{ gridColumn: `${startColumn} / span ${span}` }}
                 >
-                  {record.title || t('Untitled')}
+                  {record.title || t("Untitled")}
                 </span>
               </span>
             </div>
@@ -3430,17 +4265,23 @@ function SecondaryView({
   databaseId?: string;
   onOpen: (record: DatabaseRecord) => void;
   onCreate: (fields?: Record<string, unknown>) => void;
-  onAttachPage: (payload: DragPagePayload | null, fields?: Record<string, unknown>) => void;
+  onAttachPage: (
+    payload: DragPagePayload | null,
+    fields?: Record<string, unknown>,
+  ) => void;
   onReorderRecord: (recordId: string, beforeRecordId?: string) => void;
 }) {
   const { t } = useTranslation();
-  const [formTitle, setFormTitle] = useState('');
-  const [formDescription, setFormDescription] = useState('');
-  const statusCounts = records.reduce<Record<string, number>>((result, record) => {
-    const key = record.status || 'Empty';
-    result[key] = (result[key] ?? 0) + 1;
-    return result;
-  }, {});
+  const [formTitle, setFormTitle] = useState("");
+  const [formDescription, setFormDescription] = useState("");
+  const statusCounts = records.reduce<Record<string, number>>(
+    (result, record) => {
+      const key = record.status || "Empty";
+      result[key] = (result[key] ?? 0) + 1;
+      return result;
+    },
+    {},
+  );
   const statusEntries = Object.entries(statusCounts);
 
   const handleDropAtEnd = (event: ReactDragEvent<HTMLElement>) => {
@@ -3449,15 +4290,20 @@ function SecondaryView({
     event.stopPropagation();
     const recordId = getDraggedRecordId(event.dataTransfer);
     const pagePayload = pagePayloadFromDrag(event.dataTransfer);
-    if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+    if (
+      recordId &&
+      isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+    ) {
       onReorderRecord(recordId);
       return;
     }
     if (pagePayload) onAttachPage(pagePayload);
   };
 
-  if (type === 'chart' || type === 'dashboard') {
-    const doneCount = records.filter((record) => record.status === 'Done').length;
+  if (type === "chart" || type === "dashboard") {
+    const doneCount = records.filter(
+      (record) => record.status === "Done",
+    ).length;
     return (
       <div
         data-database-drop-zone="true"
@@ -3470,16 +4316,18 @@ function SecondaryView({
         onDrop={handleDropAtEnd}
       >
         <div className={classes.metricCard}>
-          <span>{t('Total records')}</span>
+          <span>{t("Total records")}</span>
           <strong>{records.length}</strong>
         </div>
         <div className={classes.metricCard}>
-          <span>{t('Done')}</span>
+          <span>{t("Done")}</span>
           <strong>{doneCount}</strong>
         </div>
         <div className={classes.chartCard}>
           {statusEntries.length === 0 ? (
-            <Text size="sm" c="dimmed">{t('No records yet.')}</Text>
+            <Text size="sm" c="dimmed">
+              {t("No records yet.")}
+            </Text>
           ) : (
             statusEntries.map(([status, count], index) => (
               <span
@@ -3495,7 +4343,7 @@ function SecondaryView({
     );
   }
 
-  if (type === 'form') {
+  if (type === "form") {
     return (
       <div
         data-database-drop-zone="true"
@@ -3509,22 +4357,22 @@ function SecondaryView({
       >
         <div className={classes.formPreview}>
           <Text fw={750} size="xl">
-            {t('Collect form')}
+            {t("Collect form")}
           </Text>
           <Text size="sm" c="dimmed">
-            {t('Create new pages from a simple form.')}
+            {t("Create new pages from a simple form.")}
           </Text>
           <TextInput
             mt="md"
-            label={t('Name')}
-            placeholder={t('Type a name...')}
+            label={t("Name")}
+            placeholder={t("Type a name...")}
             value={formTitle}
             onChange={(event) => setFormTitle(event.currentTarget.value)}
           />
           <TextInput
             mt="sm"
-            label={t('Description')}
-            placeholder={t('Empty')}
+            label={t("Description")}
+            placeholder={t("Empty")}
             value={formDescription}
             onChange={(event) => setFormDescription(event.currentTarget.value)}
           />
@@ -3535,11 +4383,11 @@ function SecondaryView({
               onMouseDown={(event) => event.stopPropagation()}
               onClick={() => {
                 onCreate({ Title: formTitle, Description: formDescription });
-                setFormTitle('');
-                setFormDescription('');
+                setFormTitle("");
+                setFormDescription("");
               }}
             >
-              {t('Submit')}
+              {t("Submit")}
             </Button>
           )}
         </div>
@@ -3567,7 +4415,7 @@ function SecondaryView({
           draggable={canEdit}
           onClick={() => onOpen(record)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') onOpen(record);
+            if (event.key === "Enter") onOpen(record);
           }}
           onDragStart={(event) => {
             if (!canEdit || shouldSkipRecordDrag(event.target)) {
@@ -3575,7 +4423,7 @@ function SecondaryView({
               return;
             }
             event.stopPropagation();
-            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.effectAllowed = "move";
             setRecordDragData(event.dataTransfer, record, databaseId);
           }}
           onDragOver={(event) => {
@@ -3590,7 +4438,10 @@ function SecondaryView({
             if (!recordId && !pagePayload) return;
             event.preventDefault();
             event.stopPropagation();
-            if (recordId && isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)) {
+            if (
+              recordId &&
+              isSameDatabaseDrag(pagePayload, databaseId, event.dataTransfer)
+            ) {
               if (recordId !== record.id) onReorderRecord(recordId, record.id);
               return;
             }
@@ -3598,12 +4449,14 @@ function SecondaryView({
           }}
         >
           <ViewIcon type={type} />
-          <span>{record.title || t('Untitled')}</span>
+          <span>{record.title || t("Untitled")}</span>
           <em>
-            {type === 'feed'
-              ? record.status || t('Updated')
-              : type === 'map'
-                ? valueAsString(record.fields.Place || record.fields.Location) || t('No location')
+            {type === "feed"
+              ? record.status || t("Updated")
+              : type === "map"
+                ? valueAsString(
+                    record.fields.Place || record.fields.Location,
+                  ) || t("No location")
                 : t(viewNameForType(type))}
           </em>
         </div>
@@ -3611,7 +4464,7 @@ function SecondaryView({
       {records.length === 0 && (
         <div className={classes.empty}>
           <Text size="sm" c="dimmed">
-            {t('No records yet.')}
+            {t("No records yet.")}
           </Text>
         </div>
       )}
@@ -3649,7 +4502,9 @@ function RecordSidePage({
   const { t } = useTranslation();
   const [draftFields, setDraftFields] = useState<Record<string, unknown>>({});
   const [recordEditor, setRecordEditor] = useState<Editor | null>(null);
-  const recordPageQuery = usePageQuery({ pageId: opened ? record?.pageId : undefined });
+  const recordPageQuery = usePageQuery({
+    pageId: opened ? record?.pageId : undefined,
+  });
   const recordPage = recordPageQuery.data;
 
   useEffect(() => {
@@ -3661,7 +4516,7 @@ function RecordSidePage({
             Title: record.fields.Title ?? record.pageTitle ?? record.title,
             Status: record.fields.Status ?? record.status,
             Assignee: record.fields.Assignee ?? record.assigneeIds,
-            'Due date': record.fields['Due date'] ?? record.dueDate,
+            "Due date": record.fields["Due date"] ?? record.dueDate,
             Priority: record.fields.Priority ?? record.priority,
             Tags: record.fields.Tags ?? record.tags,
           }
@@ -3681,7 +4536,11 @@ function RecordSidePage({
   };
 
   return createPortal(
-    <div className={classes.recordPageOverlay} data-record-side-page="overlay" onMouseDown={onClose}>
+    <div
+      className={classes.recordPageOverlay}
+      data-record-side-page="overlay"
+      onMouseDown={onClose}
+    >
       <aside
         className={classes.recordPage}
         data-record-side-page="panel"
@@ -3691,95 +4550,120 @@ function RecordSidePage({
         onDrop={(event) => event.stopPropagation()}
         onDragEnd={(event) => event.stopPropagation()}
       >
-      <div className={classes.recordPageTopbar}>
-        <Group gap={4}>
-          <Tooltip label={t('Close')} withArrow openDelay={250}>
-            <ActionIcon variant="subtle" color="dark" aria-label={t('Close')} onClick={onClose}>
-              <IconX size={18} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label={t('Open full page')} withArrow openDelay={250}>
-            <ActionIcon variant="subtle" color="dark" aria-label={t('Open full page')} onClick={onOpenFullPage}>
-              <IconArrowsMaximize size={18} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
-        <Group gap={4}>
-          <PageShareModal pageId={recordPage?.id ?? record.pageId} readOnly={!canEdit} />
-          <PageActionMenu
-            pageId={recordPage?.id ?? record.pageId}
-            readOnly={!canEdit}
-            getEditorHTML={() => recordEditor?.getHTML()}
-            onDeleted={onClose}
-          />
-        </Group>
-      </div>
-
-      <div className={classes.recordPageContent}>
-        <input
-          className={classes.recordTitleInput}
-          value={valueAsString(draftFields.Title)}
-          placeholder={t('Untitled')}
-          disabled={!canEdit}
-          onChange={(event) => updateDraftField('Title', event.currentTarget.value)}
-          onBlur={(event) => onUpdate(record.id, { Title: event.currentTarget.value })}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur();
-          }}
-        />
-
-        <div className={classes.propertyList}>
-          {fields
-            .filter((field) => field.name !== TITLE_FIELD)
-            .map((field) => (
-              <RecordPropertyRow
-                key={field.name}
-                field={field}
-                value={draftFields[field.name]}
-                statuses={statuses}
-                users={users}
-                canEdit={canEdit}
-                onAssigneeSearch={onAssigneeSearch}
-                onUpdate={(value) => commitField(field.name, value)}
-              />
-            ))}
-          {canEdit && (
-            <Popover width={520} shadow="md" position="bottom-start" withinPortal>
-              <Popover.Target>
-                <button type="button" className={classes.addPropertyRow}>
-                  <IconPlus size={16} />
-                  {t('Add a property')}
-                </button>
-              </Popover.Target>
-              <Popover.Dropdown className={classes.propertyPopover}>
-                <PropertyEditor onCreateField={onCreateField} onUpdateField={onUpdateField} />
-              </Popover.Dropdown>
-            </Popover>
-          )}
-        </div>
-
-        <div className={classes.recordNativePage}>
-          {recordPageQuery.isLoading ? (
-            <Group justify="center" p="md">
-              <Loader size="sm" />
-            </Group>
-          ) : recordPage ? (
-            <EmbeddedRecordPageEditor
-              key={recordPage.id}
-              pageId={recordPage.id}
-              slugId={recordPage.slugId}
-              editable={canEdit}
-              content={recordPage.content}
-              canComment
-              onEditorReady={setRecordEditor}
+        <div className={classes.recordPageTopbar}>
+          <Group gap={4}>
+            <Tooltip label={t("Close")} withArrow openDelay={250}>
+              <ActionIcon
+                variant="subtle"
+                color="dark"
+                aria-label={t("Close")}
+                onClick={onClose}
+              >
+                <IconX size={18} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={t("Open full page")} withArrow openDelay={250}>
+              <ActionIcon
+                variant="subtle"
+                color="dark"
+                aria-label={t("Open full page")}
+                onClick={onOpenFullPage}
+              >
+                <IconArrowsMaximize size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+          <Group gap={4}>
+            <PageShareModal
+              pageId={recordPage?.id ?? record.pageId}
+              readOnly={!canEdit}
             />
-          ) : (
-            <Text size="sm" c="dimmed">
-              {t('This record page could not be loaded.')}
-            </Text>
-          )}
+            <PageActionMenu
+              pageId={recordPage?.id ?? record.pageId}
+              readOnly={!canEdit}
+              getEditorHTML={() => recordEditor?.getHTML()}
+              onDeleted={onClose}
+            />
+          </Group>
         </div>
-      </div>
+
+        <div className={classes.recordPageContent}>
+          <input
+            className={classes.recordTitleInput}
+            value={valueAsString(draftFields.Title)}
+            placeholder={t("Untitled")}
+            disabled={!canEdit}
+            onChange={(event) =>
+              updateDraftField("Title", event.currentTarget.value)
+            }
+            onBlur={(event) =>
+              onUpdate(record.id, { Title: event.currentTarget.value })
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+          />
+
+          <div className={classes.propertyList}>
+            {fields
+              .filter((field) => field.name !== TITLE_FIELD)
+              .map((field) => (
+                <RecordPropertyRow
+                  key={field.name}
+                  field={field}
+                  value={draftFields[field.name]}
+                  statuses={statuses}
+                  users={users}
+                  canEdit={canEdit}
+                  onAssigneeSearch={onAssigneeSearch}
+                  onUpdate={(value) => commitField(field.name, value)}
+                />
+              ))}
+            {canEdit && (
+              <Popover
+                width={520}
+                shadow="md"
+                position="bottom-start"
+                withinPortal
+              >
+                <Popover.Target>
+                  <button type="button" className={classes.addPropertyRow}>
+                    <IconPlus size={16} />
+                    {t("Add a property")}
+                  </button>
+                </Popover.Target>
+                <Popover.Dropdown className={classes.propertyPopover}>
+                  <PropertyEditor
+                    onCreateField={onCreateField}
+                    onUpdateField={onUpdateField}
+                  />
+                </Popover.Dropdown>
+              </Popover>
+            )}
+          </div>
+
+          <div className={classes.recordNativePage}>
+            {recordPageQuery.isLoading ? (
+              <Group justify="center" p="md">
+                <Loader size="sm" />
+              </Group>
+            ) : recordPage ? (
+              <EmbeddedRecordPageEditor
+                key={recordPage.id}
+                pageId={recordPage.id}
+                slugId={recordPage.slugId}
+                editable={canEdit}
+                content={recordPage.content}
+                canComment
+                onEditorReady={setRecordEditor}
+              />
+            ) : (
+              <Text size="sm" c="dimmed">
+                {t("This record page could not be loaded.")}
+              </Text>
+            )}
+          </div>
+        </div>
       </aside>
     </div>,
     document.body,
@@ -3813,7 +4697,7 @@ function RecordPropertyRow({
         <span>{fieldLabel(field.name, t)}</span>
       </div>
       <div className={classes.propertyRowValue}>
-        {field.name === 'Assignee' || field.type === 'user' ? (
+        {field.name === "Assignee" || field.type === "user" ? (
           <PeoplePicker
             value={valueAsStringArray(value)}
             users={users}
@@ -3825,21 +4709,21 @@ function RecordPropertyRow({
         ) : isSelectField(field) ? (
           <SelectValuePicker
             value={value}
-            options={field.name === 'Status' ? statuses : field.options ?? []}
+            options={field.name === "Status" ? statuses : (field.options ?? [])}
             canEdit={canEdit}
-            clearable={field.name !== 'Status'}
+            clearable={field.name !== "Status"}
             onChange={onUpdate}
           />
-        ) : field.type === 'date' ? (
+        ) : field.type === "date" ? (
           <DateCell value={value} canEdit={canEdit} onChange={onUpdate} />
-        ) : field.type === 'checkbox' ? (
+        ) : field.type === "checkbox" ? (
           <input
             type="checkbox"
             checked={Boolean(value)}
             disabled={!canEdit}
             onChange={(event) => onUpdate(event.currentTarget.checked)}
           />
-        ) : field.type === 'multiSelect' ? (
+        ) : field.type === "multiSelect" ? (
           <SelectValuePicker
             value={value}
             options={field.options ?? []}
@@ -3848,7 +4732,11 @@ function RecordPropertyRow({
             onChange={onUpdate}
           />
         ) : (
-          <InlinePropertyInput value={value} canEdit={canEdit} onUpdate={onUpdate} />
+          <InlinePropertyInput
+            value={value}
+            canEdit={canEdit}
+            onUpdate={onUpdate}
+          />
         )}
       </div>
     </div>
@@ -3865,22 +4753,22 @@ function InlineMultiPropertyInput({
   onUpdate: (value: string[]) => void;
 }) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState(valueAsStringArray(value).join(', '));
+  const [draft, setDraft] = useState(valueAsStringArray(value).join(", "));
 
   useEffect(() => {
-    setDraft(valueAsStringArray(value).join(', '));
+    setDraft(valueAsStringArray(value).join(", "));
   }, [value]);
 
   return (
     <TextInput
       value={draft}
       disabled={!canEdit}
-      placeholder={t('Empty')}
+      placeholder={t("Empty")}
       onChange={(event) => setDraft(event.currentTarget.value)}
       onBlur={(event) =>
         onUpdate(
           event.currentTarget.value
-            .split(',')
+            .split(",")
             .map((item) => item.trim())
             .filter(Boolean),
         )
@@ -3911,7 +4799,7 @@ function InlinePropertyInput({
     <TextInput
       value={draft}
       disabled={!canEdit}
-      placeholder={t('Empty')}
+      placeholder={t("Empty")}
       onChange={(event) => setDraft(event.currentTarget.value)}
       onBlur={(event) => onUpdate(event.currentTarget.value)}
       size="xs"
@@ -3921,8 +4809,8 @@ function InlinePropertyInput({
 }
 
 function renderCell(value: unknown) {
-  if (Array.isArray(value)) return value.join(', ');
-  if (value === null || typeof value === 'undefined') return '';
-  if (typeof value === 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return value.join(", ");
+  if (value === null || typeof value === "undefined") return "";
+  if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }

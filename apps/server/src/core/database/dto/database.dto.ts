@@ -160,6 +160,12 @@ export class UpdateDatabaseFieldDto extends DatabaseInfoDto {
 
 export class ListDatabaseRecordsDto extends DatabaseInfoDto {}
 
+export class ListDatabaseTargetsDto {
+  @IsOptional()
+  @IsUUID()
+  excludeDatabaseId?: string;
+}
+
 export class CreateDatabaseRecordDto extends DatabaseInfoDto {
   @IsObject()
   fields: Record<string, unknown>;
@@ -200,6 +206,16 @@ export class DetachDatabaseRecordDto extends DatabaseInfoDto {
   @IsOptional()
   @IsUUID()
   targetPageId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  targetSpaceId?: string;
+}
+
+export class TrashDatabaseRecordPageDto extends DatabaseInfoDto {
+  @IsString()
+  @IsNotEmpty()
+  recordId: string;
 }
 
 export class ReorderDatabaseRecordDto extends DatabaseInfoDto {

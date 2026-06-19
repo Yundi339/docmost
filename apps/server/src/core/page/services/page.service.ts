@@ -15,10 +15,7 @@ import {
   executeWithCursorPagination,
 } from '@docmost/db/pagination/cursor-pagination';
 import { InjectKysely } from 'nestjs-kysely';
-import {
-  KyselyDB,
-  KyselyTransaction,
-} from '@docmost/db/types/kysely.types';
+import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { MovePageDto } from '../dto/move-page.dto';
 import { generateSlugId } from '../../../common/helpers';
@@ -393,6 +390,7 @@ export class PageService {
     spaceId: string,
     userId: string,
     parentPageId: string | null = null,
+    existingTrx?: KyselyTransaction,
   ) {
     let childPageIds: string[] = [];
 
@@ -417,160 +415,174 @@ export class PageService {
         accessibleIds.has(p.parentPageId),
     );
 
-    await executeTx(this.db, async (trx) => {
-      for (const lockedSpaceId of [...new Set([rootPage.spaceId, spaceId])].sort()) {
-        await this.lockSpaceTreeForMove(lockedSpaceId, trx);
-      }
+    await executeTx(
+      this.db,
+      async (trx) => {
+        for (const lockedSpaceId of [
+          ...new Set([rootPage.spaceId, spaceId]),
+        ].sort()) {
+          await this.lockSpaceTreeForMove(lockedSpaceId, trx);
+        }
 
-      // Orphan inaccessible child pages (make them root pages in original space)
-      for (const page of pagesToOrphan) {
-        const orphanPosition = await this.nextPagePositionIn(
+        // Orphan inaccessible child pages (make them root pages in original space)
+        for (const page of pagesToOrphan) {
+          const orphanPosition = await this.nextPagePositionIn(
+            trx,
+            rootPage.spaceId,
+            null,
+          );
+          await this.pageRepo.updatePage(
+            { parentPageId: null, position: orphanPosition },
+            page.id,
+            trx,
+          );
+        }
+
+        // Update root page
+        const nextPosition = await this.nextPagePositionIn(
           trx,
-          rootPage.spaceId,
-          null,
+          spaceId,
+          parentPageId,
         );
         await this.pageRepo.updatePage(
-          { parentPageId: null, position: orphanPosition },
-          page.id,
-          trx,
-        );
-      }
-
-      // Update root page
-      const nextPosition = await this.nextPagePositionIn(
-        trx,
-        spaceId,
-        parentPageId,
-      );
-      await this.pageRepo.updatePage(
-        { spaceId, parentPageId, position: nextPosition },
-        rootPage.id,
-        trx,
-      );
-
-      const pageIdsToMove = accessiblePages.map((p) => p.id);
-
-      childPageIds = pageIdsToMove.filter((id) => id !== rootPage.id);
-
-      if (pageIdsToMove.length > 1) {
-        // Update sub pages (all accessible pages except root)
-        await this.pageRepo.updatePages(
-          { spaceId },
-          childPageIds,
-          trx,
-        );
-      }
-
-      if (pageIdsToMove.length > 0) {
-        // Clear page-level permissions - moved pages inherit destination space permissions
-        // (page_permissions cascade deletes via foreign key)
-        await trx
-          .deleteFrom('pageAccess')
-          .where('pageId', 'in', pageIdsToMove)
-          .execute();
-
-        // update spaceId in shares
-        await trx
-          .updateTable('shares')
-          .set({ spaceId: spaceId })
-          .where('pageId', 'in', pageIdsToMove)
-          .execute();
-
-        // Update comments
-        await trx
-          .updateTable('comments')
-          .set({ spaceId: spaceId })
-          .where('pageId', 'in', pageIdsToMove)
-          .execute();
-
-        // Update page verifications
-        await trx
-          .updateTable('pageVerifications')
-          .set({ spaceId: spaceId })
-          .where('pageId', 'in', pageIdsToMove)
-          .execute();
-
-        // Update notifications — access follows the page after a move
-        await trx
-          .updateTable('notifications')
-          .set({ spaceId: spaceId })
-          .where('pageId', 'in', pageIdsToMove)
-          .execute();
-
-        // Update attachments
-        await this.attachmentRepo.updateAttachmentsByPageId(
-          { spaceId },
-          pageIdsToMove,
+          { spaceId, parentPageId, position: nextPosition },
+          rootPage.id,
           trx,
         );
 
-        // Update watchers and remove those without access to new space
-        await this.watcherService.movePageWatchersToSpace(pageIdsToMove, spaceId, {
-          trx,
-        });
+        const pageIdsToMove = accessiblePages.map((p) => p.id);
 
-        await this.aiQueue.add(QueueJob.PAGE_MOVED_TO_SPACE, {
-          pageIds: pageIdsToMove,
-          workspaceId: rootPage.workspaceId,
-        });
-      }
-    });
+        childPageIds = pageIdsToMove.filter((id) => id !== rootPage.id);
+
+        if (pageIdsToMove.length > 1) {
+          // Update sub pages (all accessible pages except root)
+          await this.pageRepo.updatePages({ spaceId }, childPageIds, trx);
+        }
+
+        if (pageIdsToMove.length > 0) {
+          // Clear page-level permissions - moved pages inherit destination space permissions
+          // (page_permissions cascade deletes via foreign key)
+          await trx
+            .deleteFrom('pageAccess')
+            .where('pageId', 'in', pageIdsToMove)
+            .execute();
+
+          // update spaceId in shares
+          await trx
+            .updateTable('shares')
+            .set({ spaceId: spaceId })
+            .where('pageId', 'in', pageIdsToMove)
+            .execute();
+
+          // Update comments
+          await trx
+            .updateTable('comments')
+            .set({ spaceId: spaceId })
+            .where('pageId', 'in', pageIdsToMove)
+            .execute();
+
+          // Update page verifications
+          await trx
+            .updateTable('pageVerifications')
+            .set({ spaceId: spaceId })
+            .where('pageId', 'in', pageIdsToMove)
+            .execute();
+
+          // Update notifications — access follows the page after a move
+          await trx
+            .updateTable('notifications')
+            .set({ spaceId: spaceId })
+            .where('pageId', 'in', pageIdsToMove)
+            .execute();
+
+          // Update attachments
+          await this.attachmentRepo.updateAttachmentsByPageId(
+            { spaceId },
+            pageIdsToMove,
+            trx,
+          );
+
+          // Update watchers and remove those without access to new space
+          await this.watcherService.movePageWatchersToSpace(
+            pageIdsToMove,
+            spaceId,
+            {
+              trx,
+            },
+          );
+
+          await this.aiQueue.add(QueueJob.PAGE_MOVED_TO_SPACE, {
+            pageIds: pageIdsToMove,
+            workspaceId: rootPage.workspaceId,
+          });
+        }
+      },
+      existingTrx,
+    );
 
     return { childPageIds };
   }
 
-  async movePageToParent(movedPage: Page, parentPageId: string | null) {
-    await this.db.transaction().execute(async (trx) => {
-      await this.lockSpaceTreeForMove(movedPage.spaceId, trx);
+  async movePageToParent(
+    movedPage: Page,
+    parentPageId: string | null,
+    existingTrx?: KyselyTransaction,
+  ) {
+    await executeTx(
+      this.db,
+      async (trx) => {
+        await this.lockSpaceTreeForMove(movedPage.spaceId, trx);
 
-      const currentMovedPage = await this.pageRepo.findById(movedPage.id, {
-        withLock: true,
-        trx,
-      });
-      if (!currentMovedPage || currentMovedPage.deletedAt) {
-        throw new NotFoundException('Moved page not found');
-      }
-
-      if (parentPageId) {
-        const parentPage = await this.pageRepo.findById(parentPageId, {
+        const currentMovedPage = await this.pageRepo.findById(movedPage.id, {
           withLock: true,
           trx,
         });
-        if (
-          !parentPage ||
-          parentPage.deletedAt ||
-          parentPage.spaceId !== currentMovedPage.spaceId
-        ) {
-          throw new NotFoundException('Parent page not found');
+        if (!currentMovedPage || currentMovedPage.deletedAt) {
+          throw new NotFoundException('Moved page not found');
         }
 
-        const wouldCreateCycle = await this.isPageInSubtree(
+        if (parentPageId) {
+          const parentPage = await this.pageRepo.findById(parentPageId, {
+            withLock: true,
+            trx,
+          });
+          if (
+            !parentPage ||
+            parentPage.deletedAt ||
+            parentPage.spaceId !== currentMovedPage.spaceId
+          ) {
+            throw new NotFoundException('Parent page not found');
+          }
+
+          const wouldCreateCycle = await this.isPageInSubtree(
+            currentMovedPage.id,
+            parentPage.id,
+            trx,
+          );
+          if (wouldCreateCycle) {
+            throw new BadRequestException(
+              'Cannot move a page under itself or its descendants',
+            );
+          }
+        }
+
+        const position = await this.nextPagePositionIn(
+          trx,
+          currentMovedPage.spaceId,
+          parentPageId,
+        );
+
+        await this.pageRepo.updatePage(
+          {
+            parentPageId,
+            position,
+          },
           currentMovedPage.id,
-          parentPage.id,
           trx,
         );
-        if (wouldCreateCycle) {
-          throw new BadRequestException(
-            'Cannot move a page under itself or its descendants',
-          );
-        }
-      }
-
-      const position = await this.nextPagePositionIn(
-        trx,
-        currentMovedPage.spaceId,
-        parentPageId,
-      );
-
-      await this.pageRepo.updatePage(
-        {
-          parentPageId,
-          position,
-        },
-        currentMovedPage.id,
-        trx,
-      );
-    });
+      },
+      existingTrx,
+    );
   }
 
   async duplicatePage(
@@ -891,10 +903,7 @@ export class PageService {
     });
   }
 
-  private async lockSpaceTreeForMove(
-    spaceId: string,
-    trx: KyselyTransaction,
-  ) {
+  private async lockSpaceTreeForMove(spaceId: string, trx: KyselyTransaction) {
     await sql`select pg_advisory_xact_lock(hashtext(${spaceId})::bigint)`.execute(
       trx,
     );
@@ -965,13 +974,15 @@ export class PageService {
       .selectFrom('page_ancestors')
       .selectAll('page_ancestors')
       .select((eb) =>
-        eb.exists(
-          eb
-            .selectFrom('pages as child')
-            .select(sql`1`.as('one'))
-            .whereRef('child.parentPageId', '=', 'page_ancestors.id')
-            .where('child.deletedAt', 'is', null),
-        ).as('hasChildren'),
+        eb
+          .exists(
+            eb
+              .selectFrom('pages as child')
+              .select(sql`1`.as('one'))
+              .whereRef('child.parentPageId', '=', 'page_ancestors.id')
+              .where('child.deletedAt', 'is', null),
+          )
+          .as('hasChildren'),
       )
       .execute();
 

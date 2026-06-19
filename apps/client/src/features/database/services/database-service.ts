@@ -1,28 +1,48 @@
-import api from '@/lib/api-client';
+import api from "@/lib/api-client";
 import {
   CreateDatabaseInput,
+  DatabaseBoardTarget,
   DatabaseBlockInfo,
   DatabaseFieldDefinition,
   DatabaseRecord,
   DatabaseViewDefinition,
-} from '@/features/database/types/database.types';
+} from "@/features/database/types/database.types";
 
 export async function createDatabase(
   data: CreateDatabaseInput,
 ): Promise<DatabaseBlockInfo> {
-  const req = await api.post<DatabaseBlockInfo>('/databases/create', data);
+  const req = await api.post<DatabaseBlockInfo>("/databases/create", data);
   return req.data;
 }
 
-export async function getDatabaseInfo(databaseId: string): Promise<DatabaseBlockInfo> {
-  const req = await api.post<DatabaseBlockInfo>('/databases/info', { databaseId });
-  return req.data;
-}
-
-export async function listDatabaseRecords(databaseId: string): Promise<DatabaseRecord[]> {
-  const req = await api.post<{ items: DatabaseRecord[] }>('/databases/records/list', {
+export async function getDatabaseInfo(
+  databaseId: string,
+): Promise<DatabaseBlockInfo> {
+  const req = await api.post<DatabaseBlockInfo>("/databases/info", {
     databaseId,
   });
+  return req.data;
+}
+
+export async function listDatabaseTargets(input: {
+  excludeDatabaseId?: string;
+}): Promise<DatabaseBoardTarget[]> {
+  const req = await api.post<{ items: DatabaseBoardTarget[] }>(
+    "/databases/targets/list",
+    input,
+  );
+  return req.data.items;
+}
+
+export async function listDatabaseRecords(
+  databaseId: string,
+): Promise<DatabaseRecord[]> {
+  const req = await api.post<{ items: DatabaseRecord[] }>(
+    "/databases/records/list",
+    {
+      databaseId,
+    },
+  );
   return req.data.items;
 }
 
@@ -30,7 +50,10 @@ export async function createDatabaseRecord(input: {
   databaseId: string;
   fields: Record<string, unknown>;
 }): Promise<DatabaseRecord> {
-  const req = await api.post<DatabaseRecord>('/databases/records/create', input);
+  const req = await api.post<DatabaseRecord>(
+    "/databases/records/create",
+    input,
+  );
   return req.data;
 }
 
@@ -39,7 +62,10 @@ export async function updateDatabaseRecord(input: {
   recordId: string;
   fields: Record<string, unknown>;
 }): Promise<DatabaseRecord> {
-  const req = await api.post<DatabaseRecord>('/databases/records/update', input);
+  const req = await api.post<DatabaseRecord>(
+    "/databases/records/update",
+    input,
+  );
   return req.data;
 }
 
@@ -49,7 +75,10 @@ export async function reorderDatabaseRecord(input: {
   beforeRecordId?: string;
   afterRecordId?: string;
 }): Promise<DatabaseRecord> {
-  const req = await api.post<DatabaseRecord>('/databases/records/reorder', input);
+  const req = await api.post<DatabaseRecord>(
+    "/databases/records/reorder",
+    input,
+  );
   return req.data;
 }
 
@@ -60,7 +89,10 @@ export async function attachDatabasePage(input: {
   sourceDatabaseId?: string;
   sourceRecordId?: string;
 }): Promise<DatabaseRecord> {
-  const req = await api.post<DatabaseRecord>('/databases/records/attach-page', input);
+  const req = await api.post<DatabaseRecord>(
+    "/databases/records/attach-page",
+    input,
+  );
   return req.data;
 }
 
@@ -68,24 +100,41 @@ export async function detachDatabaseRecord(input: {
   databaseId: string;
   recordId: string;
   targetPageId?: string;
+  targetSpaceId?: string;
 }): Promise<{
-  pageId: string;
-  pageSlugId: string;
-  pageTitle: string;
+  pageId?: string | null;
+  pageSlugId?: string | null;
+  pageTitle?: string | null;
   pageIcon?: string | null;
   targetPageId?: string | null;
+  targetSpaceId?: string | null;
 }> {
-  const req = await api.post('/databases/records/detach', input);
+  const req = await api.post("/databases/records/detach", input);
+  return req.data;
+}
+
+export async function trashDatabaseRecordPage(input: {
+  databaseId: string;
+  recordId: string;
+}): Promise<{
+  recordId: string;
+  pageId?: string | null;
+  trashedPageId?: string | null;
+}> {
+  const req = await api.post("/databases/records/trash-page", input);
   return req.data;
 }
 
 export async function createDatabaseView(input: {
   databaseId: string;
   name: string;
-  type: DatabaseViewDefinition['type'];
+  type: DatabaseViewDefinition["type"];
   groupBy?: string;
 }): Promise<DatabaseBlockInfo> {
-  const req = await api.post<DatabaseBlockInfo>('/databases/views/create', input);
+  const req = await api.post<DatabaseBlockInfo>(
+    "/databases/views/create",
+    input,
+  );
   return req.data;
 }
 
@@ -93,19 +142,25 @@ export async function updateDatabaseTitle(input: {
   databaseId: string;
   title: string;
 }): Promise<DatabaseBlockInfo> {
-  const req = await api.post<DatabaseBlockInfo>('/databases/title/update', input);
+  const req = await api.post<DatabaseBlockInfo>(
+    "/databases/title/update",
+    input,
+  );
   return req.data;
 }
 
 export async function createDatabaseField(input: {
   databaseId: string;
   name?: string;
-  type: DatabaseFieldDefinition['type'];
+  type: DatabaseFieldDefinition["type"];
   options?: string[];
-  position?: 'left' | 'right' | 'end';
+  position?: "left" | "right" | "end";
   anchorFieldName?: string;
 }): Promise<DatabaseBlockInfo> {
-  const req = await api.post<DatabaseBlockInfo>('/databases/fields/create', input);
+  const req = await api.post<DatabaseBlockInfo>(
+    "/databases/fields/create",
+    input,
+  );
   return req.data;
 }
 
@@ -113,9 +168,12 @@ export async function updateDatabaseField(input: {
   databaseId: string;
   fieldName: string;
   name?: string;
-  type?: DatabaseFieldDefinition['type'];
+  type?: DatabaseFieldDefinition["type"];
   options?: string[];
 }): Promise<DatabaseBlockInfo> {
-  const req = await api.post<DatabaseBlockInfo>('/databases/fields/update', input);
+  const req = await api.post<DatabaseBlockInfo>(
+    "/databases/fields/update",
+    input,
+  );
   return req.data;
 }

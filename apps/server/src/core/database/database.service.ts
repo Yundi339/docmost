@@ -1,19 +1,34 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectKysely } from 'nestjs-kysely';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { v7 as uuid7 } from 'uuid';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
 import { Json } from '@docmost/db/types/db';
-import { DatabaseBlock, DatabaseRecord, Page, User } from '@docmost/db/types/entity.types';
+import {
+  DatabaseBlock,
+  DatabaseRecord,
+  Page,
+  User,
+} from '@docmost/db/types/entity.types';
+import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
+import { executeTx } from '@docmost/db/utils';
 import { createYdocFromJson } from '../../common/helpers/prosemirror/utils';
 import { generateSlugId } from '../../common/helpers';
 import { jsonToText } from '../../collaboration/collaboration.util';
 import { PageAccessService } from '../page/page-access/page-access.service';
+import { PageService } from '../page/services/page.service';
 import { DatabaseRepo } from './database.repo';
 import { ApitableClient } from './apitable.client';
+import SpaceAbilityFactory from '../casl/abilities/space-ability.factory';
+import {
+  SpaceCaslAction,
+  SpaceCaslSubject,
+} from '../casl/interfaces/space-ability.type';
 import {
   buildDefaultFieldsForTemplate,
   createEmptyRecordFields,
@@ -31,7 +46,9 @@ import {
   CreateDatabaseRecordDto,
   CreateDatabaseViewDto,
   DetachDatabaseRecordDto,
+  ListDatabaseTargetsDto,
   ReorderDatabaseRecordDto,
+  TrashDatabaseRecordPageDto,
   UpdateDatabaseFieldDto,
   UpdateDatabaseRecordDto,
   UpdateDatabaseTitleDto,
@@ -49,7 +66,10 @@ export class DatabaseService {
     private readonly databaseRepo: DatabaseRepo,
     private readonly pageRepo: PageRepo,
     private readonly pageAccessService: PageAccessService,
+    private readonly pageService: PageService,
+    private readonly spaceAbility: SpaceAbilityFactory,
     private readonly apitableClient: ApitableClient,
+    @InjectKysely() private readonly db: KyselyDB,
   ) {}
 
   async createDatabase(dto: CreateDatabaseDto, user: User) {
@@ -72,7 +92,10 @@ export class DatabaseService {
     const activeView =
       views.find((view) => view.type === dto.viewType) || views[0];
     const title = dto.title?.trim() || this.defaultTitle(template);
-    const apitable = await this.apitableClient.createDatasheet({ title, fields });
+    const apitable = await this.apitableClient.createDatasheet({
+      title,
+      fields,
+    });
 
     const metadata: DatabaseMetadata = {
       provider: apitable.provider,
@@ -133,8 +156,46 @@ export class DatabaseService {
     return this.toResponse(database);
   }
 
+  async listTargets(dto: ListDatabaseTargetsDto, user: User) {
+    if (!user.workspaceId) return { items: [] };
+
+    const databases = await this.databaseRepo.listByWorkspace(
+      user.workspaceId,
+    );
+    const items = [];
+
+    for (const database of databases) {
+      if (database.id === dto.excludeDatabaseId) continue;
+      if (!this.isNativeDatabase(database)) continue;
+
+      const views = this.getViews(database.views);
+      if (!views.some((view) => view.type === 'kanban')) continue;
+
+      const page = await this.pageRepo.findById(database.pageId);
+      if (!page || page.deletedAt) continue;
+
+      try {
+        await this.pageAccessService.validateCanEdit(page, user);
+      } catch {
+        continue;
+      }
+
+      items.push({
+        ...this.toResponse(database),
+        pageTitle: page.title,
+        pageIcon: page.icon,
+      });
+    }
+
+    return { items };
+  }
+
   async createView(dto: CreateDatabaseViewDto, user: User) {
-    const database = await this.getAuthorizedDatabase(dto.databaseId, user, 'edit');
+    const database = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
     const views = this.getViews(database.views);
     const view: DatabaseViewDefinition = {
       id: uuid7(),
@@ -154,7 +215,11 @@ export class DatabaseService {
   }
 
   async updateTitle(dto: UpdateDatabaseTitleDto, user: User) {
-    const database = await this.getAuthorizedDatabase(dto.databaseId, user, 'edit');
+    const database = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
     const title = dto.title.trim();
     const updated = await this.databaseRepo.updateTitle(
       database.id,
@@ -166,7 +231,11 @@ export class DatabaseService {
   }
 
   async createField(dto: CreateDatabaseFieldDto, user: User) {
-    const database = await this.getAuthorizedDatabase(dto.databaseId, user, 'edit');
+    const database = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
     const fields = this.getFields(database.fields);
     const name = this.makeUniqueFieldName(
       dto.name?.trim() || this.defaultFieldName(dto.type),
@@ -176,7 +245,9 @@ export class DatabaseService {
     const field: DatabaseFieldDefinition = {
       name,
       type,
-      options: dto.options?.length ? dto.options : this.defaultOptionsForField(type),
+      options: dto.options?.length
+        ? dto.options
+        : this.defaultOptionsForField(type),
     };
 
     if (!field.options?.length) delete field.options;
@@ -202,13 +273,21 @@ export class DatabaseService {
   }
 
   async updateField(dto: UpdateDatabaseFieldDto, user: User) {
-    const database = await this.getAuthorizedDatabase(dto.databaseId, user, 'edit');
+    const database = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
     const fields = this.getFields(database.fields);
-    const fieldIndex = fields.findIndex((field) => field.name === dto.fieldName);
+    const fieldIndex = fields.findIndex(
+      (field) => field.name === dto.fieldName,
+    );
     if (fieldIndex === -1) throw new NotFoundException('Field not found');
 
     const currentField = fields[fieldIndex];
-    const nextType = dto.type ? this.normalizeFieldType(dto.type) : currentField.type;
+    const nextType = dto.type
+      ? this.normalizeFieldType(dto.type)
+      : currentField.type;
     const nextName = dto.name?.trim()
       ? this.makeUniqueFieldName(dto.name.trim(), fields, currentField.name)
       : currentField.name;
@@ -253,14 +332,18 @@ export class DatabaseService {
       return { items: await this.apitableClient.listRecords(datasheetId) };
     }
 
-    const nativeRecords = await this.databaseRepo.listDatabaseRecords(database.id);
+    const nativeRecords = await this.databaseRepo.listDatabaseRecords(
+      database.id,
+    );
     if (nativeRecords.length > 0) {
-      return {
-        items: await Promise.all(
-          nativeRecords.map((record) =>
-            this.normalizeNativeRecordWithPage(database, record, user),
-          ),
+      const items = await Promise.all(
+        nativeRecords.map((record) =>
+          this.normalizeNativeRecordForList(database, record, user),
         ),
+      );
+
+      return {
+        items: items.filter(Boolean),
       };
     }
 
@@ -272,7 +355,11 @@ export class DatabaseService {
   }
 
   async createRecord(dto: CreateDatabaseRecordDto, user: User) {
-    const database = await this.getAuthorizedDatabase(dto.databaseId, user, 'edit');
+    const database = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
     const datasheetId = database.apitableDatasheetId;
 
     if (datasheetId && !this.isNativeDatabase(database)) {
@@ -302,11 +389,19 @@ export class DatabaseService {
   }
 
   async updateRecord(dto: UpdateDatabaseRecordDto, user: User) {
-    const database = await this.getAuthorizedDatabase(dto.databaseId, user, 'edit');
+    const database = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
     const datasheetId = database.apitableDatasheetId;
 
     if (datasheetId && !this.isNativeDatabase(database)) {
-      return this.apitableClient.updateRecord(datasheetId, dto.recordId, dto.fields);
+      return this.apitableClient.updateRecord(
+        datasheetId,
+        dto.recordId,
+        dto.fields,
+      );
     }
 
     const record = await this.databaseRepo.findDatabaseRecord(
@@ -315,7 +410,12 @@ export class DatabaseService {
     );
 
     if (!record) {
-      return this.updateLegacyMetadataRecord(database, dto.recordId, dto.fields, user.id);
+      return this.updateLegacyMetadataRecord(
+        database,
+        dto.recordId,
+        dto.fields,
+        user.id,
+      );
     }
 
     const nextFields = {
@@ -335,7 +435,11 @@ export class DatabaseService {
   }
 
   async reorderRecord(dto: ReorderDatabaseRecordDto, user: User) {
-    const database = await this.getAuthorizedDatabase(dto.databaseId, user, 'edit');
+    const database = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
     const record = await this.databaseRepo.findDatabaseRecord(
       database.id,
       dto.recordId,
@@ -344,10 +448,16 @@ export class DatabaseService {
     if (!record) throw new NotFoundException('Record not found');
 
     const beforeRecord = dto.beforeRecordId
-      ? await this.databaseRepo.findDatabaseRecord(database.id, dto.beforeRecordId)
+      ? await this.databaseRepo.findDatabaseRecord(
+          database.id,
+          dto.beforeRecordId,
+        )
       : undefined;
     const afterRecord = dto.afterRecordId
-      ? await this.databaseRepo.findDatabaseRecord(database.id, dto.afterRecordId)
+      ? await this.databaseRepo.findDatabaseRecord(
+          database.id,
+          dto.afterRecordId,
+        )
       : undefined;
     const sortOrder = generateJitteredKeyBetween(
       afterRecord?.sortOrder ?? null,
@@ -364,96 +474,183 @@ export class DatabaseService {
   }
 
   async attachPage(dto: AttachDatabasePageDto, user: User) {
-    const database = await this.getAuthorizedDatabase(dto.databaseId, user, 'edit');
+    const database = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
     const page = await this.pageRepo.findById(dto.pageId, {
       includeTextContent: true,
     });
     if (!page || page.deletedAt) throw new NotFoundException('Page not found');
     await this.pageAccessService.validateCanEdit(page, user);
 
-    const existingRecord = await this.databaseRepo.findDatabaseRecordByPage(
-      database.id,
-      page.id,
-    );
-    if (existingRecord) {
-      return this.normalizeNativeRecordWithPage(database, existingRecord, user);
-    }
+    let attachedRecord: DatabaseRecord | undefined;
+    await executeTx(this.db, async (trx) => {
+      const existingRecord = await this.databaseRepo.findDatabaseRecordByPage(
+        database.id,
+        page.id,
+        trx,
+      );
+      if (existingRecord) {
+        attachedRecord = existingRecord;
+        if (dto.sourceDatabaseId && dto.sourceRecordId) {
+          await this.detachSourceRecordIfDifferent(
+            dto.sourceDatabaseId,
+            dto.sourceRecordId,
+            database.id,
+            existingRecord.id,
+            user,
+            trx,
+          );
+        }
+        return;
+      }
 
-    const fields = this.buildFieldsForAttachedPage(database, page, dto.fields);
-    const lastSortOrder =
-      await this.databaseRepo.getLastDatabaseRecordSortOrder(database.id);
-    const record = await this.databaseRepo.insertDatabaseRecord({
-      databaseId: database.id,
-      pageId: page.id,
-      spaceId: database.spaceId,
-      workspaceId: database.workspaceId,
-      createdById: user.id,
-      updatedById: user.id,
-      fields: fields as unknown as Json,
-      sortOrder: generateJitteredKeyBetween(lastSortOrder, null),
+      const fields = this.buildFieldsForAttachedPage(
+        database,
+        page,
+        dto.fields,
+      );
+      const lastSortOrder =
+        await this.databaseRepo.getLastDatabaseRecordSortOrder(
+          database.id,
+          trx,
+        );
+      attachedRecord = await this.databaseRepo.insertDatabaseRecord(
+        {
+          databaseId: database.id,
+          pageId: page.id,
+          spaceId: database.spaceId,
+          workspaceId: database.workspaceId,
+          createdById: user.id,
+          updatedById: user.id,
+          fields: fields as unknown as Json,
+          sortOrder: generateJitteredKeyBetween(lastSortOrder, null),
+        },
+        trx,
+      );
+
+      await this.movePageUnder(
+        page.id,
+        database.pageId,
+        database.spaceId,
+        database.workspaceId,
+        user,
+        trx,
+      );
+
+      if (dto.sourceDatabaseId && dto.sourceRecordId) {
+        await this.detachSourceRecordIfDifferent(
+          dto.sourceDatabaseId,
+          dto.sourceRecordId,
+          database.id,
+          attachedRecord.id,
+          user,
+          trx,
+        );
+      }
     });
 
-    await this.movePageUnder(
-      page.id,
-      database.pageId,
-      database.spaceId,
-      database.workspaceId,
-      user,
-    );
-
-    if (dto.sourceDatabaseId && dto.sourceRecordId) {
-      await this.detachSourceRecordIfDifferent(
-        dto.sourceDatabaseId,
-        dto.sourceRecordId,
-        database.id,
-        record.id,
-        user,
-      );
+    if (!attachedRecord) {
+      throw new BadRequestException('Failed to attach page');
     }
 
-    return this.normalizeNativeRecordWithPage(database, record, user);
+    return this.normalizeNativeRecordWithPage(database, attachedRecord, user);
   }
 
   async detachRecord(dto: DetachDatabaseRecordDto, user: User) {
-    const database = await this.getAuthorizedDatabase(dto.databaseId, user, 'edit');
+    const database = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
+    if (dto.targetPageId && dto.targetSpaceId) {
+      throw new BadRequestException(
+        'Provide only one target page or target space',
+      );
+    }
+
     const record = await this.databaseRepo.findDatabaseRecord(
       database.id,
       dto.recordId,
     );
     if (!record) throw new NotFoundException('Record not found');
 
-    const recordPage = await this.ensureRecordPage(database, record, user);
-    let targetPage: Page | undefined;
-    const pageIcon =
-      recordPage.icon === '📄' ? null : recordPage.icon;
-
-    if (recordPage.icon === '📄') {
-      await this.pageRepo.updatePage(
-        {
-          icon: null,
-          lastUpdatedById: user.id,
-          workspaceId: recordPage.workspaceId,
-        },
-        recordPage.id,
+    const recordPage = await this.getActiveRecordPage(record);
+    if (!recordPage) {
+      await this.databaseRepo.detachDatabaseRecord(
+        database.id,
+        record.id,
+        user.id,
       );
+      return {
+        pageId: record.pageId,
+        pageSlugId: null,
+        pageTitle: null,
+        pageIcon: null,
+        targetPageId: dto.targetPageId ?? null,
+        targetSpaceId: dto.targetSpaceId ?? null,
+      };
     }
 
-    if (dto.targetPageId && dto.targetPageId !== recordPage.id) {
+    await this.pageAccessService.validateCanEdit(recordPage, user);
+    let targetPage: Page | undefined;
+    let targetSpaceId = dto.targetSpaceId ?? null;
+    const pageIcon = recordPage.icon === '📄' ? null : recordPage.icon;
+
+    if (dto.targetPageId) {
+      if (dto.targetPageId === recordPage.id) {
+        throw new BadRequestException(
+          'Cannot move a page under itself or its descendants',
+        );
+      }
       targetPage = await this.pageRepo.findById(dto.targetPageId);
       if (!targetPage || targetPage.deletedAt) {
         throw new NotFoundException('Target page not found');
       }
       await this.pageAccessService.validateCanEdit(targetPage, user);
-      await this.movePageUnder(
-        recordPage.id,
-        targetPage.id,
-        targetPage.spaceId,
-        targetPage.workspaceId,
-        user,
-      );
+      targetSpaceId = targetPage.spaceId;
     }
 
-    await this.databaseRepo.detachDatabaseRecord(database.id, record.id, user.id);
+    if (targetSpaceId) {
+      const ability = await this.spaceAbility.createForUser(
+        user,
+        targetSpaceId,
+      );
+      if (ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page)) {
+        throw new ForbiddenException();
+      }
+    }
+
+    await executeTx(this.db, async (trx) => {
+      if (recordPage.icon === '📄') {
+        await this.pageRepo.updatePage(
+          {
+            icon: null,
+            lastUpdatedById: user.id,
+            workspaceId: recordPage.workspaceId,
+          },
+          recordPage.id,
+          trx,
+        );
+      }
+
+      await this.moveRecordPageToDestination(
+        recordPage,
+        targetPage?.id ?? null,
+        targetSpaceId,
+        user,
+        trx,
+      );
+
+      await this.databaseRepo.detachDatabaseRecord(
+        database.id,
+        record.id,
+        user.id,
+        trx,
+      );
+    });
 
     return {
       pageId: recordPage.id,
@@ -461,10 +658,57 @@ export class DatabaseService {
       pageTitle: recordPage.title,
       pageIcon,
       targetPageId: targetPage?.id ?? null,
+      targetSpaceId,
     };
   }
 
-  async getEmbedUrl(databaseId: string, viewId: string | undefined, user: User) {
+  async trashRecordPage(dto: TrashDatabaseRecordPageDto, user: User) {
+    const database = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
+    const record = await this.databaseRepo.findDatabaseRecord(
+      database.id,
+      dto.recordId,
+    );
+    if (!record) throw new NotFoundException('Record not found');
+
+    const recordPage = await this.getActiveRecordPage(record);
+    if (recordPage) {
+      await this.pageAccessService.validateCanEdit(recordPage, user);
+    }
+
+    await executeTx(this.db, async (trx) => {
+      await this.databaseRepo.detachDatabaseRecord(
+        database.id,
+        record.id,
+        user.id,
+        trx,
+      );
+
+      if (recordPage) {
+        await this.pageRepo.removePage(
+          recordPage.id,
+          user.id,
+          database.workspaceId,
+          trx,
+        );
+      }
+    });
+
+    return {
+      recordId: record.id,
+      pageId: record.pageId,
+      trashedPageId: recordPage?.id ?? null,
+    };
+  }
+
+  async getEmbedUrl(
+    databaseId: string,
+    viewId: string | undefined,
+    user: User,
+  ) {
     const database = await this.getAuthorizedDatabase(databaseId, user, 'view');
     return {
       embedUrl: database.apitableDatasheetId
@@ -601,6 +845,34 @@ export class DatabaseService {
     });
   }
 
+  private async normalizeNativeRecordForList(
+    database: DatabaseBlock,
+    record: DatabaseRecord,
+    user: User,
+  ) {
+    try {
+      return await this.normalizeNativeRecordWithPage(database, record, user);
+    } catch (err) {
+      if (
+        err instanceof NotFoundException &&
+        err.message === 'Record page is in trash'
+      ) {
+        return null;
+      }
+
+      throw err;
+    }
+  }
+
+  private async getActiveRecordPage(record: DatabaseRecord) {
+    if (!record.pageId) return null;
+
+    const page = await this.pageRepo.findById(record.pageId);
+    if (!page || page.deletedAt) return null;
+
+    return page;
+  }
+
   private async ensureRecordPage(
     database: DatabaseBlock,
     record: DatabaseRecord,
@@ -611,6 +883,9 @@ export class DatabaseService {
     if (record.pageId && record.pageId !== database.pageId) {
       const page = await this.pageRepo.findById(record.pageId);
       if (page && !page.deletedAt) return page;
+      if (page?.deletedAt) {
+        throw new NotFoundException('Record page is in trash');
+      }
     }
 
     const recordPage = await this.createRecordPage(database, fields, user);
@@ -622,6 +897,30 @@ export class DatabaseService {
     );
 
     return recordPage;
+  }
+
+  private async moveRecordPageToDestination(
+    recordPage: Page,
+    targetPageId: string | null,
+    targetSpaceId: string | null,
+    user: User,
+    trx: KyselyTransaction,
+  ) {
+    if (!targetPageId && !targetSpaceId) return;
+
+    const nextSpaceId = targetSpaceId ?? recordPage.spaceId;
+    if (nextSpaceId === recordPage.spaceId) {
+      await this.pageService.movePageToParent(recordPage, targetPageId, trx);
+      return;
+    }
+
+    await this.pageService.movePageToSpace(
+      recordPage,
+      nextSpaceId,
+      user.id,
+      targetPageId,
+      trx,
+    );
   }
 
   private async createRecordPage(
@@ -662,10 +961,12 @@ export class DatabaseService {
     spaceId: string,
     workspaceId: string,
     user: User,
+    trx?: KyselyTransaction,
   ) {
     const lastPosition = await this.databaseRepo.getLastChildPagePosition(
       spaceId,
       parentPageId,
+      trx,
     );
 
     await this.pageRepo.updatePage(
@@ -676,6 +977,7 @@ export class DatabaseService {
         workspaceId,
       },
       pageId,
+      trx,
     );
   }
 
@@ -685,10 +987,13 @@ export class DatabaseService {
     incomingFields?: Record<string, unknown>,
   ) {
     const fields = this.getFields(database.fields);
-    const nextFields = fields.reduce<Record<string, unknown>>((result, field) => {
-      result[field.name] = this.defaultValueForField(field);
-      return result;
-    }, {});
+    const nextFields = fields.reduce<Record<string, unknown>>(
+      (result, field) => {
+        result[field.name] = this.defaultValueForField(field);
+        return result;
+      },
+      {},
+    );
 
     return {
       ...nextFields,
@@ -704,6 +1009,7 @@ export class DatabaseService {
     targetDatabaseId: string,
     targetRecordId: string,
     user: User,
+    trx?: KyselyTransaction,
   ) {
     if (
       sourceDatabaseId === targetDatabaseId &&
@@ -720,6 +1026,7 @@ export class DatabaseService {
     const sourceRecord = await this.databaseRepo.findDatabaseRecord(
       sourceDatabase.id,
       sourceRecordId,
+      trx,
     );
 
     if (!sourceRecord) return;
@@ -727,6 +1034,7 @@ export class DatabaseService {
       sourceDatabase.id,
       sourceRecord.id,
       user.id,
+      trx,
     );
   }
 
@@ -848,9 +1156,7 @@ export class DatabaseService {
   ) {
     const baseName = rawName.trim() || 'Property';
     const existingNames = new Set(
-      fields
-        .map((field) => field.name)
-        .filter((name) => name !== currentName),
+      fields.map((field) => field.name).filter((name) => name !== currentName),
     );
 
     if (!existingNames.has(baseName)) return baseName;
@@ -870,7 +1176,9 @@ export class DatabaseService {
       return [...fields, field];
     }
 
-    const anchorIndex = fields.findIndex((item) => item.name === anchorFieldName);
+    const anchorIndex = fields.findIndex(
+      (item) => item.name === anchorFieldName,
+    );
     if (anchorIndex === -1) return [...fields, field];
 
     const insertionIndex = position === 'left' ? anchorIndex : anchorIndex + 1;

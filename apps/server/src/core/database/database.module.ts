@@ -4,9 +4,10 @@ import { DatabaseService } from './database.service';
 import { DatabaseRepo } from './database.repo';
 import { ApitableClient } from './apitable.client';
 import { PageAccessModule } from '../page/page-access/page-access.module';
+import { PageModule } from '../page/page.module';
 
 @Module({
-  imports: [PageAccessModule],
+  imports: [PageAccessModule, PageModule],
   controllers: [DatabaseController],
   providers: [DatabaseService, DatabaseRepo, ApitableClient],
   exports: [DatabaseService],

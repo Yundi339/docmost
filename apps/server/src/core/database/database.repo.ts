@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
-import { KyselyDB } from '@docmost/db/types/kysely.types';
+import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import {
   DatabaseBlock,
   DatabaseRecord,
@@ -8,6 +8,7 @@ import {
   InsertableDatabaseRecord,
 } from '@docmost/db/types/entity.types';
 import { Json } from '@docmost/db/types/db';
+import { dbOrTx } from '@docmost/db/utils';
 
 @Injectable()
 export class DatabaseRepo {
@@ -43,6 +44,17 @@ export class DatabaseRepo {
       .where('blockId', '=', blockId)
       .where('deletedAt', 'is', null)
       .executeTakeFirst();
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<DatabaseBlock[]> {
+    return this.db
+      .selectFrom('databaseBlocks')
+      .selectAll()
+      .where('workspaceId', '=', workspaceId)
+      .where('deletedAt', 'is', null)
+      .orderBy('updatedAt', 'desc')
+      .limit(100)
+      .execute();
   }
 
   async updateViews(
@@ -102,8 +114,9 @@ export class DatabaseRepo {
 
   async insertDatabaseRecord(
     data: InsertableDatabaseRecord,
+    trx?: KyselyTransaction,
   ): Promise<DatabaseRecord> {
-    return this.db
+    return dbOrTx(this.db, trx)
       .insertInto('databaseRecords')
       .values(data)
       .returningAll()
@@ -136,8 +149,9 @@ export class DatabaseRepo {
   async findDatabaseRecord(
     databaseId: string,
     recordId: string,
+    trx?: KyselyTransaction,
   ): Promise<DatabaseRecord | undefined> {
-    return this.db
+    return dbOrTx(this.db, trx)
       .selectFrom('databaseRecords')
       .selectAll()
       .where('databaseId', '=', databaseId)
@@ -149,8 +163,9 @@ export class DatabaseRepo {
   async findDatabaseRecordByPage(
     databaseId: string,
     pageId: string,
+    trx?: KyselyTransaction,
   ): Promise<DatabaseRecord | undefined> {
-    return this.db
+    return dbOrTx(this.db, trx)
       .selectFrom('databaseRecords')
       .selectAll()
       .where('databaseId', '=', databaseId)
@@ -196,8 +211,9 @@ export class DatabaseRepo {
     recordId: string,
     pageId: string,
     userId: string,
+    trx?: KyselyTransaction,
   ): Promise<DatabaseRecord> {
-    return this.db
+    return dbOrTx(this.db, trx)
       .updateTable('databaseRecords')
       .set({ pageId, updatedById: userId, updatedAt: new Date() })
       .where('databaseId', '=', databaseId)
@@ -211,10 +227,15 @@ export class DatabaseRepo {
     databaseId: string,
     recordId: string,
     userId: string,
+    trx?: KyselyTransaction,
   ): Promise<DatabaseRecord> {
-    return this.db
+    return dbOrTx(this.db, trx)
       .updateTable('databaseRecords')
-      .set({ deletedAt: new Date(), updatedById: userId, updatedAt: new Date() })
+      .set({
+        deletedAt: new Date(),
+        updatedById: userId,
+        updatedAt: new Date(),
+      })
       .where('databaseId', '=', databaseId)
       .where('id', '=', recordId)
       .where('deletedAt', 'is', null)
@@ -224,8 +245,9 @@ export class DatabaseRepo {
 
   async getLastDatabaseRecordSortOrder(
     databaseId: string,
+    trx?: KyselyTransaction,
   ): Promise<string | null> {
-    const lastRecord = await this.db
+    const lastRecord = await dbOrTx(this.db, trx)
       .selectFrom('databaseRecords')
       .select('sortOrder')
       .where('databaseId', '=', databaseId)
@@ -240,8 +262,9 @@ export class DatabaseRepo {
   async getLastChildPagePosition(
     spaceId: string,
     parentPageId: string,
+    trx?: KyselyTransaction,
   ): Promise<string | null> {
-    const lastPage = await this.db
+    const lastPage = await dbOrTx(this.db, trx)
       .selectFrom('pages')
       .select('position')
       .where('spaceId', '=', spaceId)
