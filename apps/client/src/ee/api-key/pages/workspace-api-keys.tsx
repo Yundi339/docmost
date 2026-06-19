@@ -29,16 +29,14 @@ export default function WorkspaceApiKeys() {
   const [selectedApiKey, setSelectedApiKey] = useState<IApiKey | null>(null);
   const { isAdmin, isOwner } = useUserRole();
   const [workspace] = useAtom(workspaceAtom);
-  const canUseApiManagement =
-    isOwner || workspace?.settings?.api?.allowMemberManagement !== false;
   const restrictToAdmins = workspace?.settings?.api?.restrictToAdmins === true;
   const canCreate = !restrictToAdmins || isAdmin;
   const { data, isLoading } = useGetApiKeysQuery({
     cursor,
-    adminView: isOwner,
+    adminView: isAdmin,
   });
 
-  if (!canUseApiManagement) {
+  if (!isAdmin) {
     return null;
   }
 
@@ -67,9 +65,7 @@ export default function WorkspaceApiKeys() {
       <SettingsTitle title={t("API management")} />
 
       <Text size="sm" c="dimmed" mb="md">
-        {isOwner
-          ? t("Manage API keys for all users in the workspace.")
-          : t("Manage your API keys.")}
+        {t("Manage API keys for all users in the workspace.")}
       </Text>
 
       {isOwner && (
@@ -104,7 +100,7 @@ export default function WorkspaceApiKeys() {
       <ApiKeyTable
         apiKeys={data?.items || []}
         isLoading={isLoading}
-        showUserColumn={isOwner}
+        showUserColumn
         onUpdate={handleUpdate}
         onRevoke={handleRevoke}
       />

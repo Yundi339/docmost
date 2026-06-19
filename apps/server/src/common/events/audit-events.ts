@@ -23,6 +23,9 @@ export const AuditEvent = {
   API_KEY_UPDATED: 'api_key.updated',
   API_KEY_DELETED: 'api_key.deleted',
 
+  // MCP
+  MCP_TOOL_CALLED: 'mcp.tool_called',
+
   // Space
   SPACE_CREATED: 'space.created',
   SPACE_UPDATED: 'space.updated',
@@ -106,7 +109,7 @@ export const EXCLUDED_AUDIT_EVENTS: Set<string> = new Set([
   AuditEvent.COMMENT_UPDATED,
   AuditEvent.COMMENT_RESOLVED,
   AuditEvent.COMMENT_REOPENED,
-  AuditEvent.ATTACHMENT_UPLOADED
+  AuditEvent.ATTACHMENT_UPLOADED,
 ]);
 
 export const AuditResource = {
@@ -119,6 +122,7 @@ export const AuditResource = {
   COMMENT: 'comment',
   SHARE: 'share',
   API_KEY: 'api_key',
+  MCP_TOOL: 'mcp_tool',
   SSO_PROVIDER: 'sso_provider',
   WORKSPACE_INVITATION: 'workspace_invitation',
   ATTACHMENT: 'attachment',

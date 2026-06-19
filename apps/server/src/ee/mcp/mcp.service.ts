@@ -1,4 +1,11 @@
-import { Injectable, Logger, OnModuleDestroy, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { IncomingMessage, ServerResponse } from 'node:http';
@@ -32,17 +39,36 @@ import {
 import { sql } from 'kysely';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { PaginationOptions } from '../../database/pagination/pagination-options';
+import {
+  AUDIT_SERVICE,
+  IAuditService,
+} from '../../integrations/audit/audit.service';
+import { AuditEvent, AuditResource } from '../../common/events/audit-events';
+import { ApiKeyScope, hasApiKeyScope } from '../../core/api-key/api-key-scopes';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const tsquery = require('pg-tsquery')();
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const packageJson = require('../../../package.json');
 
 const MAX_LIMIT = 200;
+export type McpMode = 'off' | 'read-only' | 'read-write';
+type McpToolAccess = 'read' | 'write';
+
+export interface McpRequestContext {
+  apiKeyId: string;
+  scopes: string[];
+  mode: McpMode;
+}
 
 interface McpSession {
   transport: StreamableHTTPServerTransport;
   server: McpServer;
   userId: string;
   workspaceId: string;
+  apiKeyId: string;
+  scopes: string[];
+  mode: McpMode;
 }
 
 @Injectable()
@@ -63,6 +89,7 @@ export class McpService implements OnModuleDestroy {
     private readonly userRepo: UserRepo,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly workspaceAbility: WorkspaceAbilityFactory,
+    @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
   onModuleDestroy() {
@@ -78,6 +105,7 @@ export class McpService implements OnModuleDestroy {
     body: unknown,
     user: User,
     workspace: Workspace,
+    context: McpRequestContext,
   ): Promise<void> {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
@@ -86,10 +114,16 @@ export class McpService implements OnModuleDestroy {
       // Prevent session hijacking: the caller's JWT must match the user/workspace
       // that created this session. Otherwise anyone with the sessionId + any valid
       // API key could execute tools as the original user.
-      if (session.userId !== user.id || session.workspaceId !== workspace.id) {
+      if (
+        session.userId !== user.id ||
+        session.workspaceId !== workspace.id ||
+        session.apiKeyId !== context.apiKeyId
+      ) {
         res
           .writeHead(403, { 'Content-Type': 'application/json' })
-          .end(JSON.stringify({ error: 'Session does not belong to this user' }));
+          .end(
+            JSON.stringify({ error: 'Session does not belong to this user' }),
+          );
         return;
       }
       await session.transport.handleRequest(req, res, body);
@@ -101,12 +135,14 @@ export class McpService implements OnModuleDestroy {
       return;
     }
 
-    // New session (initialization)
+    // New session (initialization). This in-memory session store is suitable for
+    // single-instance deployments. Multi-instance deployments must use sticky
+    // sessions or replace this with a shared store.
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
     });
 
-    const server = this.createMcpServer(user, workspace);
+    const server = this.createMcpServer(user, workspace, context);
     await server.connect(transport);
 
     const sid = transport.sessionId;
@@ -116,6 +152,9 @@ export class McpService implements OnModuleDestroy {
         server,
         userId: user.id,
         workspaceId: workspace.id,
+        apiKeyId: context.apiKeyId,
+        scopes: context.scopes,
+        mode: context.mode,
       });
 
       transport.onclose = () => {
@@ -132,11 +171,18 @@ export class McpService implements OnModuleDestroy {
     res: ServerResponse,
     user?: User,
     workspace?: Workspace,
+    context?: McpRequestContext,
   ): Promise<void> {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     if (sessionId && this.sessions.has(sessionId)) {
       const session = this.sessions.get(sessionId);
-      if (user && workspace && (session.userId !== user.id || session.workspaceId !== workspace.id)) {
+      if (
+        user &&
+        workspace &&
+        (session.userId !== user.id ||
+          session.workspaceId !== workspace.id ||
+          (context && session.apiKeyId !== context.apiKeyId))
+      ) {
         res.writeHead(403).end();
         return;
       }
@@ -171,15 +217,99 @@ export class McpService implements OnModuleDestroy {
   private async assertSpaceSettingsManage(user: User, spaceId: string) {
     const ability = await this.spaceAbility.createForUser(user, spaceId);
     if (ability.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)) {
-      throw new ForbiddenException('Forbidden: space settings management required');
+      throw new ForbiddenException(
+        'Forbidden: space settings management required',
+      );
     }
   }
 
-  private createMcpServer(user: User, workspace: Workspace): McpServer {
+  private async runTool(
+    context: McpRequestContext,
+    user: User,
+    workspace: Workspace,
+    toolName: string,
+    access: McpToolAccess,
+    args: Record<string, any>,
+    handler: () => Promise<any>,
+  ) {
+    this.assertMcpToolAccess(context, access);
+
+    try {
+      const result = await handler();
+      if (access === 'write') {
+        this.auditMcpWriteTool(user, workspace, context, toolName, args, true);
+      }
+      return result;
+    } catch (err) {
+      if (access === 'write') {
+        this.auditMcpWriteTool(user, workspace, context, toolName, args, false);
+      }
+      throw err;
+    }
+  }
+
+  private assertMcpToolAccess(
+    context: McpRequestContext,
+    access: McpToolAccess,
+  ) {
+    if (context.mode === 'off') {
+      throw new ForbiddenException('MCP is not enabled for this workspace');
+    }
+
+    if (
+      !hasApiKeyScope(context.scopes, ApiKeyScope.MCP_READ) &&
+      !hasApiKeyScope(context.scopes, ApiKeyScope.MCP_WRITE)
+    ) {
+      throw new ForbiddenException('Missing API key scope: mcp:read');
+    }
+
+    if (access === 'write') {
+      if (context.mode === 'read-only') {
+        throw new ForbiddenException('MCP is enabled in read-only mode');
+      }
+      if (!hasApiKeyScope(context.scopes, ApiKeyScope.MCP_WRITE)) {
+        throw new ForbiddenException('Missing API key scope: mcp:write');
+      }
+    }
+  }
+
+  private auditMcpWriteTool(
+    user: User,
+    workspace: Workspace,
+    context: McpRequestContext,
+    toolName: string,
+    args: Record<string, any>,
+    success: boolean,
+  ) {
+    this.auditService.logWithContext(
+      {
+        event: AuditEvent.MCP_TOOL_CALLED,
+        resourceType: AuditResource.MCP_TOOL,
+        resourceId: getMcpTargetId(args),
+        metadata: {
+          toolName,
+          apiKeyId: context.apiKeyId,
+          success,
+          target: getMcpTargetMetadata(args),
+        },
+      },
+      {
+        workspaceId: workspace.id,
+        actorId: user.id,
+        actorType: 'api_key',
+      },
+    );
+  }
+
+  private createMcpServer(
+    user: User,
+    workspace: Workspace,
+    context: McpRequestContext,
+  ): McpServer {
     const server = new McpServer(
       {
         name: 'Docmost',
-        version: '0.80.0',
+        version: process.env.APP_VERSION || packageJson?.version || 'unknown',
       },
       {
         capabilities: {
@@ -188,7 +318,7 @@ export class McpService implements OnModuleDestroy {
       },
     );
 
-    this.registerTools(server, user, workspace);
+    this.registerTools(server, user, workspace, context);
 
     return server;
   }
@@ -197,64 +327,108 @@ export class McpService implements OnModuleDestroy {
     server: McpServer,
     user: User,
     workspace: Workspace,
+    context: McpRequestContext,
   ): void {
     const userId = user.id;
     const workspaceId = workspace.id;
+    const readTool = (
+      name: string,
+      description: string,
+      schema: any,
+      handler: (args: any) => Promise<any>,
+    ) =>
+      server.tool(name, description, schema, (args: any) =>
+        this.runTool(context, user, workspace, name, 'read', args, () =>
+          handler(args),
+        ),
+      );
+    const writeTool = (
+      name: string,
+      description: string,
+      schema: any,
+      handler: (args: any) => Promise<any>,
+    ) =>
+      server.tool(name, description, schema, (args: any) =>
+        this.runTool(context, user, workspace, name, 'write', args, () =>
+          handler(args),
+        ),
+      );
 
     // 1. search_pages
-    server.tool(
+    readTool(
       'search_pages',
       'Search pages by query text',
-      { query: z.string(), spaceId: z.string().optional(), limit: z.number().optional() },
+      {
+        query: z.string(),
+        spaceId: z.string().optional(),
+        limit: z.number().optional(),
+      },
       async ({ query, spaceId, limit }) => {
         const result = await this.searchService.searchPage(
           { query, spaceId, limit: limit ?? 25, offset: 0 },
           { userId, workspaceId },
         );
-        return { content: [{ type: 'text', text: JSON.stringify(result.items) }] };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result.items) }],
+        };
       },
     );
 
     // 2. get_page
-    server.tool(
+    readTool(
       'get_page',
       'Get a page by ID. Returns content in the specified format (json, markdown, or html)',
-      { pageId: z.string(), format: z.enum(['json', 'markdown', 'html']).optional() },
+      {
+        pageId: z.string(),
+        format: z.enum(['json', 'markdown', 'html']).optional(),
+      },
       async ({ pageId, format }) => {
         const page = await this.pageRepo.findById(pageId, {
           includeContent: true,
           includeSpace: true,
         });
         if (!page || page.workspaceId !== workspaceId) {
-          return { content: [{ type: 'text', text: 'Page not found' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Page not found' }],
+            isError: true,
+          };
         }
-        await this.assertSpacePageAccess(user, page.spaceId, SpaceCaslAction.Read);
+        await this.assertSpacePageAccess(
+          user,
+          page.spaceId,
+          SpaceCaslAction.Read,
+        );
         let content = page.content;
         if (format && format !== 'json' && content) {
-          content = format === 'markdown' ? jsonToMarkdown(content) : jsonToHtml(content);
+          content =
+            format === 'markdown'
+              ? jsonToMarkdown(content)
+              : jsonToHtml(content);
         }
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              id: page.id,
-              slugId: page.slugId,
-              title: page.title,
-              icon: page.icon,
-              spaceId: page.spaceId,
-              parentPageId: page.parentPageId,
-              creatorId: page.creatorId,
-              content,
-              createdAt: page.createdAt,
-              updatedAt: page.updatedAt,
-            }),
-          }],
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: page.id,
+                slugId: page.slugId,
+                title: page.title,
+                icon: page.icon,
+                spaceId: page.spaceId,
+                parentPageId: page.parentPageId,
+                creatorId: page.creatorId,
+                content,
+                createdAt: page.createdAt,
+                updatedAt: page.updatedAt,
+              }),
+            },
+          ],
         };
       },
     );
 
     // 3. create_page
-    server.tool(
+    writeTool(
       'create_page',
       'Create a new page in a space. Content can be markdown, html, or json format',
       {
@@ -265,6 +439,19 @@ export class McpService implements OnModuleDestroy {
         parentPageId: z.string().optional(),
       },
       async ({ spaceId, title, content, format, parentPageId }) => {
+        if (parentPageId) {
+          const parentPage = await this.pageRepo.findById(parentPageId);
+          if (
+            !parentPage ||
+            parentPage.workspaceId !== workspaceId ||
+            parentPage.spaceId !== spaceId
+          ) {
+            return {
+              content: [{ type: 'text', text: 'Parent page not found' }],
+              isError: true,
+            };
+          }
+        }
         await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Create);
         const page = await this.pageService.create(userId, workspaceId, {
           spaceId,
@@ -273,12 +460,23 @@ export class McpService implements OnModuleDestroy {
           format: format ?? 'markdown',
           parentPageId,
         });
-        return { content: [{ type: 'text', text: JSON.stringify({ id: page.id, slugId: page.slugId, title: page.title }) }] };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: page.id,
+                slugId: page.slugId,
+                title: page.title,
+              }),
+            },
+          ],
+        };
       },
     );
 
     // 4. update_page
-    server.tool(
+    writeTool(
       'update_page',
       'Update an existing page. Supports append, prepend, or replace operations',
       {
@@ -291,20 +489,40 @@ export class McpService implements OnModuleDestroy {
       async ({ pageId, title, content, format, operation }) => {
         const page = await this.pageRepo.findById(pageId);
         if (!page || page.workspaceId !== workspaceId) {
-          return { content: [{ type: 'text', text: 'Page not found' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Page not found' }],
+            isError: true,
+          };
         }
-        await this.assertSpacePageAccess(user, page.spaceId, SpaceCaslAction.Edit);
+        await this.assertSpacePageAccess(
+          user,
+          page.spaceId,
+          SpaceCaslAction.Edit,
+        );
         const updated = await this.pageService.update(
           page,
-          { pageId, title, content, format: format ?? 'markdown', operation: operation ?? 'replace' },
+          {
+            pageId,
+            title,
+            content,
+            format: format ?? 'markdown',
+            operation: operation ?? 'replace',
+          },
           user,
         );
-        return { content: [{ type: 'text', text: JSON.stringify({ id: updated.id, title: updated.title }) }] };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ id: updated.id, title: updated.title }),
+            },
+          ],
+        };
       },
     );
 
     // 5. list_pages
-    server.tool(
+    readTool(
       'list_pages',
       'List root-level pages in a space',
       { spaceId: z.string(), limit: z.number().optional() },
@@ -316,12 +534,14 @@ export class McpService implements OnModuleDestroy {
           undefined,
           userId,
         );
-        return { content: [{ type: 'text', text: JSON.stringify(result.items) }] };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result.items) }],
+        };
       },
     );
 
     // 6. list_child_pages
-    server.tool(
+    readTool(
       'list_child_pages',
       'List child pages of a specific page',
       { spaceId: z.string(), pageId: z.string(), limit: z.number().optional() },
@@ -333,104 +553,197 @@ export class McpService implements OnModuleDestroy {
           pageId,
           userId,
         );
-        return { content: [{ type: 'text', text: JSON.stringify(result.items) }] };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result.items) }],
+        };
       },
     );
 
     // 7. duplicate_page
-    server.tool(
+    writeTool(
       'duplicate_page',
       'Duplicate a page within the same space',
       { pageId: z.string() },
       async ({ pageId }) => {
         const page = await this.pageRepo.findById(pageId);
         if (!page || page.workspaceId !== workspaceId) {
-          return { content: [{ type: 'text', text: 'Page not found' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Page not found' }],
+            isError: true,
+          };
         }
-        await this.assertSpacePageAccess(user, page.spaceId, SpaceCaslAction.Create);
-        const newPage = await this.pageService.duplicatePage(page, undefined, user);
-        return { content: [{ type: 'text', text: JSON.stringify({ id: newPage.id, title: newPage.title }) }] };
+        await this.assertSpacePageAccess(
+          user,
+          page.spaceId,
+          SpaceCaslAction.Read,
+        );
+        await this.assertSpacePageAccess(
+          user,
+          page.spaceId,
+          SpaceCaslAction.Create,
+        );
+        const newPage = await this.pageService.duplicatePage(
+          page,
+          undefined,
+          user,
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ id: newPage.id, title: newPage.title }),
+            },
+          ],
+        };
       },
     );
 
     // 8. copy_page_to_space
-    server.tool(
+    writeTool(
       'copy_page_to_space',
       'Copy a page to a different space',
       { pageId: z.string(), spaceId: z.string() },
       async ({ pageId, spaceId }) => {
         const page = await this.pageRepo.findById(pageId);
         if (!page || page.workspaceId !== workspaceId) {
-          return { content: [{ type: 'text', text: 'Page not found' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Page not found' }],
+            isError: true,
+          };
         }
-        await this.assertSpacePageAccess(user, page.spaceId, SpaceCaslAction.Read);
+        await this.assertSpacePageAccess(
+          user,
+          page.spaceId,
+          SpaceCaslAction.Read,
+        );
         await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Create);
-        const newPage = await this.pageService.duplicatePage(page, spaceId, user);
-        return { content: [{ type: 'text', text: JSON.stringify({ id: newPage.id, title: newPage.title }) }] };
+        const newPage = await this.pageService.duplicatePage(
+          page,
+          spaceId,
+          user,
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ id: newPage.id, title: newPage.title }),
+            },
+          ],
+        };
       },
     );
 
     // 9. move_page
-    server.tool(
+    writeTool(
       'move_page',
       'Move a page under a new parent within the same space',
       { pageId: z.string(), parentPageId: z.string().optional() },
       async ({ pageId, parentPageId }) => {
         const page = await this.pageRepo.findById(pageId);
         if (!page || page.workspaceId !== workspaceId) {
-          return { content: [{ type: 'text', text: 'Page not found' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Page not found' }],
+            isError: true,
+          };
         }
-        await this.assertSpacePageAccess(user, page.spaceId, SpaceCaslAction.Edit);
+        await this.assertSpacePageAccess(
+          user,
+          page.spaceId,
+          SpaceCaslAction.Edit,
+        );
+        if (parentPageId) {
+          const parentPage = await this.pageRepo.findById(parentPageId);
+          if (
+            !parentPage ||
+            parentPage.workspaceId !== workspaceId ||
+            parentPage.spaceId !== page.spaceId
+          ) {
+            return {
+              content: [{ type: 'text', text: 'Parent page not found' }],
+              isError: true,
+            };
+          }
+          await this.assertSpacePageAccess(
+            user,
+            parentPage.spaceId,
+            SpaceCaslAction.Create,
+          );
+        }
         await this.pageService.movePage(
-          { pageId, position: page.position ?? 'a0', parentPageId: parentPageId ?? null },
+          {
+            pageId,
+            position: page.position ?? 'a0',
+            parentPageId: parentPageId ?? null,
+          },
           page,
         );
-        return { content: [{ type: 'text', text: `Page ${pageId} moved successfully` }] };
+        return {
+          content: [
+            { type: 'text', text: `Page ${pageId} moved successfully` },
+          ],
+        };
       },
     );
 
     // 10. move_page_to_space
-    server.tool(
+    writeTool(
       'move_page_to_space',
       'Move a page to a different space',
       { pageId: z.string(), spaceId: z.string() },
       async ({ pageId, spaceId }) => {
         const page = await this.pageRepo.findById(pageId);
         if (!page || page.workspaceId !== workspaceId) {
-          return { content: [{ type: 'text', text: 'Page not found' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Page not found' }],
+            isError: true,
+          };
         }
-        await this.assertSpacePageAccess(user, page.spaceId, SpaceCaslAction.Edit);
+        await this.assertSpacePageAccess(
+          user,
+          page.spaceId,
+          SpaceCaslAction.Edit,
+        );
         await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Create);
         await this.pageService.movePageToSpace(page, spaceId, userId);
-        return { content: [{ type: 'text', text: `Page ${pageId} moved to space ${spaceId}` }] };
+        return {
+          content: [
+            { type: 'text', text: `Page ${pageId} moved to space ${spaceId}` },
+          ],
+        };
       },
     );
 
     // 11. get_space
-    server.tool(
+    readTool(
       'get_space',
       'Get space information by ID',
       { spaceId: z.string() },
       async ({ spaceId }) => {
         await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Read);
-        const space = await this.spaceService.getSpaceInfo(spaceId, workspaceId);
+        const space = await this.spaceService.getSpaceInfo(
+          spaceId,
+          workspaceId,
+        );
         return { content: [{ type: 'text', text: JSON.stringify(space) }] };
       },
     );
 
     // 12. list_spaces
-    server.tool(
+    readTool(
       'list_spaces',
       'List all spaces the user has access to',
       {},
       async () => {
-        const result = await this.spaceMemberService.getUserSpaces(userId, this.paginate(100));
+        const result = await this.spaceMemberService.getUserSpaces(
+          userId,
+          this.paginate(100),
+        );
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       },
     );
 
     // 13. create_space
-    server.tool(
+    writeTool(
       'create_space',
       'Create a new space',
       {
@@ -440,7 +753,9 @@ export class McpService implements OnModuleDestroy {
       },
       async ({ name, slug, description }) => {
         const ability = this.workspaceAbility.createForUser(user, workspace);
-        if (ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Space)) {
+        if (
+          ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Space)
+        ) {
           throw new ForbiddenException('Forbidden: cannot create spaces');
         }
         const space = await this.spaceService.createSpace(user, workspaceId, {
@@ -448,12 +763,23 @@ export class McpService implements OnModuleDestroy {
           slug,
           description,
         });
-        return { content: [{ type: 'text', text: JSON.stringify({ id: space.id, name: space.name, slug: space.slug }) }] };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: space.id,
+                name: space.name,
+                slug: space.slug,
+              }),
+            },
+          ],
+        };
       },
     );
 
     // 14. update_space
-    server.tool(
+    writeTool(
       'update_space',
       'Update a space',
       {
@@ -472,16 +798,23 @@ export class McpService implements OnModuleDestroy {
     );
 
     // 15. get_comments
-    server.tool(
+    readTool(
       'get_comments',
       'Get comments on a page',
       { pageId: z.string(), limit: z.number().optional() },
       async ({ pageId, limit }) => {
         const page = await this.pageRepo.findById(pageId);
         if (!page || page.workspaceId !== workspaceId) {
-          return { content: [{ type: 'text', text: 'Page not found' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Page not found' }],
+            isError: true,
+          };
         }
-        await this.assertSpacePageAccess(user, page.spaceId, SpaceCaslAction.Read);
+        await this.assertSpacePageAccess(
+          user,
+          page.spaceId,
+          SpaceCaslAction.Read,
+        );
         const comments = await this.commentService.findByPageId(
           pageId,
           this.paginate(limit),
@@ -491,31 +824,49 @@ export class McpService implements OnModuleDestroy {
     );
 
     // 16. create_comment
-    server.tool(
+    writeTool(
       'create_comment',
       'Create a comment on a page (page-level comment). Content must be a JSON string of ProseMirror document.',
-      { pageId: z.string(), content: z.string().describe('JSON ProseMirror content string') },
+      {
+        pageId: z.string(),
+        content: z.string().describe('JSON ProseMirror content string'),
+      },
       async ({ pageId, content }) => {
         const page = await this.pageRepo.findById(pageId);
         if (!page || page.workspaceId !== workspaceId) {
-          return { content: [{ type: 'text', text: 'Page not found' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Page not found' }],
+            isError: true,
+          };
         }
-        await this.assertSpacePageAccess(user, page.spaceId, SpaceCaslAction.Read);
+        await this.assertSpacePageAccess(
+          user,
+          page.spaceId,
+          SpaceCaslAction.Read,
+        );
         const comment = await this.commentService.create(
           { page, workspaceId, user },
           { pageId, content, type: 'page' } as any,
         );
-        return { content: [{ type: 'text', text: JSON.stringify({ id: comment.id }) }] };
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ id: comment.id }) }],
+        };
       },
     );
 
     // 17. update_comment
-    server.tool(
+    writeTool(
       'update_comment',
       'Update an existing comment. Content must be a JSON string of ProseMirror document.',
-      { commentId: z.string(), content: z.string().describe('JSON ProseMirror content string') },
+      {
+        commentId: z.string(),
+        content: z.string().describe('JSON ProseMirror content string'),
+      },
       async ({ commentId, content }) => {
-        const existingComment = await this.commentService.findById(commentId, workspaceId);
+        const existingComment = await this.commentService.findById(
+          commentId,
+          workspaceId,
+        );
         if (!existingComment) {
           throw new NotFoundException('Comment not found');
         }
@@ -527,12 +878,14 @@ export class McpService implements OnModuleDestroy {
           { commentId, content } as any,
           user,
         );
-        return { content: [{ type: 'text', text: JSON.stringify({ id: updated.id }) }] };
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ id: updated.id }) }],
+        };
       },
     );
 
     // 18. search_attachments
-    server.tool(
+    readTool(
       'search_attachments',
       'Search attachments (PDF, DOCX) by text content',
       { query: z.string(), limit: z.number().optional() },
@@ -553,13 +906,21 @@ export class McpService implements OnModuleDestroy {
             'a.pageId',
             'a.creatorId',
             'a.createdAt',
-            sql<number>`ts_rank(a.tsv, to_tsquery('english', f_unaccent(${searchQuery})))`.as('rank'),
-            sql<string>`ts_headline('english', a.text_content, to_tsquery('english', f_unaccent(${searchQuery})), 'MinWords=9,MaxWords=10,MaxFragments=3')`.as('highlight'),
+            sql<number>`ts_rank(a.tsv, to_tsquery('english', f_unaccent(${searchQuery})))`.as(
+              'rank',
+            ),
+            sql<string>`ts_headline('english', a.text_content, to_tsquery('english', f_unaccent(${searchQuery})), 'MinWords=9,MaxWords=10,MaxFragments=3')`.as(
+              'highlight',
+            ),
             's.name as spaceName',
             'p.title as pageTitle',
             'p.slugId as pageSlugId',
           ])
-          .where('a.tsv', '@@', sql<string>`to_tsquery('english', f_unaccent(${searchQuery}))`)
+          .where(
+            'a.tsv',
+            '@@',
+            sql<string>`to_tsquery('english', f_unaccent(${searchQuery}))`,
+          )
           .where('a.workspaceId', '=', workspaceId)
           .where('a.spaceId', 'in', userSpaceIds)
           .where('a.deletedAt', 'is', null)
@@ -572,14 +933,18 @@ export class McpService implements OnModuleDestroy {
     );
 
     // 19. list_workspace_members
-    server.tool(
+    readTool(
       'list_workspace_members',
       'List workspace members',
       { limit: z.number().optional() },
       async ({ limit }) => {
         const ability = this.workspaceAbility.createForUser(user, workspace);
-        if (ability.cannot(WorkspaceCaslAction.Read, WorkspaceCaslSubject.Member)) {
-          throw new ForbiddenException('Forbidden: cannot list workspace members');
+        if (
+          ability.cannot(WorkspaceCaslAction.Read, WorkspaceCaslSubject.Member)
+        ) {
+          throw new ForbiddenException(
+            'Forbidden: cannot list workspace members',
+          );
         }
         const result = await this.workspaceService.getWorkspaceUsers(
           workspaceId,
@@ -590,25 +955,54 @@ export class McpService implements OnModuleDestroy {
     );
 
     // 20. get_current_user
-    server.tool(
+    readTool(
       'get_current_user',
       'Get information about the currently authenticated user',
       {},
       async () => {
         const u = await this.userRepo.findById(userId, workspaceId);
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              id: u.id,
-              name: u.name,
-              email: u.email,
-              role: u.role,
-              avatarUrl: u.avatarUrl,
-            }),
-          }],
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                role: u.role,
+                avatarUrl: u.avatarUrl,
+              }),
+            },
+          ],
         };
       },
     );
   }
+}
+
+function getMcpTargetId(args: Record<string, any>) {
+  return (
+    args.pageId ??
+    args.commentId ??
+    args.spaceId ??
+    args.parentPageId ??
+    undefined
+  );
+}
+
+function getMcpTargetMetadata(args: Record<string, any>) {
+  const allowedKeys = [
+    'pageId',
+    'commentId',
+    'spaceId',
+    'parentPageId',
+    'format',
+    'operation',
+  ];
+
+  return Object.fromEntries(
+    allowedKeys
+      .filter((key) => typeof args[key] !== 'undefined')
+      .map((key) => [key, args[key]]),
+  );
 }

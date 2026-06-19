@@ -28,7 +28,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   ) {
     super({
       jwtFromRequest: (req: FastifyRequest) => {
-        return req.cookies?.authToken || extractBearerTokenFromHeader(req);
+        return extractBearerTokenFromHeader(req) || req.cookies?.authToken;
       },
       ignoreExpiration: false,
       secretOrKey: environmentService.getAppSecret(),
@@ -105,18 +105,41 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         strict: false,
       });
 
-      return ApiKeyService.validateApiKey(payload);
+      const authContext = await ApiKeyService.validateApiKey(
+        payload,
+        this.getApiKeyMetadata(req),
+      );
+      req.raw.apiKey = authContext.apiKey;
+      return authContext;
     }
 
     // Fallback to OSS ApiKeyService
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { ApiKeyService } = require('../../api-key/api-key.service');
       const apiKeyService = this.moduleRef.get(ApiKeyService, {
         strict: false,
       });
-      return apiKeyService.validateApiKey(payload);
+      const authContext = await apiKeyService.validateApiKey(
+        payload,
+        this.getApiKeyMetadata(req),
+      );
+      req.raw.apiKey = authContext.apiKey;
+      return authContext;
     } catch (err) {
       throw new UnauthorizedException('API Key module not available');
     }
+  }
+
+  private getApiKeyMetadata(req: any) {
+    const forwardedFor = req.headers?.['x-forwarded-for'];
+    const ipAddress = Array.isArray(forwardedFor)
+      ? forwardedFor[0]
+      : forwardedFor?.split(',')[0]?.trim() || req.ip;
+
+    return {
+      ipAddress,
+      userAgent: req.headers?.['user-agent'],
+    };
   }
 }

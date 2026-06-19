@@ -98,10 +98,19 @@ export class ApiKeyRepo {
       .execute();
   }
 
-  async updateLastUsed(apiKeyId: string): Promise<void> {
+  async updateLastUsed(
+    apiKeyId: string,
+    metadata?: { ipAddress?: string; userAgent?: string },
+  ): Promise<void> {
     await this.db
       .updateTable('apiKeys')
-      .set({ lastUsedAt: new Date() })
+      .set({
+        lastUsedAt: new Date(),
+        ...(metadata?.ipAddress ? { lastUsedIp: metadata.ipAddress } : {}),
+        ...(metadata?.userAgent
+          ? { lastUsedUserAgent: metadata.userAgent.slice(0, 1000) }
+          : {}),
+      })
       .where('id', '=', apiKeyId)
       .execute();
   }

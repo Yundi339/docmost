@@ -1,4 +1,14 @@
-import { IsOptional, IsString, IsUUID, IsDateString, MaxLength } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsDateString,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
+import { API_KEY_SCOPES } from '../api-key-scopes';
 
 export class CreateApiKeyDto {
   @IsString()
@@ -8,6 +18,12 @@ export class CreateApiKeyDto {
   @IsOptional()
   @IsDateString()
   expiresAt?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsIn(API_KEY_SCOPES, { each: true })
+  scopes?: string[];
 }
 
 export class UpdateApiKeyDto {

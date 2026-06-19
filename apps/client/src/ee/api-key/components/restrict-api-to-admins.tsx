@@ -20,9 +20,6 @@ export default function RestrictApiToAdmins() {
   const [restrictToAdmins, setRestrictToAdmins] = useState(
     workspace?.settings?.api?.restrictToAdmins === true,
   );
-  const [allowMemberApiManagement, setAllowMemberApiManagement] = useState(
-    workspace?.settings?.api?.allowMemberManagement !== false,
-  );
   const [allowMemberAiSettings, setAllowMemberAiSettings] = useState(
     workspace?.settings?.ai?.allowMemberSettings !== false,
   );
@@ -32,7 +29,6 @@ export default function RestrictApiToAdmins() {
   const updateSetting = async (
     payload: {
       restrictApiToAdmins?: boolean;
-      allowMemberApiManagement?: boolean;
       allowMemberAiSettings?: boolean;
     },
     onSuccess: () => void,
@@ -58,15 +54,6 @@ export default function RestrictApiToAdmins() {
     );
   };
 
-  const handleAllowMemberApiManagementChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const value = event.currentTarget.checked;
-    await updateSetting({ allowMemberApiManagement: value }, () =>
-      setAllowMemberApiManagement(value),
-    );
-  };
-
   const handleAllowMemberAiSettingsChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -84,28 +71,6 @@ export default function RestrictApiToAdmins() {
           {t("Control which workspace settings members can use.")}
         </Text>
       </div>
-
-      <ResponsiveSettingsRow>
-        <ResponsiveSettingsContent>
-          <Text size="md">{t("Allow members to use API management")}</Text>
-          <Text size="sm" c="dimmed">
-            {t(
-              "Members can open API management and manage their own API keys.",
-            )}
-          </Text>
-        </ResponsiveSettingsContent>
-
-        <ResponsiveSettingsControl>
-          <Tooltip label={upgradeLabel} disabled={hasAccess} refProp="rootRef">
-            <Switch
-              checked={allowMemberApiManagement}
-              onChange={handleAllowMemberApiManagementChange}
-              disabled={!hasAccess}
-              aria-label={t("Toggle member API management")}
-            />
-          </Tooltip>
-        </ResponsiveSettingsControl>
-      </ResponsiveSettingsRow>
 
       <ResponsiveSettingsRow>
         <ResponsiveSettingsContent>

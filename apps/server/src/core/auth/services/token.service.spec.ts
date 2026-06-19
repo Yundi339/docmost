@@ -33,6 +33,7 @@ describe('TokenService', () => {
       apiKeyId: 'api-key-id',
       user,
       workspaceId: 'workspace-id',
+      scopes: ['mcp:read'],
     });
 
     const payload = jwtService.decode(token) as Record<string, any>;
@@ -40,6 +41,7 @@ describe('TokenService', () => {
       sub: 'user-id',
       apiKeyId: 'api-key-id',
       workspaceId: 'workspace-id',
+      scopes: ['mcp:read'],
       type: JwtType.API_KEY,
       iss: 'Docmost',
     });

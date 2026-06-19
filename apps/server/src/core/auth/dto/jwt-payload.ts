@@ -43,5 +43,6 @@ export type JwtApiKeyPayload = {
   sub: string;
   workspaceId: string;
   apiKeyId: string;
+  scopes?: string[];
   type: 'api_key';
 };

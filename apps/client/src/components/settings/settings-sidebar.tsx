@@ -112,6 +112,7 @@ const groupedData: DataGroup[] = [
         label: "API management",
         icon: IconKey,
         path: "/settings/api-keys",
+        role: "admin",
       },
       {
         label: "AI settings",
@@ -151,13 +152,6 @@ export default function SettingsSidebar() {
   const canShowItem = (item: DataItem) => {
     if (item.env === "cloud" && !isCloud()) return false;
     if (item.env === "selfhosted" && isCloud()) return false;
-    if (
-      item.label === "API management" &&
-      !isOwner &&
-      workspace?.settings?.api?.allowMemberManagement === false
-    ) {
-      return false;
-    }
     if (
       item.label === "AI settings" &&
       !isAdmin &&
@@ -205,7 +199,7 @@ export default function SettingsSidebar() {
               prefetchHandler = prefetchApiKeys;
               break;
             case "API management":
-              prefetchHandler = isOwner
+              prefetchHandler = isAdmin
                 ? prefetchApiKeyManagement
                 : prefetchApiKeys;
               break;

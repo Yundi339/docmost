@@ -36,7 +36,10 @@ export interface ApiKeys {
   expiresAt: Timestamp | null;
   id: Generated<string>;
   lastUsedAt: Timestamp | null;
+  lastUsedIp: string | null;
+  lastUsedUserAgent: string | null;
   name: string | null;
+  scopes: Generated<string[]>;
   updatedAt: Generated<Timestamp>;
   creatorId: string;
   workspaceId: string;
@@ -174,7 +177,6 @@ export interface Comments {
   updatedAt: Generated<Timestamp>;
   workspaceId: string;
 }
-
 
 export interface DatabaseBlocks {
   id: Generated<string>;

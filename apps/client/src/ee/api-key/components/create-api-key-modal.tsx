@@ -1,5 +1,13 @@
 import { lazy, Suspense, useState } from "react";
-import { Modal, TextInput, Button, Group, Stack, Select } from "@mantine/core";
+import {
+  Modal,
+  TextInput,
+  Button,
+  Group,
+  Stack,
+  Select,
+  MultiSelect,
+} from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { z } from "zod/v4";
@@ -7,6 +15,8 @@ import { useTranslation } from "react-i18next";
 import { useCreateApiKeyMutation } from "@/ee/api-key/queries/api-key-query";
 import { IconCalendar } from "@tabler/icons-react";
 import { IApiKey } from "@/ee/api-key";
+import { API_KEY_SCOPE_PRESETS } from "@/ee/api-key/lib/api-key-scopes";
+import { ApiKeyScope } from "@/ee/api-key/types/api-key.types";
 
 const DateInput = lazy(() =>
   import("@mantine/dates").then((module) => ({
@@ -33,6 +43,11 @@ export function CreateApiKeyModal({
 }: CreateApiKeyModalProps) {
   const { t, i18n } = useTranslation();
   const [expirationOption, setExpirationOption] = useState<string>("30");
+  const [scopePreset, setScopePreset] = useState<string>("full");
+  const [customScopes, setCustomScopes] = useState<ApiKeyScope[]>([
+    "rest:read",
+    "rest:write",
+  ]);
   const createApiKeyMutation = useCreateApiKeyMutation();
 
   const form = useForm<FormValues>({
@@ -76,6 +91,29 @@ export function CreateApiKeyModal({
     { value: "never", label: t("No expiration") },
   ];
 
+  const scopePresetOptions = API_KEY_SCOPE_PRESETS.map((preset) => ({
+    value: preset.value,
+    label: t(preset.label),
+  }));
+
+  const scopeOptions = [
+    { value: "rest:read", label: "rest:read" },
+    { value: "rest:write", label: "rest:write" },
+    { value: "mcp:read", label: "mcp:read" },
+    { value: "mcp:write", label: "mcp:write" },
+  ];
+
+  const getScopes = (): ApiKeyScope[] => {
+    if (scopePreset === "custom") {
+      return customScopes;
+    }
+
+    return (
+      API_KEY_SCOPE_PRESETS.find((preset) => preset.value === scopePreset)
+        ?.scopes || []
+    );
+  };
+
   const handleSubmit = async (data: {
     name?: string;
     expiresAt?: string | Date;
@@ -83,6 +121,7 @@ export function CreateApiKeyModal({
     const groupData = {
       name: data.name,
       expiresAt: getExpirationDate(),
+      scopes: getScopes(),
     };
 
     try {
@@ -98,6 +137,8 @@ export function CreateApiKeyModal({
   const handleClose = () => {
     form.reset();
     setExpirationOption("30");
+    setScopePreset("full");
+    setCustomScopes(["rest:read", "rest:write"]);
     onClose();
   };
 
@@ -118,6 +159,24 @@ export function CreateApiKeyModal({
             required
             {...form.getInputProps("name")}
           />
+
+          <Select
+            label={t("Usage type")}
+            data={scopePresetOptions}
+            value={scopePreset}
+            onChange={(value) => setScopePreset(value || "full")}
+            allowDeselect={false}
+          />
+
+          {scopePreset === "custom" && (
+            <MultiSelect
+              label={t("Scopes")}
+              data={scopeOptions}
+              value={customScopes}
+              onChange={(value) => setCustomScopes(value as ApiKeyScope[])}
+              required
+            />
+          )}
 
           <Select
             label={t("Expiration")}

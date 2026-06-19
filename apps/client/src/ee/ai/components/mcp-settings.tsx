@@ -2,12 +2,12 @@ import {
   Group,
   List,
   Text,
-  Switch,
   TextInput,
   ActionIcon,
   Tooltip,
   Stack,
   Alert,
+  SegmentedControl,
 } from "@mantine/core";
 import { useAtom } from "jotai";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
@@ -25,17 +25,16 @@ import { CopyButton } from "@/components/common/copy-button.tsx";
 export default function McpSettings() {
   const { t } = useTranslation();
   const [workspace, setWorkspace] = useAtom(workspaceAtom);
-  const [checked, setChecked] = useState(workspace?.settings?.ai?.mcp);
+  const [mode, setMode] = useState(resolveMcpMode(workspace?.settings?.ai));
   const hasAccess = useHasFeature(Feature.MCP);
   const upgradeLabel = useUpgradeLabel();
 
   const mcpUrl = `${getAppUrl()}/mcp`;
 
-  const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.currentTarget.checked;
+  const handleChange = async (value: string) => {
     try {
-      const updatedWorkspace = await updateWorkspace({ mcpEnabled: value });
-      setChecked(value);
+      const updatedWorkspace = await updateWorkspace({ mcpMode: value as any });
+      setMode(value as McpMode);
       setWorkspace(updatedWorkspace);
     } catch (err) {
       notifications.show({
@@ -49,9 +48,7 @@ export default function McpSettings() {
     <Stack gap="lg">
       {!hasAccess && (
         <Alert icon={<IconInfoCircle />} title={upgradeLabel} color="blue">
-          {t(
-            "MCP is only available in the enterprise edition.",
-          )}
+          {t("MCP is only available in the enterprise edition.")}
         </Alert>
       )}
 
@@ -65,16 +62,21 @@ export default function McpSettings() {
           </Text>
         </div>
 
-        <Tooltip label={upgradeLabel} disabled={hasAccess} refProp="rootRef">
-          <Switch
-            defaultChecked={checked}
+        <Tooltip label={upgradeLabel} disabled={hasAccess}>
+          <SegmentedControl
+            value={mode}
             onChange={handleChange}
             disabled={!hasAccess}
+            data={[
+              { value: "off", label: t("Off") },
+              { value: "read-only", label: t("Read-only") },
+              { value: "read-write", label: t("Read-write") },
+            ]}
           />
         </Tooltip>
       </Group>
 
-      {checked && (
+      {mode !== "off" && (
         <div>
           <Text size="sm" fw={500} mb={4}>
             {t("MCP Server URL")}
@@ -101,7 +103,9 @@ export default function McpSettings() {
           </Group>
           <Text size="sm" c="dimmed" mt="xs">
             {t(
-              "Use your API key for authentication. You can manage API keys in your account settings.",
+              mode === "read-only"
+                ? "Use an API key with mcp:read scope for authentication."
+                : "Use an API key with mcp:write scope for write tools.",
             )}
           </Text>
 
@@ -146,4 +150,20 @@ export default function McpSettings() {
       )}
     </Stack>
   );
+}
+
+type McpMode = "off" | "read-only" | "read-write";
+
+function resolveMcpMode(aiSettings: any): McpMode {
+  if (
+    aiSettings?.mcpMode === "read-only" ||
+    aiSettings?.mcpMode === "read-write"
+  ) {
+    return aiSettings.mcpMode;
+  }
+  if (aiSettings?.mcpMode === "off") {
+    return "off";
+  }
+
+  return aiSettings?.mcp === true ? "read-write" : "off";
 }

@@ -1,12 +1,13 @@
 import {
-  Injectable,
-  NotFoundException,
   ForbiddenException,
   Inject,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiKeyRepo } from '@docmost/db/repos/api-key/api-key.repo';
 import { TokenService } from '../auth/services/token.service';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
+import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { CreateApiKeyDto, UpdateApiKeyDto } from './dto/api-key.dto';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
@@ -18,6 +19,18 @@ import {
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import { UserRole } from '../../common/helpers/types/permission';
 import { isUserDisabled } from '../../common/helpers';
+import { LicenseCheckService } from '../../integrations/environment/license-check.service';
+import { Feature } from '../../common/features';
+import {
+  DEFAULT_API_KEY_SCOPES,
+  LEGACY_API_KEY_SCOPES,
+  normalizeApiKeyScopes,
+} from './api-key-scopes';
+
+export type ApiKeyAuthMetadata = {
+  ipAddress?: string;
+  userAgent?: string;
+};
 
 @Injectable()
 export class ApiKeyService {
@@ -25,6 +38,8 @@ export class ApiKeyService {
     private readonly apiKeyRepo: ApiKeyRepo,
     private readonly tokenService: TokenService,
     private readonly userRepo: UserRepo,
+    private readonly workspaceRepo: WorkspaceRepo,
+    private readonly licenseCheckService: LicenseCheckService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -51,6 +66,7 @@ export class ApiKeyService {
       throw new ForbiddenException('API key creation is restricted to admins');
     }
 
+    const scopes = normalizeApiKeyScopes(dto.scopes, DEFAULT_API_KEY_SCOPES);
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
 
     const apiKey = await this.apiKeyRepo.insertApiKey({
@@ -58,6 +74,7 @@ export class ApiKeyService {
       creatorId: user.id,
       workspaceId: workspace.id,
       expiresAt,
+      scopes,
     });
 
     const expiresInSec = expiresAt
@@ -69,12 +86,14 @@ export class ApiKeyService {
       user,
       workspaceId: workspace.id,
       expiresIn: expiresInSec,
+      scopes,
     });
 
     this.auditService.log({
       event: AuditEvent.API_KEY_CREATED,
       resourceType: AuditResource.API_KEY,
       resourceId: apiKey.id,
+      metadata: { scopes },
     });
 
     const result = await this.apiKeyRepo.findById(apiKey.id, workspace.id);
@@ -101,6 +120,10 @@ export class ApiKeyService {
       event: AuditEvent.API_KEY_UPDATED,
       resourceType: AuditResource.API_KEY,
       resourceId: apiKey.id,
+      metadata: {
+        creatorId: apiKey.creatorId,
+        renamedByAdmin: apiKey.creatorId !== user.id,
+      },
     });
 
     return this.apiKeyRepo.findById(dto.apiKeyId, workspace.id);
@@ -121,10 +144,17 @@ export class ApiKeyService {
       event: AuditEvent.API_KEY_DELETED,
       resourceType: AuditResource.API_KEY,
       resourceId: apiKey.id,
+      metadata: {
+        creatorId: apiKey.creatorId,
+        revokedByAdmin: apiKey.creatorId !== user.id,
+      },
     });
   }
 
-  async validateApiKey(payload: JwtApiKeyPayload) {
+  async validateApiKey(
+    payload: JwtApiKeyPayload,
+    metadata?: ApiKeyAuthMetadata,
+  ) {
     const apiKey = await this.apiKeyRepo.findById(
       payload.apiKeyId,
       payload.workspaceId,
@@ -138,21 +168,43 @@ export class ApiKeyService {
       throw new ForbiddenException('API key expired');
     }
 
+    const workspace = await this.workspaceRepo.findById(payload.workspaceId);
+    if (!workspace) {
+      throw new ForbiddenException('Workspace not found');
+    }
+
+    if (
+      !this.licenseCheckService.hasFeature(
+        workspace.licenseKey,
+        Feature.API_KEYS,
+        workspace.plan,
+      )
+    ) {
+      throw new ForbiddenException('API keys are not enabled');
+    }
+
     const user = await this.userRepo.findById(payload.sub, payload.workspaceId);
     if (!user || isUserDisabled(user)) {
       throw new ForbiddenException('User not found');
     }
 
-    const workspace = { id: payload.workspaceId } as any;
+    const scopes = normalizeApiKeyScopes(apiKey.scopes, LEGACY_API_KEY_SCOPES);
 
-    // Update last used timestamp in background
-    this.apiKeyRepo.updateLastUsed(apiKey.id).catch(() => {});
+    this.apiKeyRepo.updateLastUsed(apiKey.id, metadata).catch(() => {});
 
-    return { user, workspace };
+    return {
+      user,
+      workspace,
+      apiKey: {
+        id: apiKey.id,
+        creatorId: apiKey.creatorId,
+        scopes,
+      },
+    };
   }
 
   private canManageWorkspaceApiKeys(user: User) {
-    return user.role === UserRole.OWNER;
+    return isWorkspaceAdmin(user);
   }
 }
 

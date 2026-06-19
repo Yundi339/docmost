@@ -1,5 +1,6 @@
 import {
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -9,6 +10,7 @@ import { Reflector } from '@nestjs/core';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { addDays } from 'date-fns';
 import { JwtType } from '../../core/auth/dto/jwt-payload';
+import { ApiKeyScope, hasApiKeyScope } from '../../core/api-key/api-key-scopes';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -37,8 +39,24 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw err || new UnauthorizedException();
     }
 
+    this.assertApiKeyRestScope(ctx);
     this.setJoinedWorkspacesCookie(user, ctx);
     return user;
+  }
+
+  private assertApiKeyRestScope(ctx: ExecutionContext) {
+    const req = ctx.switchToHttp().getRequest();
+    if (req.raw?.authType !== JwtType.API_KEY || isMcpRequest(req)) {
+      return;
+    }
+
+    const requiredScope = isReadMethod(req.method)
+      ? ApiKeyScope.REST_READ
+      : ApiKeyScope.REST_WRITE;
+
+    if (!hasApiKeyScope(req.raw?.apiKey?.scopes, requiredScope)) {
+      throw new ForbiddenException(`Missing API key scope: ${requiredScope}`);
+    }
   }
 
   setJoinedWorkspacesCookie(user: any, ctx: ExecutionContext) {
@@ -73,4 +91,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       });
     }
   }
+}
+
+function isReadMethod(method?: string) {
+  return ['GET', 'HEAD', 'OPTIONS'].includes(method ?? '');
+}
+
+function isMcpRequest(req: any) {
+  const url = req.url ?? req.raw?.url ?? '';
+  return url === '/mcp' || url.startsWith('/mcp/') || url.includes('/mcp');
 }

@@ -14,6 +14,8 @@ describe('ApiKeyService', () => {
   };
   let tokenService: { generateApiToken: jest.Mock };
   let userRepo: { findById: jest.Mock };
+  let workspaceRepo: { findById: jest.Mock };
+  let licenseCheckService: { hasFeature: jest.Mock };
   let auditService: { log: jest.Mock };
 
   const workspace = (settings: Record<string, any> = {}) =>
@@ -35,13 +37,23 @@ describe('ApiKeyService', () => {
       insertApiKey: jest.fn(),
       updateApiKey: jest.fn(),
       softDelete: jest.fn(),
-      updateLastUsed: jest.fn(),
+      updateLastUsed: jest.fn().mockResolvedValue(undefined),
     };
     tokenService = {
       generateApiToken: jest.fn(),
     };
     userRepo = {
       findById: jest.fn(),
+    };
+    workspaceRepo = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'workspace-id',
+        licenseKey: null,
+        plan: null,
+      }),
+    };
+    licenseCheckService = {
+      hasFeature: jest.fn().mockReturnValue(true),
     };
     auditService = {
       log: jest.fn(),
@@ -51,11 +63,13 @@ describe('ApiKeyService', () => {
       apiKeyRepo as any,
       tokenService as any,
       userRepo as any,
+      workspaceRepo as any,
+      licenseCheckService as any,
       auditService as any,
     );
   });
 
-  it('blocks non-owners from the workspace-wide API key view', async () => {
+  it('blocks members from the workspace-wide API key view', async () => {
     await expect(
       service.findApiKeys(
         workspace({ api: { allowMemberManagement: true } }),
@@ -65,6 +79,23 @@ describe('ApiKeyService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(apiKeyRepo.findApiKeys).not.toHaveBeenCalled();
+  });
+
+  it('allows admins to use the workspace-wide API key view', async () => {
+    const result = { items: [], meta: {} };
+    apiKeyRepo.findApiKeys.mockResolvedValue(result);
+
+    await expect(
+      service.findApiKeys(
+        workspace(),
+        { adminView: true } as any,
+        user(UserRole.ADMIN, 'admin-id'),
+      ),
+    ).resolves.toBe(result);
+
+    expect(apiKeyRepo.findApiKeys).toHaveBeenCalledWith('workspace-id', {
+      adminView: true,
+    });
   });
 
   it('lists only the current user keys in personal view', async () => {
@@ -162,7 +193,7 @@ describe('ApiKeyService', () => {
 
     await expect(
       service.create(
-        { name: 'Admin key' },
+        { name: 'Admin key', scopes: ['mcp:read'] },
         user(UserRole.ADMIN, 'admin-id'),
         workspace({ api: { restrictToAdmins: true } }),
       ),
@@ -170,12 +201,19 @@ describe('ApiKeyService', () => {
       id: 'api-key-id',
       token: 'api-token',
     });
+    expect(apiKeyRepo.insertApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: ['mcp:read'] }),
+    );
+    expect(tokenService.generateApiToken).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: ['mcp:read'] }),
+    );
   });
 
   it('rejects API keys created by disabled users', async () => {
     apiKeyRepo.findById.mockResolvedValue({
       id: 'api-key-id',
       creatorId: 'member-id',
+      scopes: ['rest:read'],
     });
     userRepo.findById.mockResolvedValue({
       id: 'member-id',
@@ -193,5 +231,55 @@ describe('ApiKeyService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(apiKeyRepo.updateLastUsed).not.toHaveBeenCalled();
+  });
+
+  it('rejects expired API keys', async () => {
+    apiKeyRepo.findById.mockResolvedValue({
+      id: 'api-key-id',
+      creatorId: 'member-id',
+      expiresAt: new Date(Date.now() - 1000),
+      scopes: ['rest:read'],
+    });
+
+    await expect(
+      service.validateApiKey({
+        apiKeyId: 'api-key-id',
+        sub: 'member-id',
+        workspaceId: 'workspace-id',
+        type: 'api_key',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(apiKeyRepo.updateLastUsed).not.toHaveBeenCalled();
+  });
+
+  it('keeps legacy API keys REST-only and updates last-used metadata', async () => {
+    apiKeyRepo.findById.mockResolvedValue({
+      id: 'api-key-id',
+      creatorId: 'member-id',
+      expiresAt: null,
+      scopes: null,
+    });
+    userRepo.findById.mockResolvedValue({
+      id: 'member-id',
+      deactivatedAt: null,
+      deletedAt: null,
+    });
+
+    const result = await service.validateApiKey(
+      {
+        apiKeyId: 'api-key-id',
+        sub: 'member-id',
+        workspaceId: 'workspace-id',
+        type: 'api_key',
+      },
+      { ipAddress: '127.0.0.1', userAgent: 'test-agent' },
+    );
+
+    expect(result.apiKey.scopes).toEqual(['rest:read', 'rest:write']);
+    expect(apiKeyRepo.updateLastUsed).toHaveBeenCalledWith('api-key-id', {
+      ipAddress: '127.0.0.1',
+      userAgent: 'test-agent',
+    });
   });
 });

@@ -373,6 +373,7 @@ const MEMBER_AI_SETTINGS_FIELDS = new Set([
   'aiSearch',
   'generativeAi',
   'mcpEnabled',
+  'mcpMode',
   'aiChat',
 ]);
 

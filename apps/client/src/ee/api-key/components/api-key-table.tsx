@@ -1,4 +1,4 @@
-import { ActionIcon, Group, Menu, Table, Text } from "@mantine/core";
+import { ActionIcon, Badge, Group, Menu, Table, Text } from "@mantine/core";
 import { IconDots, IconEdit, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { IApiKey } from "@/ee/api-key";
@@ -6,6 +6,7 @@ import { CustomAvatar } from "@/components/ui/custom-avatar.tsx";
 import React from "react";
 import NoTableResults from "@/components/common/no-table-results";
 import { formatLocalized, useDateFnsLocale } from "@/lib/date-locale.ts";
+import { getApiKeyScopeLabel } from "@/ee/api-key/lib/api-key-scopes";
 
 interface ApiKeyTableProps {
   apiKeys: IApiKey[];
@@ -42,6 +43,8 @@ export function ApiKeyTable({
           <Table.Tr>
             <Table.Th>{t("Name")}</Table.Th>
             {showUserColumn && <Table.Th>{t("User")}</Table.Th>}
+            <Table.Th>{t("Usage type")}</Table.Th>
+            <Table.Th>{t("Status")}</Table.Th>
             <Table.Th>{t("Last used")}</Table.Th>
             <Table.Th>{t("Expires")}</Table.Th>
             <Table.Th>{t("Created")}</Table.Th>
@@ -73,6 +76,24 @@ export function ApiKeyTable({
                     </Group>
                   </Table.Td>
                 )}
+
+                <Table.Td>
+                  <Text fz="sm" fw={500}>
+                    {t(getApiKeyScopeLabel(apiKey.scopes))}
+                  </Text>
+                  <Text fz="xs" c="dimmed" lineClamp={2}>
+                    {(apiKey.scopes || []).join(", ")}
+                  </Text>
+                </Table.Td>
+
+                <Table.Td>
+                  <Badge
+                    variant="light"
+                    color={isExpired(apiKey.expiresAt) ? "red" : "green"}
+                  >
+                    {isExpired(apiKey.expiresAt) ? t("Expired") : t("Active")}
+                  </Badge>
+                </Table.Td>
 
                 <Table.Td>
                   <Text fz="sm" style={{ whiteSpace: "nowrap" }}>
@@ -139,7 +160,7 @@ export function ApiKeyTable({
               </Table.Tr>
             ))
           ) : (
-            <NoTableResults colSpan={showUserColumn ? 6 : 5} />
+            <NoTableResults colSpan={showUserColumn ? 8 : 7} />
           )}
         </Table.Tbody>
       </Table>

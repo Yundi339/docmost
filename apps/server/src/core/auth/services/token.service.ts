@@ -98,9 +98,10 @@ export class TokenService {
     apiKeyId: string;
     user: User;
     workspaceId: string;
+    scopes?: string[];
     expiresIn?: StringValue | number;
   }): Promise<string> {
-    const { apiKeyId, user, workspaceId, expiresIn } = opts;
+    const { apiKeyId, user, workspaceId, scopes, expiresIn } = opts;
     if (isUserDisabled(user)) {
       throw new ForbiddenException();
     }
@@ -109,6 +110,7 @@ export class TokenService {
       sub: user.id,
       apiKeyId: apiKeyId,
       workspaceId,
+      scopes,
       type: JwtType.API_KEY,
     };
 

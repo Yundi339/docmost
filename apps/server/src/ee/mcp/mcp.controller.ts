@@ -14,7 +14,7 @@ import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
-import { McpService } from './mcp.service';
+import { McpMode, McpRequestContext, McpService } from './mcp.service';
 
 @UseGuards(JwtAuthGuard, ApiKeyAuthGuard)
 @Controller('mcp')
@@ -40,16 +40,32 @@ export class McpController {
     }
 
     const settings = fullWorkspace.settings as any;
-    if (!settings?.ai?.mcp) {
+    const mode = resolveMcpMode(settings?.ai);
+    if (mode === 'off') {
       throw new ForbiddenException('MCP is not enabled for this workspace');
     }
+    const apiKey = (req as any).raw?.apiKey;
+    if (!apiKey?.id) {
+      throw new ForbiddenException('An API key bearer token is required');
+    }
+    const context: McpRequestContext = {
+      apiKeyId: apiKey.id,
+      scopes: apiKey.scopes ?? [],
+      mode,
+    };
 
     const method = req.method;
     const rawReq = req.raw;
     const rawRes = res.raw;
 
     if (method === 'DELETE') {
-      await this.mcpService.handleDelete(rawReq, rawRes, user, fullWorkspace);
+      await this.mcpService.handleDelete(
+        rawReq,
+        rawRes,
+        user,
+        fullWorkspace,
+        context,
+      );
       return;
     }
 
@@ -60,6 +76,21 @@ export class McpController {
       req.body,
       user,
       fullWorkspace,
+      context,
     );
   }
+}
+
+export function resolveMcpMode(aiSettings: any): McpMode {
+  if (
+    aiSettings?.mcpMode === 'read-only' ||
+    aiSettings?.mcpMode === 'read-write'
+  ) {
+    return aiSettings.mcpMode;
+  }
+  if (aiSettings?.mcpMode === 'off') {
+    return 'off';
+  }
+
+  return aiSettings?.mcp === true ? 'read-write' : 'off';
 }

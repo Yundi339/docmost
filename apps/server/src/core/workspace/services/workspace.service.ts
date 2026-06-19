@@ -339,6 +339,7 @@ export class WorkspaceService {
       typeof updateWorkspaceDto.disablePublicSharing !== 'undefined' ||
       typeof updateWorkspaceDto.trashRetentionDays !== 'undefined' ||
       typeof updateWorkspaceDto.mcpEnabled !== 'undefined' ||
+      typeof updateWorkspaceDto.mcpMode !== 'undefined' ||
       typeof updateWorkspaceDto.restrictApiToAdmins !== 'undefined' ||
       typeof updateWorkspaceDto.allowMemberApiManagement !== 'undefined' ||
       typeof updateWorkspaceDto.allowMemberAiSettings !== 'undefined' ||
@@ -354,7 +355,10 @@ export class WorkspaceService {
         throw new NotFoundException('Workspace not found');
       }
 
-      if (typeof updateWorkspaceDto.mcpEnabled !== 'undefined') {
+      if (
+        typeof updateWorkspaceDto.mcpEnabled !== 'undefined' ||
+        typeof updateWorkspaceDto.mcpMode !== 'undefined'
+      ) {
         if (
           !this.licenseCheckService.hasFeature(ws.licenseKey, 'mcp', ws.plan)
         ) {
@@ -496,15 +500,42 @@ export class WorkspaceService {
       }
 
       if (typeof updateWorkspaceDto.mcpEnabled !== 'undefined') {
-        const prev = settingsBefore?.ai?.mcp ?? false;
-        if (prev !== updateWorkspaceDto.mcpEnabled) {
-          before.mcpEnabled = prev;
-          after.mcpEnabled = updateWorkspaceDto.mcpEnabled;
+        const nextMode = updateWorkspaceDto.mcpEnabled ? 'read-write' : 'off';
+        const prevMode = resolveMcpMode(settingsBefore?.ai);
+        if (prevMode !== nextMode) {
+          before.mcpMode = prevMode;
+          after.mcpMode = nextMode;
         }
         await this.workspaceRepo.updateAiSettings(
           workspaceId,
           'mcp',
           updateWorkspaceDto.mcpEnabled,
+          trx,
+        );
+        await this.workspaceRepo.updateAiSettings(
+          workspaceId,
+          'mcpMode',
+          nextMode,
+          trx,
+        );
+      }
+
+      if (typeof updateWorkspaceDto.mcpMode !== 'undefined') {
+        const prevMode = resolveMcpMode(settingsBefore?.ai);
+        if (prevMode !== updateWorkspaceDto.mcpMode) {
+          before.mcpMode = prevMode;
+          after.mcpMode = updateWorkspaceDto.mcpMode;
+        }
+        await this.workspaceRepo.updateAiSettings(
+          workspaceId,
+          'mcp',
+          updateWorkspaceDto.mcpMode !== 'off',
+          trx,
+        );
+        await this.workspaceRepo.updateAiSettings(
+          workspaceId,
+          'mcpMode',
+          updateWorkspaceDto.mcpMode,
           trx,
         );
       }
@@ -544,6 +575,7 @@ export class WorkspaceService {
       delete updateWorkspaceDto.generativeAi;
       delete updateWorkspaceDto.disablePublicSharing;
       delete updateWorkspaceDto.mcpEnabled;
+      delete updateWorkspaceDto.mcpMode;
       delete updateWorkspaceDto.allowMemberTemplates;
       delete updateWorkspaceDto.aiChat;
 
@@ -902,4 +934,18 @@ export class WorkspaceService {
       // empty
     }
   }
+}
+
+function resolveMcpMode(aiSettings: any): 'off' | 'read-only' | 'read-write' {
+  if (
+    aiSettings?.mcpMode === 'read-only' ||
+    aiSettings?.mcpMode === 'read-write'
+  ) {
+    return aiSettings.mcpMode;
+  }
+  if (aiSettings?.mcpMode === 'off') {
+    return 'off';
+  }
+
+  return aiSettings?.mcp === true ? 'read-write' : 'off';
 }
