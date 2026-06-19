@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { Alert, Button, Divider, Group, Space, Text } from "@mantine/core";
-import { IconInfoCircle } from "@tabler/icons-react";
+import { Button, Divider, Group, Space, Text } from "@mantine/core";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 import SettingsTitle from "@/components/settings/settings-title";
@@ -16,8 +15,6 @@ import { useGetApiKeysQuery } from "@/ee/api-key/queries/api-key-query.ts";
 import { IApiKey } from "@/ee/api-key";
 import useUserRole from "@/hooks/use-user-role.tsx";
 import RestrictApiToAdmins from "@/ee/api-key/components/restrict-api-to-admins";
-import { useAtom } from "jotai";
-import { workspaceAtom } from "@/features/user/atoms/current-user-atom";
 
 export default function WorkspaceApiKeys() {
   const { t } = useTranslation();
@@ -27,16 +24,16 @@ export default function WorkspaceApiKeys() {
   const [updateModalOpened, setUpdateModalOpened] = useState(false);
   const [revokeModalOpened, setRevokeModalOpened] = useState(false);
   const [selectedApiKey, setSelectedApiKey] = useState<IApiKey | null>(null);
-  const { isAdmin, isOwner } = useUserRole();
-  const [workspace] = useAtom(workspaceAtom);
-  const restrictToAdmins = workspace?.settings?.api?.restrictToAdmins === true;
-  const canCreate = !restrictToAdmins || isAdmin;
-  const { data, isLoading } = useGetApiKeysQuery({
-    cursor,
-    adminView: isAdmin,
-  });
+  const { isOwner } = useUserRole();
+  const { data, isLoading } = useGetApiKeysQuery(
+    {
+      cursor,
+      adminView: true,
+    },
+    { enabled: isOwner },
+  );
 
-  if (!isAdmin) {
+  if (!isOwner) {
     return null;
   }
 
@@ -68,34 +65,14 @@ export default function WorkspaceApiKeys() {
         {t("Manage API keys for all users in the workspace.")}
       </Text>
 
-      {isOwner && (
-        <>
-          <RestrictApiToAdmins />
-          <Divider my="lg" />
-        </>
-      )}
+      <RestrictApiToAdmins />
+      <Divider my="lg" />
 
-      {canCreate ? (
-        <Group justify="flex-end" mb="md">
-          <Button onClick={() => setCreateModalOpened(true)}>
-            {t("Create API Key")}
-          </Button>
-        </Group>
-      ) : restrictToAdmins ? (
-        <Alert
-          variant="light"
-          color="yellow"
-          mb="md"
-          p="sm"
-          icon={<IconInfoCircle />}
-        >
-          <Text size="sm">
-            {t(
-              "API key creation is restricted to admins by your workspace administrator.",
-            )}
-          </Text>
-        </Alert>
-      ) : null}
+      <Group justify="flex-end" mb="md">
+        <Button onClick={() => setCreateModalOpened(true)}>
+          {t("Create API Key")}
+        </Button>
+      </Group>
 
       <ApiKeyTable
         apiKeys={data?.items || []}

@@ -94,7 +94,7 @@ export class WorkspaceController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    if (hasMemberManagementFields(dto) && user.role !== UserRole.OWNER) {
+    if (hasOwnerOnlyWorkspaceSettings(dto) && user.role !== UserRole.OWNER) {
       throw new ForbiddenException();
     }
 
@@ -103,8 +103,7 @@ export class WorkspaceController {
       ability.cannot(
         WorkspaceCaslAction.Manage,
         WorkspaceCaslSubject.Settings,
-      ) &&
-      !canMemberUpdateAiSettings(workspace.settings, dto)
+      )
     ) {
       throw new ForbiddenException();
     }
@@ -376,29 +375,21 @@ export class WorkspaceController {
   }
 }
 
-const MEMBER_AI_SETTINGS_FIELDS = new Set([
+const OWNER_ONLY_WORKSPACE_SETTING_FIELDS = new Set([
+  'restrictApiToAdmins',
+  'allowMemberApiManagement',
+  'allowMemberAiSettings',
   'aiSearch',
   'generativeAi',
   'aiChat',
+  'mcpEnabled',
+  'mcpMode',
 ]);
 
-function hasMemberManagementFields(dto: UpdateWorkspaceDto) {
-  return (
-    typeof dto.allowMemberApiManagement !== 'undefined' ||
-    typeof dto.allowMemberAiSettings !== 'undefined'
+function hasOwnerOnlyWorkspaceSettings(dto: UpdateWorkspaceDto) {
+  return Object.entries(dto).some(
+    ([key, value]) =>
+      typeof value !== 'undefined' &&
+      OWNER_ONLY_WORKSPACE_SETTING_FIELDS.has(key),
   );
-}
-
-function canMemberUpdateAiSettings(
-  settings: Workspace['settings'],
-  dto: UpdateWorkspaceDto,
-) {
-  const requestedFields = Object.entries(dto)
-    .filter(([, value]) => typeof value !== 'undefined')
-    .map(([key]) => key);
-
-  if (requestedFields.length === 0) return false;
-  if ((settings as any)?.ai?.allowMemberSettings === false) return false;
-
-  return requestedFields.every((key) => MEMBER_AI_SETTINGS_FIELDS.has(key));
 }

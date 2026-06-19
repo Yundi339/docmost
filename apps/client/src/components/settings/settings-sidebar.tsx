@@ -39,7 +39,6 @@ import { useAtom } from "jotai";
 import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import { useSettingsNavigation } from "@/hooks/use-settings-navigation";
-import { workspaceAtom } from "@/features/user/atoms/current-user-atom";
 
 type DataItem = {
   label: string;
@@ -112,12 +111,13 @@ const groupedData: DataGroup[] = [
         label: "API management",
         icon: IconKey,
         path: "/settings/api-keys",
-        role: "admin",
+        role: "owner",
       },
       {
         label: "AI settings",
         icon: IconSparkles,
         path: "/settings/ai",
+        role: "owner",
       },
       {
         label: "Audit log",
@@ -141,7 +141,6 @@ export default function SettingsSidebar() {
   const [active, setActive] = useState(location.pathname);
   const { goBack } = useSettingsNavigation();
   const { isAdmin, isOwner } = useUserRole();
-  const [workspace] = useAtom(workspaceAtom);
   const [mobileSidebarOpened] = useAtom(mobileSidebarAtom);
   const toggleMobileSidebar = useToggleSidebar(mobileSidebarAtom);
 
@@ -152,13 +151,6 @@ export default function SettingsSidebar() {
   const canShowItem = (item: DataItem) => {
     if (item.env === "cloud" && !isCloud()) return false;
     if (item.env === "selfhosted" && isCloud()) return false;
-    if (
-      item.label === "AI settings" &&
-      !isAdmin &&
-      workspace?.settings?.ai?.allowMemberSettings === false
-    ) {
-      return false;
-    }
     if (item.role === "admin" && !isAdmin) return false;
     if (item.role === "owner" && !isOwner) return false;
     return true;
@@ -199,9 +191,7 @@ export default function SettingsSidebar() {
               prefetchHandler = prefetchApiKeys;
               break;
             case "API management":
-              prefetchHandler = isAdmin
-                ? prefetchApiKeyManagement
-                : prefetchApiKeys;
+              prefetchHandler = prefetchApiKeyManagement;
               break;
             case "Audit log":
               prefetchHandler = prefetchAuditLogs;

@@ -1,4 +1,4 @@
-import { Divider, Stack, Text, Switch } from "@mantine/core";
+import { Stack, Text, Switch } from "@mantine/core";
 import { useAtom } from "jotai";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
 import React, { useState } from "react";
@@ -17,14 +17,10 @@ export default function RestrictApiToAdmins() {
   const [restrictToAdmins, setRestrictToAdmins] = useState(
     workspace?.settings?.api?.restrictToAdmins === true,
   );
-  const [allowMemberAiSettings, setAllowMemberAiSettings] = useState(
-    workspace?.settings?.ai?.allowMemberSettings !== false,
-  );
 
   const updateSetting = async (
     payload: {
       restrictApiToAdmins?: boolean;
-      allowMemberAiSettings?: boolean;
     },
     onSuccess: () => void,
   ) => {
@@ -49,42 +45,14 @@ export default function RestrictApiToAdmins() {
     );
   };
 
-  const handleAllowMemberAiSettingsChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const value = event.currentTarget.checked;
-    await updateSetting({ allowMemberAiSettings: value }, () =>
-      setAllowMemberAiSettings(value),
-    );
-  };
-
   return (
     <Stack gap="md">
       <div>
-        <Text fw={600}>{t("Member management")}</Text>
+        <Text fw={600}>{t("API management")}</Text>
         <Text size="sm" c="dimmed">
-          {t("Control which workspace settings members can use.")}
+          {t("Control API key creation for this workspace.")}
         </Text>
       </div>
-
-      <ResponsiveSettingsRow>
-        <ResponsiveSettingsContent>
-          <Text size="md">{t("Allow members to use AI settings")}</Text>
-          <Text size="sm" c="dimmed">
-            {t("Members can open AI settings and update AI feature toggles.")}
-          </Text>
-        </ResponsiveSettingsContent>
-
-        <ResponsiveSettingsControl>
-          <Switch
-            checked={allowMemberAiSettings}
-            onChange={handleAllowMemberAiSettingsChange}
-            aria-label={t("Toggle member AI settings")}
-          />
-        </ResponsiveSettingsControl>
-      </ResponsiveSettingsRow>
-
-      <Divider />
 
       <ResponsiveSettingsRow>
         <ResponsiveSettingsContent>

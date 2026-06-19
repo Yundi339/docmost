@@ -76,7 +76,19 @@ describe('ApiKeyService', () => {
     expect(apiKeyRepo.findApiKeys).not.toHaveBeenCalled();
   });
 
-  it('allows admins to use the workspace-wide API key view', async () => {
+  it('blocks admins from the workspace-wide API key view', async () => {
+    await expect(
+      service.findApiKeys(
+        workspace(),
+        { adminView: true } as any,
+        user(UserRole.ADMIN, 'admin-id'),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(apiKeyRepo.findApiKeys).not.toHaveBeenCalled();
+  });
+
+  it('allows owners to use the workspace-wide API key view', async () => {
     const result = { items: [], meta: {} };
     apiKeyRepo.findApiKeys.mockResolvedValue(result);
 
@@ -84,7 +96,7 @@ describe('ApiKeyService', () => {
       service.findApiKeys(
         workspace(),
         { adminView: true } as any,
-        user(UserRole.ADMIN, 'admin-id'),
+        user(UserRole.OWNER, 'owner-id'),
       ),
     ).resolves.toBe(result);
 

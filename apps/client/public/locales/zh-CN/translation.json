@@ -247,6 +247,7 @@
   "Continue": "继续",
   "Continue writing": "继续写作",
   "Contributors": "贡献者",
+  "Control API key creation for this workspace.": "控制此工作区的 API 密钥创建规则。",
   "Control who can view and edit individual pages. Available with an enterprise license.": "控制谁可以查看和编辑单个页面。此功能在企业版许可下可用。",
   "Control which workspace settings members can use.": "控制成员可以使用哪些工作区设置。",
   "Convert to attachment": "转换为附件",

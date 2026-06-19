@@ -69,6 +69,19 @@ describe('WorkspaceController', () => {
     expect(workspaceService.update).not.toHaveBeenCalled();
   });
 
+  it('blocks admins from changing API management settings', async () => {
+    await expect(
+      controller.updateWorkspace(
+        response(),
+        dto({ restrictApiToAdmins: true }),
+        user(UserRole.ADMIN),
+        workspace(),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(workspaceService.update).not.toHaveBeenCalled();
+  });
+
   it('allows owners to change member management settings', async () => {
     await expect(
       controller.updateWorkspace(
@@ -84,7 +97,20 @@ describe('WorkspaceController', () => {
     });
   });
 
-  it('allows members to update AI settings when member AI settings are enabled', async () => {
+  it('blocks admins from updating AI settings', async () => {
+    await expect(
+      controller.updateWorkspace(
+        response(),
+        dto({ aiSearch: true }),
+        user(UserRole.ADMIN),
+        workspace({ ai: { allowMemberSettings: true } }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(workspaceService.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks members from updating AI settings when member AI settings are enabled', async () => {
     ability.cannot.mockReturnValue(true);
 
     await expect(
@@ -94,6 +120,19 @@ describe('WorkspaceController', () => {
         user(UserRole.MEMBER),
         workspace({ ai: { allowMemberSettings: true } }),
       ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(workspaceService.update).not.toHaveBeenCalled();
+  });
+
+  it('allows owners to update AI settings', async () => {
+    await expect(
+      controller.updateWorkspace(
+        response(),
+        dto({ aiSearch: true }),
+        user(UserRole.OWNER),
+        workspace({ ai: { allowMemberSettings: false } }),
+      ),
     ).resolves.toMatchObject({ id: 'workspace-id' });
 
     expect(workspaceService.update).toHaveBeenCalledWith('workspace-id', {
@@ -102,8 +141,6 @@ describe('WorkspaceController', () => {
   });
 
   it('blocks members from updating AI settings when member AI settings are disabled', async () => {
-    ability.cannot.mockReturnValue(true);
-
     await expect(
       controller.updateWorkspace(
         response(),
@@ -117,8 +154,6 @@ describe('WorkspaceController', () => {
   });
 
   it('blocks members from updating MCP mode even when member AI settings are enabled', async () => {
-    ability.cannot.mockReturnValue(true);
-
     await expect(
       controller.updateWorkspace(
         response(),

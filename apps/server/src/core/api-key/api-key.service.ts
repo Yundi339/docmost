@@ -191,10 +191,14 @@ export class ApiKeyService {
   }
 
   private canManageWorkspaceApiKeys(user: User) {
-    return isWorkspaceAdmin(user);
+    return isWorkspaceOwner(user);
   }
 }
 
 function isWorkspaceAdmin(user: User) {
   return user.role === UserRole.ADMIN || user.role === UserRole.OWNER;
+}
+
+function isWorkspaceOwner(user: User) {
+  return user.role === UserRole.OWNER;
 }

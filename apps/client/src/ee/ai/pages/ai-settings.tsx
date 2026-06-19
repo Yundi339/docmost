@@ -15,23 +15,18 @@ import { Feature } from "@/ee/features";
 import { useUpgradeLabel } from "@/ee/hooks/use-upgrade-label";
 import { isCloud } from "@/lib/config.ts";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useAtom } from "jotai";
-import { workspaceAtom } from "@/features/user/atoms/current-user-atom";
 
 export default function AiSettings() {
   const { t } = useTranslation();
-  const { isAdmin } = useUserRole();
+  const { isOwner } = useUserRole();
   const hasAccess = useHasFeature(Feature.AI);
   const upgradeLabel = useUpgradeLabel();
   const location = useLocation();
   const navigate = useNavigate();
-  const [workspace] = useAtom(workspaceAtom);
-  const canUseAiSettings =
-    isAdmin || workspace?.settings?.ai?.allowMemberSettings !== false;
 
   const activeTab = location.pathname.endsWith("/mcp") ? "mcp" : "ai";
 
-  if (!canUseAiSettings) {
+  if (!isOwner) {
     return null;
   }
 

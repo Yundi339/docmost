@@ -20,10 +20,12 @@ import { useTranslation } from "react-i18next";
 
 export function useGetApiKeysQuery(
   params?: QueryParams,
+  options?: { enabled?: boolean },
 ): UseQueryResult<IPagination<IApiKey>, Error> {
   return useQuery({
     queryKey: ["api-key-list", params],
     queryFn: () => getApiKeys(params),
+    enabled: options?.enabled,
     staleTime: 0,
     gcTime: 0,
     placeholderData: keepPreviousData,
