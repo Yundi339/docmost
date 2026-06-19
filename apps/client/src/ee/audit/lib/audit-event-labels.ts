@@ -33,6 +33,8 @@ export const auditEventLabels: Record<string, string> = {
   "api_key.updated": "Updated API key",
   "api_key.deleted": "Deleted API key",
 
+  "mcp.tool_called": "Called MCP tool",
+
   "space.created": "Created space",
   "space.updated": "Updated space",
   "space.deleted": "Deleted space",
@@ -126,10 +128,12 @@ export const eventFilterOptions: EventGroup[] = [
     ],
   },
   {
+    group: "MCP",
+    items: [{ value: "mcp.tool_called", label: "Called MCP tool" }],
+  },
+  {
     group: "Comment",
-    items: [
-      { value: "comment.deleted", label: "Deleted comment" },
-    ],
+    items: [{ value: "comment.deleted", label: "Deleted comment" }],
   },
   {
     group: "Page",
@@ -143,9 +147,18 @@ export const eventFilterOptions: EventGroup[] = [
       { value: "page.restriction_removed", label: "Removed page restriction" },
       { value: "page.permission_added", label: "Added page permission" },
       { value: "page.permission_removed", label: "Removed page permission" },
-      { value: "page.verification_created", label: "Created page verification" },
-      { value: "page.verification_updated", label: "Updated page verification" },
-      { value: "page.verification_removed", label: "Removed page verification" },
+      {
+        value: "page.verification_created",
+        label: "Created page verification",
+      },
+      {
+        value: "page.verification_updated",
+        label: "Updated page verification",
+      },
+      {
+        value: "page.verification_removed",
+        label: "Removed page verification",
+      },
       { value: "page.verified", label: "Verified page" },
       { value: "page.approval_requested", label: "Requested page approval" },
       { value: "page.approval_rejected", label: "Rejected page approval" },

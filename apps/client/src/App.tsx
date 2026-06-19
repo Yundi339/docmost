@@ -54,6 +54,9 @@ const WorkspaceApiKeys = lazy(() => import("@/ee/api-key/pages/workspace-api-key
 const UserOAuthSettings = lazy(
   () => import("@/ee/oauth/pages/user-oauth-settings"),
 );
+const UserMcpActivity = lazy(
+  () => import("@/ee/audit/pages/user-mcp-activity"),
+);
 const WorkspaceOAuthManagement = lazy(
   () => import("@/ee/oauth/pages/workspace-oauth-management"),
 );
@@ -132,6 +135,10 @@ export default function App() {
             />
             <Route path={"account/api-keys"} element={<UserApiKeys />} />
             <Route path={"account/oauth"} element={<UserOAuthSettings />} />
+            <Route
+              path={"account/mcp-activity"}
+              element={<UserMcpActivity />}
+            />
             <Route path={"workspace"} element={<WorkspaceSettings />} />
             <Route path={"members"} element={<WorkspaceMembers />} />
             <Route path={"api-keys"} element={<WorkspaceApiKeys />} />

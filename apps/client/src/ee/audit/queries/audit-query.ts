@@ -8,6 +8,7 @@ import {
 import {
   getAuditLogs,
   getAuditRetention,
+  getMyMcpAuditLogs,
   updateAuditRetention,
 } from "@/ee/audit/services/audit-service";
 import { IAuditLog, IAuditLogParams } from "@/ee/audit/types/audit.types";
@@ -21,6 +22,16 @@ export function useAuditLogsQuery(
   return useQuery({
     queryKey: ["audit-logs", params],
     queryFn: () => getAuditLogs(params),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useMyMcpAuditLogsQuery(
+  params?: IAuditLogParams,
+): UseQueryResult<IPagination<IAuditLog>, Error> {
+  return useQuery({
+    queryKey: ["audit-logs", "mcp", "my", params],
+    queryFn: () => getMyMcpAuditLogs(params),
     placeholderData: keepPreviousData,
   });
 }

@@ -9,6 +9,7 @@ import { WorkspaceModule } from '../../core/workspace/workspace.module';
 import { ApiKeyModule } from '../../core/api-key/api-key.module';
 import { OAuthModule } from '../oauth/oauth.module';
 import { McpAuthGuard } from './mcp-auth.guard';
+import { PageAccessModule } from '../../core/page/page-access/page-access.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { McpAuthGuard } from './mcp-auth.guard';
     WorkspaceModule,
     ApiKeyModule,
     OAuthModule,
+    PageAccessModule,
   ],
   controllers: [McpController],
   providers: [McpService, McpAuthGuard],

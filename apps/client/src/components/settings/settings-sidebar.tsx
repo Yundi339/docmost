@@ -33,6 +33,7 @@ import {
   prefetchSsoProviders,
   prefetchWorkspaceMembers,
   prefetchAuditLogs,
+  prefetchMyMcpAuditLogs,
   prefetchVerifiedPages,
   prefetchOAuthManagement,
   prefetchOAuthSettings,
@@ -76,6 +77,11 @@ const groupedData: DataGroup[] = [
         label: "OAuth settings",
         icon: IconShieldLock,
         path: "/settings/account/oauth",
+      },
+      {
+        label: "MCP activity",
+        icon: IconHistory,
+        path: "/settings/account/mcp-activity",
       },
     ],
   },
@@ -206,6 +212,9 @@ export default function SettingsSidebar() {
               break;
             case "OAuth settings":
               prefetchHandler = prefetchOAuthSettings;
+              break;
+            case "MCP activity":
+              prefetchHandler = prefetchMyMcpAuditLogs;
               break;
             case "API management":
               prefetchHandler = prefetchApiKeyManagement;

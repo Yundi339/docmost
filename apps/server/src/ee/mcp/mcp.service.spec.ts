@@ -65,6 +65,8 @@ describe('McpService access control', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
+      {} as any,
       auditService as any,
     );
   });
@@ -73,9 +75,13 @@ describe('McpService access control', () => {
     mode: McpRequestContext['mode'],
     scopes: string[],
   ): McpRequestContext => ({
+    authType: 'api_key',
+    credentialId: 'api-key-id',
     apiKeyId: 'api-key-id',
     mode,
     scopes,
+    ipAddress: '203.0.113.10',
+    userAgent: 'test-agent',
   });
 
   it('resolves legacy and mode-based MCP settings', () => {
@@ -133,7 +139,8 @@ describe('McpService access control', () => {
     ).not.toThrow();
   });
 
-  it('audits MCP write tool calls without sensitive content', async () => {
+  it('audits MCP tool calls without sensitive content', async () => {
+    const pageId = '018f3f73-2f69-7c8d-9d79-8f3f4d7d9711';
     const result = await (service as any).runTool(
       context('read-write', [ApiKeyScope.MCP_WRITE]),
       { id: 'user-id' },
@@ -141,7 +148,7 @@ describe('McpService access control', () => {
       'update_page',
       'write',
       {
-        pageId: 'page-id',
+        pageId,
         content: 'sensitive content',
         operation: 'replace',
       },
@@ -151,12 +158,50 @@ describe('McpService access control', () => {
     expect(result).toEqual({ ok: true });
     expect(auditService.logWithContext).toHaveBeenCalledWith(
       expect.objectContaining({
-        resourceId: 'page-id',
+        resourceId: pageId,
         metadata: expect.objectContaining({
           toolName: 'update_page',
+          access: 'write',
           apiKeyId: 'api-key-id',
           success: true,
-          target: { pageId: 'page-id', operation: 'replace' },
+          target: { pageId, operation: 'replace' },
+          userAgent: 'test-agent',
+        }),
+      }),
+      expect.objectContaining({
+        workspaceId: 'workspace-id',
+        actorId: 'user-id',
+        actorType: 'api_key',
+        ipAddress: '203.0.113.10',
+      }),
+    );
+    expect(
+      JSON.stringify(auditService.logWithContext.mock.calls),
+    ).not.toContain('sensitive content');
+  });
+
+  it('audits MCP read tool calls', async () => {
+    await (service as any).runTool(
+      context('read-only', [ApiKeyScope.MCP_READ]),
+      { id: 'user-id' },
+      { id: 'workspace-id' },
+      'search_pages',
+      'read',
+      {
+        query: 'sensitive search',
+        limit: 10,
+      },
+      async () => ({ ok: true }),
+    );
+
+    expect(auditService.logWithContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceId: undefined,
+        metadata: expect.objectContaining({
+          toolName: 'search_pages',
+          access: 'read',
+          success: true,
+          target: {},
         }),
       }),
       expect.objectContaining({
@@ -167,7 +212,7 @@ describe('McpService access control', () => {
     );
     expect(
       JSON.stringify(auditService.logWithContext.mock.calls),
-    ).not.toContain('sensitive content');
+    ).not.toContain('sensitive search');
   });
 
   it('rejects session owner mismatch', async () => {
@@ -178,7 +223,8 @@ describe('McpService access control', () => {
     (service as any).sessions.set('session-id', {
       userId: 'user-id',
       workspaceId: 'workspace-id',
-      apiKeyId: 'api-key-id',
+      authType: 'api_key',
+      credentialId: 'api-key-id',
       transport: { handleRequest: jest.fn() },
     });
 
@@ -189,6 +235,8 @@ describe('McpService access control', () => {
       { id: 'user-id' } as any,
       { id: 'workspace-id' } as any,
       {
+        authType: 'api_key',
+        credentialId: 'other-api-key-id',
         apiKeyId: 'other-api-key-id',
         mode: 'read-write',
         scopes: [ApiKeyScope.MCP_WRITE],
@@ -213,7 +261,8 @@ describe('McpService access control', () => {
     (service as any).sessions.set('session-id', {
       userId: 'user-id',
       workspaceId: 'workspace-id',
-      apiKeyId: 'api-key-id',
+      authType: 'api_key',
+      credentialId: 'api-key-id',
       mode: 'read-write',
       scopes: [ApiKeyScope.MCP_WRITE],
       transport: { close, handleRequest },
@@ -268,7 +317,8 @@ describe('McpService access control', () => {
     expect(session).toMatchObject({
       userId: 'user-id',
       workspaceId: 'workspace-id',
-      apiKeyId: 'api-key-id',
+      authType: 'api_key',
+      credentialId: 'api-key-id',
       scopes: [ApiKeyScope.MCP_WRITE],
       mode: 'read-write',
       server,

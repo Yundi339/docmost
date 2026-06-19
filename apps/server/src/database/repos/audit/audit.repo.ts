@@ -22,10 +22,7 @@ export class AuditRepo {
   constructor(@InjectKysely() private readonly db: KyselyDB) {}
 
   async insertAudit(data: InsertableAudit): Promise<void> {
-    await this.db
-      .insertInto('audit')
-      .values(data)
-      .execute();
+    await this.db.insertInto('audit').values(data).execute();
   }
 
   async findAuditLogs(workspaceId: string, params: AuditQueryParams) {
@@ -58,12 +55,21 @@ export class AuditRepo {
       perPage: params.limit,
       cursor: params.cursor,
       beforeCursor: params.beforeCursor,
-      fields: [{ expression: 'createdAt', direction: 'desc' }, { expression: 'id', direction: 'desc' }],
-      parseCursor: (cursor) => ({ createdAt: new Date(cursor.createdAt), id: cursor.id }),
+      fields: [
+        { expression: 'createdAt', direction: 'desc' },
+        { expression: 'id', direction: 'desc' },
+      ],
+      parseCursor: (cursor) => ({
+        createdAt: new Date(cursor.createdAt),
+        id: cursor.id,
+      }),
     });
   }
 
-  async deleteOldAuditLogs(workspaceId: string, retentionDays: number): Promise<void> {
+  async deleteOldAuditLogs(
+    workspaceId: string,
+    retentionDays: number,
+  ): Promise<void> {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - retentionDays);
 
@@ -78,7 +84,7 @@ export class AuditRepo {
     return jsonObjectFrom(
       eb
         .selectFrom('users')
-        .select(['users.id', 'users.name', 'users.avatarUrl'])
+        .select(['users.id', 'users.name', 'users.email', 'users.avatarUrl'])
         .whereRef('users.id', '=', 'audit.actorId'),
     ).as('actor');
   }

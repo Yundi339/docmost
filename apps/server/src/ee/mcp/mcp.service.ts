@@ -45,6 +45,8 @@ import {
 } from '../../integrations/audit/audit.service';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import { ApiKeyScope, hasApiKeyScope } from '../../core/api-key/api-key-scopes';
+import { PageAccessService } from '../../core/page/page-access/page-access.service';
+import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const tsquery = require('pg-tsquery')();
@@ -60,8 +62,12 @@ export interface McpRequestContext {
   credentialId: string;
   apiKeyId?: string;
   oauthAuthorizationId?: string;
+  oauthClientId?: string;
+  clientId?: string;
   scopes: string[];
   mode: McpMode;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 interface McpSession {
@@ -93,6 +99,8 @@ export class McpService implements OnModuleDestroy {
     private readonly userRepo: UserRepo,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly workspaceAbility: WorkspaceAbilityFactory,
+    private readonly pageAccessService: PageAccessService,
+    private readonly pagePermissionRepo: PagePermissionRepo,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -237,6 +245,14 @@ export class McpService implements OnModuleDestroy {
     }
   }
 
+  private async getSpacePageEditAccess(user: User, spaceId: string) {
+    const ability = await this.spaceAbility.createForUser(user, spaceId);
+    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException('Forbidden: insufficient space permissions');
+    }
+    return ability.can(SpaceCaslAction.Edit, SpaceCaslSubject.Page);
+  }
+
   private async assertSpaceSettingsManage(user: User, spaceId: string) {
     const ability = await this.spaceAbility.createForUser(user, spaceId);
     if (ability.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)) {
@@ -255,18 +271,30 @@ export class McpService implements OnModuleDestroy {
     args: Record<string, any>,
     handler: () => Promise<any>,
   ) {
-    this.assertMcpToolAccess(context, access);
-
     try {
+      this.assertMcpToolAccess(context, access);
       const result = await handler();
-      if (access === 'write') {
-        this.auditMcpWriteTool(user, workspace, context, toolName, args, true);
-      }
+      this.auditMcpToolCall(
+        user,
+        workspace,
+        context,
+        toolName,
+        access,
+        args,
+        !isMcpToolError(result),
+      );
       return result;
     } catch (err) {
-      if (access === 'write') {
-        this.auditMcpWriteTool(user, workspace, context, toolName, args, false);
-      }
+      this.auditMcpToolCall(
+        user,
+        workspace,
+        context,
+        toolName,
+        access,
+        args,
+        false,
+        err,
+      );
       throw err;
     }
   }
@@ -296,33 +324,42 @@ export class McpService implements OnModuleDestroy {
     }
   }
 
-  private auditMcpWriteTool(
+  private auditMcpToolCall(
     user: User,
     workspace: Workspace,
     context: McpRequestContext,
     toolName: string,
+    access: McpToolAccess,
     args: Record<string, any>,
     success: boolean,
+    err?: unknown,
   ) {
+    const targetId = getMcpTargetId(args);
     this.auditService.logWithContext(
       {
         event: AuditEvent.MCP_TOOL_CALLED,
         resourceType: AuditResource.MCP_TOOL,
-        resourceId: getMcpTargetId(args),
+        resourceId: isUuid(targetId) ? targetId : undefined,
         metadata: {
           toolName,
+          access,
           authType: context.authType,
           credentialId: context.credentialId,
           apiKeyId: context.apiKeyId,
           oauthAuthorizationId: context.oauthAuthorizationId,
+          oauthClientId: context.oauthClientId,
+          clientId: context.clientId,
           success,
           target: getMcpTargetMetadata(args),
+          error: getAuditError(err),
+          userAgent: truncateString(context.userAgent, 1000),
         },
       },
       {
         workspaceId: workspace.id,
         actorId: user.id,
         actorType: context.authType,
+        ipAddress: context.ipAddress,
       },
     );
   }
@@ -425,11 +462,7 @@ export class McpService implements OnModuleDestroy {
             isError: true,
           };
         }
-        await this.assertSpacePageAccess(
-          user,
-          page.spaceId,
-          SpaceCaslAction.Read,
-        );
+        await this.pageAccessService.validateCanView(page, user);
         let content = page.content;
         if (format && format !== 'json' && content) {
           content =
@@ -475,6 +508,7 @@ export class McpService implements OnModuleDestroy {
           const parentPage = await this.pageRepo.findById(parentPageId);
           if (
             !parentPage ||
+            parentPage.deletedAt ||
             parentPage.workspaceId !== workspaceId ||
             parentPage.spaceId !== spaceId
           ) {
@@ -483,8 +517,14 @@ export class McpService implements OnModuleDestroy {
               isError: true,
             };
           }
+          await this.pageAccessService.validateCanEdit(parentPage, user);
+        } else {
+          await this.assertSpacePageAccess(
+            user,
+            spaceId,
+            SpaceCaslAction.Create,
+          );
         }
-        await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Create);
         const page = await this.pageService.create(userId, workspaceId, {
           spaceId,
           title,
@@ -526,11 +566,7 @@ export class McpService implements OnModuleDestroy {
             isError: true,
           };
         }
-        await this.assertSpacePageAccess(
-          user,
-          page.spaceId,
-          SpaceCaslAction.Edit,
-        );
+        await this.pageAccessService.validateCanEdit(page, user);
         const updated = await this.pageService.update(
           page,
           {
@@ -559,12 +595,13 @@ export class McpService implements OnModuleDestroy {
       'List root-level pages in a space',
       { spaceId: z.string(), limit: z.number().optional() },
       async ({ spaceId, limit }) => {
-        await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Read);
+        const spaceCanEdit = await this.getSpacePageEditAccess(user, spaceId);
         const result = await this.pageService.getSidebarPages(
           spaceId,
           this.paginate(limit),
           undefined,
           userId,
+          spaceCanEdit,
         );
         return {
           content: [{ type: 'text', text: JSON.stringify(result.items) }],
@@ -578,12 +615,26 @@ export class McpService implements OnModuleDestroy {
       'List child pages of a specific page',
       { spaceId: z.string(), pageId: z.string(), limit: z.number().optional() },
       async ({ spaceId, pageId, limit }) => {
-        await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Read);
+        const page = await this.pageRepo.findById(pageId);
+        if (
+          !page ||
+          page.deletedAt ||
+          page.workspaceId !== workspaceId ||
+          page.spaceId !== spaceId
+        ) {
+          return {
+            content: [{ type: 'text', text: 'Page not found' }],
+            isError: true,
+          };
+        }
+        await this.pageAccessService.validateCanView(page, user);
+        const spaceCanEdit = await this.getSpacePageEditAccess(user, spaceId);
         const result = await this.pageService.getSidebarPages(
           spaceId,
           this.paginate(limit),
           pageId,
           userId,
+          spaceCanEdit,
         );
         return {
           content: [{ type: 'text', text: JSON.stringify(result.items) }],
@@ -604,15 +655,11 @@ export class McpService implements OnModuleDestroy {
             isError: true,
           };
         }
+        await this.pageAccessService.validateCanView(page, user);
         await this.assertSpacePageAccess(
           user,
           page.spaceId,
-          SpaceCaslAction.Read,
-        );
-        await this.assertSpacePageAccess(
-          user,
-          page.spaceId,
-          SpaceCaslAction.Create,
+          SpaceCaslAction.Edit,
         );
         const newPage = await this.pageService.duplicatePage(
           page,
@@ -643,12 +690,13 @@ export class McpService implements OnModuleDestroy {
             isError: true,
           };
         }
+        await this.pageAccessService.validateCanView(page, user);
         await this.assertSpacePageAccess(
           user,
           page.spaceId,
-          SpaceCaslAction.Read,
+          SpaceCaslAction.Edit,
         );
-        await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Create);
+        await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Edit);
         const newPage = await this.pageService.duplicatePage(
           page,
           spaceId,
@@ -683,10 +731,12 @@ export class McpService implements OnModuleDestroy {
           page.spaceId,
           SpaceCaslAction.Edit,
         );
+        await this.pageAccessService.validateCanEdit(page, user);
         if (parentPageId) {
           const parentPage = await this.pageRepo.findById(parentPageId);
           if (
             !parentPage ||
+            parentPage.deletedAt ||
             parentPage.workspaceId !== workspaceId ||
             parentPage.spaceId !== page.spaceId
           ) {
@@ -695,11 +745,7 @@ export class McpService implements OnModuleDestroy {
               isError: true,
             };
           }
-          await this.assertSpacePageAccess(
-            user,
-            parentPage.spaceId,
-            SpaceCaslAction.Create,
-          );
+          await this.pageAccessService.validateCanEdit(parentPage, user);
         }
         await this.pageService.movePage(
           {
@@ -735,7 +781,8 @@ export class McpService implements OnModuleDestroy {
           page.spaceId,
           SpaceCaslAction.Edit,
         );
-        await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Create);
+        await this.pageAccessService.validateCanEdit(page, user);
+        await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Edit);
         await this.pageService.movePageToSpace(page, spaceId, userId);
         return {
           content: [
@@ -842,11 +889,7 @@ export class McpService implements OnModuleDestroy {
             isError: true,
           };
         }
-        await this.assertSpacePageAccess(
-          user,
-          page.spaceId,
-          SpaceCaslAction.Read,
-        );
+        await this.pageAccessService.validateCanView(page, user);
         const comments = await this.commentService.findByPageId(
           pageId,
           this.paginate(limit),
@@ -871,11 +914,7 @@ export class McpService implements OnModuleDestroy {
             isError: true,
           };
         }
-        await this.assertSpacePageAccess(
-          user,
-          page.spaceId,
-          SpaceCaslAction.Read,
-        );
+        await this.pageAccessService.validateCanComment(page, user, workspaceId);
         const comment = await this.commentService.create(
           { page, workspaceId, user },
           { pageId, content, type: 'page' } as any,
@@ -905,6 +944,11 @@ export class McpService implements OnModuleDestroy {
         if (existingComment.creatorId !== userId) {
           throw new ForbiddenException('You can only edit your own comments');
         }
+        const page = await this.pageRepo.findById(existingComment.pageId);
+        if (!page || page.workspaceId !== workspaceId) {
+          throw new NotFoundException('Page not found');
+        }
+        await this.pageAccessService.validateCanComment(page, user, workspaceId);
         const updated = await this.commentService.update(
           existingComment,
           { commentId, content } as any,
@@ -925,10 +969,11 @@ export class McpService implements OnModuleDestroy {
         if (query.length < 1) {
           return { content: [{ type: 'text', text: '[]' }] };
         }
+        const requestedLimit = Math.min(Math.max(1, limit ?? 25), MAX_LIMIT);
         const searchQuery = tsquery(query.trim() + '*');
         const userSpaceIds = this.spaceMemberRepo.getUserSpaceIdsQuery(userId);
 
-        const items = await this.db
+        const rows = await this.db
           .selectFrom('attachments as a')
           .innerJoin('pages as p', 'p.id', 'a.pageId')
           .innerJoin('spaces as s', 's.id', 'a.spaceId')
@@ -956,9 +1001,20 @@ export class McpService implements OnModuleDestroy {
           .where('a.workspaceId', '=', workspaceId)
           .where('a.spaceId', 'in', userSpaceIds)
           .where('a.deletedAt', 'is', null)
+          .where('p.deletedAt', 'is', null)
           .orderBy('rank', 'desc')
-          .limit(limit ?? 25)
+          .limit(MAX_LIMIT)
           .execute();
+
+        const accessiblePageIds =
+          await this.pagePermissionRepo.filterAccessiblePageIds({
+            pageIds: [...new Set(rows.map((item) => item.pageId))],
+            userId,
+          });
+        const accessiblePageIdSet = new Set(accessiblePageIds);
+        const items = rows
+          .filter((item) => accessiblePageIdSet.has(item.pageId))
+          .slice(0, requestedLimit);
 
         return { content: [{ type: 'text', text: JSON.stringify(items) }] };
       },
@@ -1036,6 +1092,40 @@ function getMcpTargetMetadata(args: Record<string, any>) {
     allowedKeys
       .filter((key) => typeof args[key] !== 'undefined')
       .map((key) => [key, args[key]]),
+  );
+}
+
+function isMcpToolError(result: unknown) {
+  return (
+    !!result &&
+    typeof result === 'object' &&
+    'isError' in result &&
+    result.isError === true
+  );
+}
+
+function getAuditError(err?: unknown) {
+  if (!err) return undefined;
+  if (err instanceof Error) {
+    return {
+      name: err.name,
+      message: truncateString(err.message, 300),
+    };
+  }
+  return { name: 'Error' };
+}
+
+function truncateString(value: unknown, maxLength: number) {
+  if (typeof value !== 'string') return undefined;
+  return value.length > maxLength ? value.slice(0, maxLength) : value;
+}
+
+function isUuid(value: unknown) {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
   );
 }
 

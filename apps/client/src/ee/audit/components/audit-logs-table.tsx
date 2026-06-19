@@ -28,7 +28,12 @@ type AuditLogsTableProps = {
 };
 
 function hasDetails(entry: IAuditLog): boolean {
-  return !!(entry.changes?.before || entry.changes?.after || entry.metadata);
+  return !!(
+    entry.changes?.before ||
+    entry.changes?.after ||
+    entry.metadata ||
+    entry.ipAddress
+  );
 }
 
 function getResourceUrl(entry: IAuditLog): string | null {
@@ -121,6 +126,25 @@ function MetadataDisplay({ metadata }: { metadata: Record<string, any> }) {
           <Text fz="xs">{formatValue(value)}</Text>
         </Group>
       ))}
+    </Box>
+  );
+}
+
+function RequestDisplay({ entry }: { entry: IAuditLog }) {
+  const { t } = useTranslation();
+  if (!entry.ipAddress) return null;
+
+  return (
+    <Box>
+      <Text fz="xs" fw={600} mb={4}>
+        {t("Request")}
+      </Text>
+      <Group gap={6} mb={2} wrap="nowrap">
+        <Text fz="xs" c="dimmed" fw={500}>
+          {t("IP address")}:
+        </Text>
+        <Text fz="xs">{entry.ipAddress}</Text>
+      </Group>
     </Box>
   );
 }
@@ -313,6 +337,9 @@ export default function AuditLogsTable({
                               )}
                               {entry.metadata && (
                                 <MetadataDisplay metadata={entry.metadata} />
+                              )}
+                              {entry.ipAddress && (
+                                <RequestDisplay entry={entry} />
                               )}
                             </Group>
                           </Box>

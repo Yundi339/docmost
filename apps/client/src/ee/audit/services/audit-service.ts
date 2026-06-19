@@ -9,6 +9,13 @@ export async function getAuditLogs(
   return req.data;
 }
 
+export async function getMyMcpAuditLogs(
+  params?: IAuditLogParams,
+): Promise<IPagination<IAuditLog>> {
+  const req = await api.post("/audit/mcp/my", { ...params });
+  return req.data;
+}
+
 export async function getAuditRetention(): Promise<{ retentionDays: number }> {
   const req = await api.post("/audit/retention");
   return req.data;

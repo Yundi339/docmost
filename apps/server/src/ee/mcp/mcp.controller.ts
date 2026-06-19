@@ -52,8 +52,12 @@ export class McpController {
       credentialId: mcpAuth.credentialId,
       apiKeyId: mcpAuth.apiKeyId,
       oauthAuthorizationId: mcpAuth.oauthAuthorizationId,
+      oauthClientId: mcpAuth.oauthClientId,
+      clientId: mcpAuth.clientId,
       scopes: mcpAuth.scopes ?? [],
       mode,
+      ipAddress: getClientIp(req),
+      userAgent: req.headers?.['user-agent'],
     };
 
     const method = req.method;
@@ -95,4 +99,11 @@ export function resolveMcpMode(aiSettings: any): McpMode {
   }
 
   return aiSettings?.mcp === true ? 'read-write' : 'off';
+}
+
+function getClientIp(req: FastifyRequest) {
+  const forwardedFor = req.headers?.['x-forwarded-for'];
+  return Array.isArray(forwardedFor)
+    ? forwardedFor[0]
+    : forwardedFor?.split(',')[0]?.trim() || req.ip;
 }

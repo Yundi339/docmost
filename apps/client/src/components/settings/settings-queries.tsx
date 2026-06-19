@@ -16,7 +16,10 @@ import {
   getOAuthAuthorizations,
   getOAuthClients,
 } from "@/ee/oauth";
-import { getAuditLogs } from "@/ee/audit/services/audit-service";
+import {
+  getAuditLogs,
+  getMyMcpAuditLogs,
+} from "@/ee/audit/services/audit-service";
 import { getVerificationList } from "@/ee/page-verification/services/page-verification-service";
 
 export const prefetchWorkspaceMembers = () => {
@@ -123,6 +126,14 @@ export const prefetchAuditLogs = () => {
   queryClient.prefetchQuery({
     queryKey: ["audit-logs", params],
     queryFn: () => getAuditLogs(params),
+  });
+};
+
+export const prefetchMyMcpAuditLogs = () => {
+  const params = { limit: 50 };
+  queryClient.prefetchQuery({
+    queryKey: ["audit-logs", "mcp", "my", params],
+    queryFn: () => getMyMcpAuditLogs(params),
   });
 };
 

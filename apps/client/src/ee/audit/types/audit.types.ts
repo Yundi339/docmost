@@ -12,7 +12,7 @@ export type IAuditLog = {
     after?: Record<string, any>;
   };
   metadata?: Record<string, any>;
-  ipAddress?: string;
+  ipAddress?: string | null;
   createdAt: string;
   actor?: {
     id: string;
