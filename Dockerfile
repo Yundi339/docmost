@@ -4,6 +4,9 @@ RUN npm install -g pnpm@10.4.0
 
 FROM base AS builder
 
+ARG APP_VERSION
+ENV APP_VERSION=${APP_VERSION}
+
 WORKDIR /app
 
 COPY . .
@@ -12,6 +15,9 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm build
 
 FROM base AS installer
+
+ARG APP_VERSION
+ENV APP_VERSION=${APP_VERSION}
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl bash gosu \

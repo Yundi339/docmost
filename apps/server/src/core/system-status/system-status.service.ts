@@ -4,6 +4,8 @@ import { sql } from 'kysely';
 import { Redis } from 'ioredis';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const packageJson = require('../../../package.json');
 
 export interface SystemStatusResponse {
   app: {
@@ -49,7 +51,11 @@ export class SystemStatusService {
 
     return {
       app: {
-        version: process.env.APP_VERSION || 'dev',
+        version: (
+          process.env.APP_VERSION ||
+          packageJson?.version ||
+          'dev'
+        ).replace(/^v/, ''),
         nodeVersion: process.version,
         uptimeSeconds: Math.floor(process.uptime()),
         cloud: this.environmentService.isCloud(),

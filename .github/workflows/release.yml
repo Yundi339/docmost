@@ -85,6 +85,8 @@ jobs:
             ${{ matrix.image }}:latest
             ${{ matrix.image }}:${{ steps.metadata.outputs.version }}
             ${{ matrix.image }}:${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.ref_slug }}-${{ steps.metadata.outputs.sha_short }}
+          build-args: |
+            APP_VERSION=${{ steps.metadata.outputs.version }}
           outputs: type=docker,dest=${{ matrix.artifact_prefix }}-${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.ref_slug }}-${{ steps.metadata.outputs.sha_short }}-${{ matrix.suffix }}.docker.tar
           cache-from: type=gha,scope=${{ matrix.variant }}-${{ matrix.suffix }}
           cache-to: type=gha,scope=${{ matrix.variant }}-${{ matrix.suffix }},mode=max

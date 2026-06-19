@@ -5,6 +5,9 @@
 # Stage 1: build the app (mirrors the main Dockerfile builder stage)
 FROM node:22-slim AS builder
 
+ARG APP_VERSION
+ENV APP_VERSION=${APP_VERSION}
+
 RUN npm install -g pnpm@10.4.0
 
 WORKDIR /app
@@ -15,9 +18,11 @@ RUN pnpm build
 # Stage 2: runtime with postgres + redis + supervisord
 FROM node:22-slim AS runtime
 
+ARG APP_VERSION
 ARG POSTGRES_VERSION=15
 
 ENV DEBIAN_FRONTEND=noninteractive \
+    APP_VERSION=${APP_VERSION} \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     PG_VERSION=${POSTGRES_VERSION} \
     PG_DATA=/app/data/postgres \

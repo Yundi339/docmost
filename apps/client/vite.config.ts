@@ -16,6 +16,11 @@ export default defineConfig(({ mode }) => {
     BILLING_TRIAL_DAYS,
   } = loadEnv(mode, envPath, "");
   const proxyTarget = APP_URL?.replace("localhost", "127.0.0.1");
+  const appVersion = (
+    process.env.APP_VERSION ||
+    process.env.npm_package_version ||
+    ""
+  ).replace(/^v/, "");
 
   return {
     define: {
@@ -29,7 +34,7 @@ export default defineConfig(({ mode }) => {
         COLLAB_URL,
         BILLING_TRIAL_DAYS,
       },
-      APP_VERSION: JSON.stringify(process.env.npm_package_version),
+      APP_VERSION: JSON.stringify(appVersion),
     },
     plugins: [react()],
     build: {

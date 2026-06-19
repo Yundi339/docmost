@@ -7,7 +7,11 @@ export class VersionService {
   constructor() {}
 
   async getVersion() {
-    const currentVersion = packageJson?.version;
+    const currentVersion = (
+      process.env.APP_VERSION ||
+      packageJson?.version ||
+      'dev'
+    ).replace(/^v/, '');
 
     return {
       currentVersion,
