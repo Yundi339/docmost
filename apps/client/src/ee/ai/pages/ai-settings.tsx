@@ -15,6 +15,8 @@ import { Feature } from "@/ee/features";
 import { useUpgradeLabel } from "@/ee/hooks/use-upgrade-label";
 import { isCloud } from "@/lib/config.ts";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useAtom } from "jotai";
+import { workspaceAtom } from "@/features/user/atoms/current-user-atom";
 
 export default function AiSettings() {
   const { t } = useTranslation();
@@ -23,10 +25,13 @@ export default function AiSettings() {
   const upgradeLabel = useUpgradeLabel();
   const location = useLocation();
   const navigate = useNavigate();
+  const [workspace] = useAtom(workspaceAtom);
+  const canUseAiSettings =
+    isAdmin || workspace?.settings?.ai?.allowMemberSettings !== false;
 
   const activeTab = location.pathname.endsWith("/mcp") ? "mcp" : "ai";
 
-  if (!isAdmin) {
+  if (!canUseAiSettings) {
     return null;
   }
 
@@ -63,9 +68,7 @@ export default function AiSettings() {
               color="blue"
               mb="lg"
             >
-              {t(
-                "AI is only available in the enterprise edition.",
-              )}
+              {t("AI is only available in the enterprise edition.")}
             </Alert>
           )}
 

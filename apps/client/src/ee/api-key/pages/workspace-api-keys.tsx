@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { Anchor, Button, Divider, Group, Space, Text } from "@mantine/core";
+import { Alert, Button, Divider, Group, Space, Text } from "@mantine/core";
+import { IconInfoCircle } from "@tabler/icons-react";
 import { Helmet } from "react-helmet-async";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import SettingsTitle from "@/components/settings/settings-title";
 import { getAppName } from "@/lib/config";
 import { ApiKeyTable } from "@/ee/api-key/components/api-key-table";
@@ -13,8 +14,10 @@ import Paginate from "@/components/common/paginate";
 import { useCursorPaginate } from "@/hooks/use-cursor-paginate";
 import { useGetApiKeysQuery } from "@/ee/api-key/queries/api-key-query.ts";
 import { IApiKey } from "@/ee/api-key";
-import useUserRole from '@/hooks/use-user-role.tsx';
+import useUserRole from "@/hooks/use-user-role.tsx";
 import RestrictApiToAdmins from "@/ee/api-key/components/restrict-api-to-admins";
+import { useAtom } from "jotai";
+import { workspaceAtom } from "@/features/user/atoms/current-user-atom";
 
 export default function WorkspaceApiKeys() {
   const { t } = useTranslation();
@@ -24,10 +27,18 @@ export default function WorkspaceApiKeys() {
   const [updateModalOpened, setUpdateModalOpened] = useState(false);
   const [revokeModalOpened, setRevokeModalOpened] = useState(false);
   const [selectedApiKey, setSelectedApiKey] = useState<IApiKey | null>(null);
-  const { data, isLoading } = useGetApiKeysQuery({ cursor, adminView: true });
-  const { isOwner } = useUserRole();
+  const { isAdmin, isOwner } = useUserRole();
+  const [workspace] = useAtom(workspaceAtom);
+  const canUseApiManagement =
+    isOwner || workspace?.settings?.api?.allowMemberManagement !== false;
+  const restrictToAdmins = workspace?.settings?.api?.restrictToAdmins === true;
+  const canCreate = !restrictToAdmins || isAdmin;
+  const { data, isLoading } = useGetApiKeysQuery({
+    cursor,
+    adminView: isOwner,
+  });
 
-  if (!isOwner) {
+  if (!canUseApiManagement) {
     return null;
   }
 
@@ -56,22 +67,44 @@ export default function WorkspaceApiKeys() {
       <SettingsTitle title={t("API management")} />
 
       <Text size="sm" c="dimmed" mb="md">
-        {t("Manage API keys for all users in the workspace.")}
+        {isOwner
+          ? t("Manage API keys for all users in the workspace.")
+          : t("Manage your API keys.")}
       </Text>
 
-      <RestrictApiToAdmins />
-      <Divider my="lg" />
+      {isOwner && (
+        <>
+          <RestrictApiToAdmins />
+          <Divider my="lg" />
+        </>
+      )}
 
-      <Group justify="flex-end" mb="md">
-        <Button onClick={() => setCreateModalOpened(true)}>
-          {t("Create API Key")}
-        </Button>
-      </Group>
+      {canCreate ? (
+        <Group justify="flex-end" mb="md">
+          <Button onClick={() => setCreateModalOpened(true)}>
+            {t("Create API Key")}
+          </Button>
+        </Group>
+      ) : restrictToAdmins ? (
+        <Alert
+          variant="light"
+          color="yellow"
+          mb="md"
+          p="sm"
+          icon={<IconInfoCircle />}
+        >
+          <Text size="sm">
+            {t(
+              "API key creation is restricted to admins by your workspace administrator.",
+            )}
+          </Text>
+        </Alert>
+      ) : null}
 
       <ApiKeyTable
-        apiKeys={data?.items}
+        apiKeys={data?.items || []}
         isLoading={isLoading}
-        showUserColumn
+        showUserColumn={isOwner}
         onUpdate={handleUpdate}
         onRevoke={handleRevoke}
       />

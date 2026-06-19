@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { dbOrTx } from '@docmost/db/utils';
-import { ApiKey, InsertableApiKey, UpdatableApiKey } from '@docmost/db/types/entity.types';
+import {
+  ApiKey,
+  InsertableApiKey,
+  UpdatableApiKey,
+} from '@docmost/db/types/entity.types';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { executeWithCursorPagination } from '@docmost/db/pagination/cursor-pagination';
 import { ExpressionBuilder } from 'kysely';
@@ -27,20 +31,34 @@ export class ApiKeyRepo {
       .executeTakeFirst();
   }
 
-  async findApiKeys(workspaceId: string, pagination: PaginationOptions) {
-    const query = this.db
+  async findApiKeys(
+    workspaceId: string,
+    pagination: PaginationOptions,
+    creatorId?: string,
+  ) {
+    let query = this.db
       .selectFrom('apiKeys')
       .selectAll('apiKeys')
       .select((eb) => this.withCreator(eb))
       .where('workspaceId', '=', workspaceId)
       .where('deletedAt', 'is', null);
 
+    if (creatorId) {
+      query = query.where('creatorId', '=', creatorId);
+    }
+
     return executeWithCursorPagination(query, {
       perPage: pagination.limit,
       cursor: pagination.cursor,
       beforeCursor: pagination.beforeCursor,
-      fields: [{ expression: 'createdAt', direction: 'desc' }, { expression: 'id', direction: 'desc' }],
-      parseCursor: (cursor) => ({ createdAt: new Date(cursor.createdAt), id: cursor.id }),
+      fields: [
+        { expression: 'createdAt', direction: 'desc' },
+        { expression: 'id', direction: 'desc' },
+      ],
+      parseCursor: (cursor) => ({
+        createdAt: new Date(cursor.createdAt),
+        id: cursor.id,
+      }),
     });
   }
 

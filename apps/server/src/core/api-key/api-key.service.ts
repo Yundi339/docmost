@@ -8,7 +8,7 @@ import { ApiKeyRepo } from '@docmost/db/repos/api-key/api-key.repo';
 import { TokenService } from '../auth/services/token.service';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { CreateApiKeyDto, UpdateApiKeyDto } from './dto/api-key.dto';
-import { User } from '@docmost/db/types/entity.types';
+import { User, Workspace } from '@docmost/db/types/entity.types';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { JwtApiKeyPayload } from '../auth/dto/jwt-payload';
 import {
@@ -16,6 +16,7 @@ import {
   IAuditService,
 } from '../../integrations/audit/audit.service';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
+import { UserRole } from '../../common/helpers/types/permission';
 
 @Injectable()
 export class ApiKeyService {
@@ -26,17 +27,35 @@ export class ApiKeyService {
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
-  async findApiKeys(workspaceId: string, pagination: PaginationOptions) {
-    return this.apiKeyRepo.findApiKeys(workspaceId, pagination);
+  async findApiKeys(
+    workspace: Workspace,
+    pagination: PaginationOptions,
+    user: User,
+  ) {
+    if (pagination.adminView) {
+      if (!this.canManageWorkspaceApiKeys(user)) {
+        throw new ForbiddenException();
+      }
+      return this.apiKeyRepo.findApiKeys(workspace.id, pagination);
+    }
+
+    return this.apiKeyRepo.findApiKeys(workspace.id, pagination, user.id);
   }
 
-  async create(dto: CreateApiKeyDto, user: User, workspaceId: string) {
+  async create(dto: CreateApiKeyDto, user: User, workspace: Workspace) {
+    if (
+      (workspace.settings as any)?.api?.restrictToAdmins === true &&
+      !isWorkspaceAdmin(user)
+    ) {
+      throw new ForbiddenException('API key creation is restricted to admins');
+    }
+
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
 
     const apiKey = await this.apiKeyRepo.insertApiKey({
       name: dto.name,
       creatorId: user.id,
-      workspaceId,
+      workspaceId: workspace.id,
       expiresAt,
     });
 
@@ -47,7 +66,7 @@ export class ApiKeyService {
     const token = await this.tokenService.generateApiToken({
       apiKeyId: apiKey.id,
       user,
-      workspaceId,
+      workspaceId: workspace.id,
       expiresIn: expiresInSec,
     });
 
@@ -57,21 +76,24 @@ export class ApiKeyService {
       resourceId: apiKey.id,
     });
 
-    const result = await this.apiKeyRepo.findById(apiKey.id, workspaceId);
+    const result = await this.apiKeyRepo.findById(apiKey.id, workspace.id);
 
     return { ...result, token };
   }
 
-  async update(dto: UpdateApiKeyDto, workspaceId: string) {
-    const apiKey = await this.apiKeyRepo.findById(dto.apiKeyId, workspaceId);
+  async update(dto: UpdateApiKeyDto, workspace: Workspace, user: User) {
+    const apiKey = await this.apiKeyRepo.findById(dto.apiKeyId, workspace.id);
     if (!apiKey) {
       throw new NotFoundException('API key not found');
+    }
+    if (apiKey.creatorId !== user.id && !this.canManageWorkspaceApiKeys(user)) {
+      throw new ForbiddenException();
     }
 
     await this.apiKeyRepo.updateApiKey(
       { name: dto.name },
       dto.apiKeyId,
-      workspaceId,
+      workspace.id,
     );
 
     this.auditService.log({
@@ -80,16 +102,19 @@ export class ApiKeyService {
       resourceId: apiKey.id,
     });
 
-    return this.apiKeyRepo.findById(dto.apiKeyId, workspaceId);
+    return this.apiKeyRepo.findById(dto.apiKeyId, workspace.id);
   }
 
-  async revoke(apiKeyId: string, workspaceId: string) {
-    const apiKey = await this.apiKeyRepo.findById(apiKeyId, workspaceId);
+  async revoke(apiKeyId: string, workspace: Workspace, user: User) {
+    const apiKey = await this.apiKeyRepo.findById(apiKeyId, workspace.id);
     if (!apiKey) {
       throw new NotFoundException('API key not found');
     }
+    if (apiKey.creatorId !== user.id && !this.canManageWorkspaceApiKeys(user)) {
+      throw new ForbiddenException();
+    }
 
-    await this.apiKeyRepo.softDelete(apiKeyId, workspaceId);
+    await this.apiKeyRepo.softDelete(apiKeyId, workspace.id);
 
     this.auditService.log({
       event: AuditEvent.API_KEY_DELETED,
@@ -99,7 +124,10 @@ export class ApiKeyService {
   }
 
   async validateApiKey(payload: JwtApiKeyPayload) {
-    const apiKey = await this.apiKeyRepo.findById(payload.apiKeyId, payload.workspaceId);
+    const apiKey = await this.apiKeyRepo.findById(
+      payload.apiKeyId,
+      payload.workspaceId,
+    );
 
     if (!apiKey) {
       throw new ForbiddenException('Invalid API key');
@@ -121,4 +149,12 @@ export class ApiKeyService {
 
     return { user, workspace };
   }
+
+  private canManageWorkspaceApiKeys(user: User) {
+    return user.role === UserRole.OWNER;
+  }
+}
+
+function isWorkspaceAdmin(user: User) {
+  return user.role === UserRole.ADMIN || user.role === UserRole.OWNER;
 }

@@ -91,7 +91,15 @@ export class WorkspaceService {
   async getWorkspacePublicData(workspaceId: string) {
     const workspace = await this.db
       .selectFrom('workspaces')
-      .select(['id', 'name', 'logo', 'hostname', 'enforceSso', 'licenseKey', 'plan'])
+      .select([
+        'id',
+        'name',
+        'logo',
+        'hostname',
+        'enforceSso',
+        'licenseKey',
+        'plan',
+      ])
       .select((eb) =>
         jsonArrayFrom(
           eb
@@ -332,6 +340,8 @@ export class WorkspaceService {
       typeof updateWorkspaceDto.trashRetentionDays !== 'undefined' ||
       typeof updateWorkspaceDto.mcpEnabled !== 'undefined' ||
       typeof updateWorkspaceDto.restrictApiToAdmins !== 'undefined' ||
+      typeof updateWorkspaceDto.allowMemberApiManagement !== 'undefined' ||
+      typeof updateWorkspaceDto.allowMemberAiSettings !== 'undefined' ||
       typeof updateWorkspaceDto.allowMemberTemplates !== 'undefined'
     ) {
       const ws = await this.db
@@ -345,10 +355,10 @@ export class WorkspaceService {
       }
 
       if (typeof updateWorkspaceDto.mcpEnabled !== 'undefined') {
-        if (!this.licenseCheckService.hasFeature(ws.licenseKey, 'mcp', ws.plan)) {
-          throw new ForbiddenException(
-            'This feature requires a valid license',
-          );
+        if (
+          !this.licenseCheckService.hasFeature(ws.licenseKey, 'mcp', ws.plan)
+        ) {
+          throw new ForbiddenException('This feature requires a valid license');
         }
       }
 
@@ -356,12 +366,18 @@ export class WorkspaceService {
         typeof updateWorkspaceDto.disablePublicSharing !== 'undefined' ||
         typeof updateWorkspaceDto.trashRetentionDays !== 'undefined' ||
         typeof updateWorkspaceDto.restrictApiToAdmins !== 'undefined' ||
+        typeof updateWorkspaceDto.allowMemberApiManagement !== 'undefined' ||
+        typeof updateWorkspaceDto.allowMemberAiSettings !== 'undefined' ||
         typeof updateWorkspaceDto.allowMemberTemplates !== 'undefined'
       ) {
-        if (!this.licenseCheckService.hasFeature(ws.licenseKey, Feature.SECURITY_SETTINGS, ws.plan)) {
-          throw new ForbiddenException(
-            'This feature requires a valid license',
-          );
+        if (
+          !this.licenseCheckService.hasFeature(
+            ws.licenseKey,
+            Feature.SECURITY_SETTINGS,
+            ws.plan,
+          )
+        ) {
+          throw new ForbiddenException('This feature requires a valid license');
         }
       }
 
@@ -404,6 +420,21 @@ export class WorkspaceService {
         );
       }
 
+      if (typeof updateWorkspaceDto.allowMemberApiManagement !== 'undefined') {
+        const prev = settingsBefore?.api?.allowMemberManagement ?? true;
+        if (prev !== updateWorkspaceDto.allowMemberApiManagement) {
+          before.allowMemberApiManagement = prev;
+          after.allowMemberApiManagement =
+            updateWorkspaceDto.allowMemberApiManagement;
+        }
+        await this.workspaceRepo.updateApiSettings(
+          workspaceId,
+          'allowMemberManagement',
+          updateWorkspaceDto.allowMemberApiManagement,
+          trx,
+        );
+      }
+
       if (typeof updateWorkspaceDto.aiSearch !== 'undefined') {
         const prev = settingsBefore?.ai?.search ?? false;
         if (prev !== updateWorkspaceDto.aiSearch) {
@@ -414,6 +445,21 @@ export class WorkspaceService {
           workspaceId,
           'search',
           updateWorkspaceDto.aiSearch,
+          trx,
+        );
+      }
+
+      if (typeof updateWorkspaceDto.allowMemberAiSettings !== 'undefined') {
+        const prev = settingsBefore?.ai?.allowMemberSettings ?? true;
+        if (prev !== updateWorkspaceDto.allowMemberAiSettings) {
+          before.allowMemberAiSettings = prev;
+          after.allowMemberAiSettings =
+            updateWorkspaceDto.allowMemberAiSettings;
+        }
+        await this.workspaceRepo.updateAiSettings(
+          workspaceId,
+          'allowMemberSettings',
+          updateWorkspaceDto.allowMemberAiSettings,
           trx,
         );
       }
@@ -492,7 +538,9 @@ export class WorkspaceService {
       }
 
       delete updateWorkspaceDto.restrictApiToAdmins;
+      delete updateWorkspaceDto.allowMemberApiManagement;
       delete updateWorkspaceDto.aiSearch;
+      delete updateWorkspaceDto.allowMemberAiSettings;
       delete updateWorkspaceDto.generativeAi;
       delete updateWorkspaceDto.disablePublicSharing;
       delete updateWorkspaceDto.mcpEnabled;
@@ -530,13 +578,7 @@ export class WorkspaceService {
     });
 
     const columnChanges = diffAuditTrackedFields(
-      [
-        'name',
-        'logo',
-        'enforceSso',
-        'enforceMfa',
-        'emailDomains',
-      ],
+      ['name', 'logo', 'enforceSso', 'enforceMfa', 'emailDomains'],
       updateWorkspaceDto,
       workspaceBefore,
       workspace,

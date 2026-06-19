@@ -7,7 +7,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiKeyService } from './api-key.service';
-import { CreateApiKeyDto, UpdateApiKeyDto, ApiKeyIdDto } from './dto/api-key.dto';
+import {
+  CreateApiKeyDto,
+  UpdateApiKeyDto,
+  ApiKeyIdDto,
+} from './dto/api-key.dto';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -23,9 +27,10 @@ export class ApiKeyController {
   @Post('/')
   async findApiKeys(
     @Body() pagination: PaginationOptions,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.apiKeyService.findApiKeys(workspace.id, pagination);
+    return this.apiKeyService.findApiKeys(workspace, pagination, user);
   }
 
   @HttpCode(HttpStatus.OK)
@@ -35,24 +40,26 @@ export class ApiKeyController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.apiKeyService.create(dto, user, workspace.id);
+    return this.apiKeyService.create(dto, user, workspace);
   }
 
   @HttpCode(HttpStatus.OK)
   @Post('update')
   async update(
     @Body() dto: UpdateApiKeyDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.apiKeyService.update(dto, workspace.id);
+    return this.apiKeyService.update(dto, workspace, user);
   }
 
   @HttpCode(HttpStatus.OK)
   @Post('revoke')
   async revoke(
     @Body() input: ApiKeyIdDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    await this.apiKeyService.revoke(input.apiKeyId, workspace.id);
+    await this.apiKeyService.revoke(input.apiKeyId, workspace, user);
   }
 }

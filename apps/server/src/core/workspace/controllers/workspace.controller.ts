@@ -36,6 +36,7 @@ import { LicenseCheckService } from '../../../integrations/environment/license-c
 import { CheckHostnameDto } from '../dto/check-hostname.dto';
 import { RemoveWorkspaceUserDto } from '../dto/remove-workspace-user.dto';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
+import { UserRole } from '../../../common/helpers/types/permission';
 
 @UseGuards(JwtAuthGuard)
 @Controller('workspace')
@@ -87,9 +88,17 @@ export class WorkspaceController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
+    if (hasMemberManagementFields(dto) && user.role !== UserRole.OWNER) {
+      throw new ForbiddenException();
+    }
+
     const ability = this.workspaceAbility.createForUser(user, workspace);
     if (
-      ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Settings)
+      ability.cannot(
+        WorkspaceCaslAction.Manage,
+        WorkspaceCaslSubject.Settings,
+      ) &&
+      !canMemberUpdateAiSettings(workspace.settings, dto)
     ) {
       throw new ForbiddenException();
     }
@@ -356,4 +365,32 @@ export class WorkspaceController {
 
     return { inviteLink };
   }
+}
+
+const MEMBER_AI_SETTINGS_FIELDS = new Set([
+  'aiSearch',
+  'generativeAi',
+  'mcpEnabled',
+  'aiChat',
+]);
+
+function hasMemberManagementFields(dto: UpdateWorkspaceDto) {
+  return (
+    typeof dto.allowMemberApiManagement !== 'undefined' ||
+    typeof dto.allowMemberAiSettings !== 'undefined'
+  );
+}
+
+function canMemberUpdateAiSettings(
+  settings: Workspace['settings'],
+  dto: UpdateWorkspaceDto,
+) {
+  const requestedFields = Object.entries(dto)
+    .filter(([, value]) => typeof value !== 'undefined')
+    .map(([key]) => key);
+
+  if (requestedFields.length === 0) return false;
+  if ((settings as any)?.ai?.allowMemberSettings === false) return false;
+
+  return requestedFields.every((key) => MEMBER_AI_SETTINGS_FIELDS.has(key));
 }
