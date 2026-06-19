@@ -8,7 +8,10 @@ import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
 import { SessionActivityService } from '../../session/session-activity.service';
 import { FastifyRequest } from 'fastify';
-import { extractBearerTokenFromHeader, isUserDisabled } from '../../../common/helpers';
+import {
+  extractBearerTokenFromHeader,
+  isUserDisabled,
+} from '../../../common/helpers';
 import { ModuleRef } from '@nestjs/core';
 
 @Injectable()
@@ -34,6 +37,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(req: any, payload: JwtPayload | JwtApiKeyPayload) {
+    req.raw.authType = payload.type;
+
     if (!payload.workspaceId) {
       throw new UnauthorizedException();
     }
@@ -64,11 +69,19 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if ((payload as JwtPayload).sessionId) {
       const sessionId = (payload as JwtPayload).sessionId;
       const session = await this.userSessionRepo.findActiveById(sessionId);
-      if (!session || session.userId !== payload.sub || session.workspaceId !== payload.workspaceId) {
+      if (
+        !session ||
+        session.userId !== payload.sub ||
+        session.workspaceId !== payload.workspaceId
+      ) {
         throw new UnauthorizedException();
       }
       req.raw.sessionId = sessionId;
-      this.sessionActivityService.trackActivity(sessionId, payload.sub, payload.workspaceId);
+      this.sessionActivityService.trackActivity(
+        sessionId,
+        payload.sub,
+        payload.workspaceId,
+      );
     }
 
     return { user, workspace };
@@ -98,7 +111,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     // Fallback to OSS ApiKeyService
     try {
       const { ApiKeyService } = require('../../api-key/api-key.service');
-      const apiKeyService = this.moduleRef.get(ApiKeyService, { strict: false });
+      const apiKeyService = this.moduleRef.get(ApiKeyService, {
+        strict: false,
+      });
       return apiKeyService.validateApiKey(payload);
     } catch (err) {
       throw new UnauthorizedException('API Key module not available');

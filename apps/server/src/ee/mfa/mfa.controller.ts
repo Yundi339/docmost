@@ -18,6 +18,7 @@ import { JwtService } from '@nestjs/jwt';
 import { JwtMfaTokenPayload, JwtType } from '../../core/auth/dto/jwt-payload';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
+import { SessionAuthGuard } from '../../common/guards/session-auth.guard';
 
 @Controller('mfa')
 export class MfaController {
@@ -28,7 +29,7 @@ export class MfaController {
     private environmentService: EnvironmentService,
   ) {}
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('status')
   async getStatus(
@@ -38,7 +39,7 @@ export class MfaController {
     return this.mfaService.getMfaStatus(user.id, workspace.id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('setup')
   async setup(
@@ -46,10 +47,14 @@ export class MfaController {
     @AuthWorkspace() workspace: Workspace,
     @Body() body: { method: string },
   ) {
-    return this.mfaService.setupMfa(user.id, workspace.id, body.method || 'totp');
+    return this.mfaService.setupMfa(
+      user.id,
+      workspace.id,
+      body.method || 'totp',
+    );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('enable')
   async enable(
@@ -65,17 +70,14 @@ export class MfaController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('disable')
-  async disable(
-    @AuthUser() user: User,
-    @AuthWorkspace() workspace: Workspace,
-  ) {
+  async disable(@AuthUser() user: User, @AuthWorkspace() workspace: Workspace) {
     return this.mfaService.disableMfa(user.id, workspace.id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('generate-backup-codes')
   async generateBackupCodes(
@@ -127,9 +129,7 @@ export class MfaController {
 
   @HttpCode(HttpStatus.OK)
   @Post('validate-access')
-  async validateAccess(
-    @Req() req: FastifyRequest,
-  ) {
+  async validateAccess(@Req() req: FastifyRequest) {
     const mfaToken = (req.cookies as any)?.mfaToken;
     if (!mfaToken) {
       return { valid: false };

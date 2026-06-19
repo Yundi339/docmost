@@ -112,7 +112,16 @@ export class TokenService {
       type: JwtType.API_KEY,
     };
 
-    return this.jwtService.sign(payload, expiresIn ? { expiresIn } : { expiresIn: '365d' });
+    if (expiresIn) {
+      return this.jwtService.sign(payload, { expiresIn });
+    }
+
+    const nonExpiringJwtService = new JwtService({
+      secret: this.environmentService.getAppSecret(),
+      signOptions: { issuer: 'Docmost' },
+    });
+
+    return nonExpiringJwtService.sign(payload);
   }
 
   async verifyJwt(token: string, tokenType: string) {

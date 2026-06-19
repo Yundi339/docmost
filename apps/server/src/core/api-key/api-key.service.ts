@@ -17,6 +17,7 @@ import {
 } from '../../integrations/audit/audit.service';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import { UserRole } from '../../common/helpers/types/permission';
+import { isUserDisabled } from '../../common/helpers';
 
 @Injectable()
 export class ApiKeyService {
@@ -138,7 +139,7 @@ export class ApiKeyService {
     }
 
     const user = await this.userRepo.findById(payload.sub, payload.workspaceId);
-    if (!user) {
+    if (!user || isUserDisabled(user)) {
       throw new ForbiddenException('User not found');
     }
 

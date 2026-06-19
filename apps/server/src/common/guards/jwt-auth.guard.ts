@@ -8,6 +8,7 @@ import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { Reflector } from '@nestjs/core';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { addDays } from 'date-fns';
+import { JwtType } from '../../core/auth/dto/jwt-payload';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -41,8 +42,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   setJoinedWorkspacesCookie(user: any, ctx: ExecutionContext) {
-    if (this.environmentService.isCloud()) {
-      const req = ctx.switchToHttp().getRequest();
+    const req = ctx.switchToHttp().getRequest();
+    if (
+      this.environmentService.isCloud() &&
+      req.raw?.authType === JwtType.ACCESS
+    ) {
       const res = ctx.switchToHttp().getResponse();
 
       const workspaceId = user?.workspace?.id;

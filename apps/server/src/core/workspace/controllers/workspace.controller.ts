@@ -24,6 +24,7 @@ import {
   RevokeInviteDto,
 } from '../dto/invitation.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { SessionAuthGuard } from '../../../common/guards/session-auth.guard';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import WorkspaceAbilityFactory from '../../casl/abilities/workspace-ability.factory';
 import {
@@ -82,6 +83,7 @@ export class WorkspaceController {
 
   @HttpCode(HttpStatus.OK)
   @Post('update')
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
   async updateWorkspace(
     @Res({ passthrough: true }) res: FastifyReply,
     @Body() dto: UpdateWorkspaceDto,

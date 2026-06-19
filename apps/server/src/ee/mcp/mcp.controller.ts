@@ -9,13 +9,14 @@ import {
 } from '@nestjs/common';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { ApiKeyAuthGuard } from '../../common/guards/api-key-auth.guard';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { McpService } from './mcp.service';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ApiKeyAuthGuard)
 @Controller('mcp')
 export class McpController {
   private readonly logger = new Logger(McpController.name);

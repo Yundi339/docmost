@@ -13,6 +13,7 @@ describe('ApiKeyService', () => {
     updateLastUsed: jest.Mock;
   };
   let tokenService: { generateApiToken: jest.Mock };
+  let userRepo: { findById: jest.Mock };
   let auditService: { log: jest.Mock };
 
   const workspace = (settings: Record<string, any> = {}) =>
@@ -39,6 +40,9 @@ describe('ApiKeyService', () => {
     tokenService = {
       generateApiToken: jest.fn(),
     };
+    userRepo = {
+      findById: jest.fn(),
+    };
     auditService = {
       log: jest.fn(),
     };
@@ -46,7 +50,7 @@ describe('ApiKeyService', () => {
     service = new ApiKeyService(
       apiKeyRepo as any,
       tokenService as any,
-      {} as any,
+      userRepo as any,
       auditService as any,
     );
   });
@@ -166,5 +170,28 @@ describe('ApiKeyService', () => {
       id: 'api-key-id',
       token: 'api-token',
     });
+  });
+
+  it('rejects API keys created by disabled users', async () => {
+    apiKeyRepo.findById.mockResolvedValue({
+      id: 'api-key-id',
+      creatorId: 'member-id',
+    });
+    userRepo.findById.mockResolvedValue({
+      id: 'member-id',
+      deactivatedAt: new Date(),
+      deletedAt: null,
+    });
+
+    await expect(
+      service.validateApiKey({
+        apiKeyId: 'api-key-id',
+        sub: 'member-id',
+        workspaceId: 'workspace-id',
+        type: 'api_key',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(apiKeyRepo.updateLastUsed).not.toHaveBeenCalled();
   });
 });
