@@ -1,7 +1,17 @@
 import { ForbiddenException } from '@nestjs/common';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { McpService, McpRequestContext } from './mcp.service';
 import { resolveMcpMode } from './mcp.controller';
 import { ApiKeyScope } from '../../core/api-key/api-key-scopes';
+
+jest.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
+  StreamableHTTPServerTransport: jest.fn().mockImplementation((options) => ({
+    close: jest.fn().mockResolvedValue(undefined),
+    handleRequest: jest.fn(async () => {
+      await options?.onsessioninitialized?.('generated-session-id');
+    }),
+  })),
+}));
 
 jest.mock(
   'src/collaboration/collaboration.util',
@@ -40,6 +50,7 @@ describe('McpService access control', () => {
   let auditService: { logWithContext: jest.Mock };
 
   beforeEach(() => {
+    jest.clearAllMocks();
     auditService = { logWithContext: jest.fn() };
     service = new McpService(
       {} as any,
@@ -228,5 +239,45 @@ describe('McpService access control', () => {
         error: 'MCP session permissions changed. Reconnect required.',
       }),
     );
+  });
+
+  it('stores new sessions when the streamable HTTP transport initializes them', async () => {
+    const body = { jsonrpc: '2.0', id: 1, method: 'initialize' };
+    const req = { headers: {} };
+    const res = {};
+    const server = { connect: jest.fn().mockResolvedValue(undefined) };
+    jest.spyOn(service as any, 'createMcpServer').mockReturnValue(server);
+
+    await service.handleRequest(
+      req as any,
+      res as any,
+      body,
+      { id: 'user-id' } as any,
+      { id: 'workspace-id' } as any,
+      context('read-write', [ApiKeyScope.MCP_WRITE]),
+    );
+
+    const sessions = (service as any).sessions as Map<string, any>;
+    const session = sessions.get('generated-session-id');
+    const transport = (
+      StreamableHTTPServerTransport as jest.MockedClass<
+        typeof StreamableHTTPServerTransport
+      >
+    ).mock.results[0].value;
+
+    expect(session).toMatchObject({
+      userId: 'user-id',
+      workspaceId: 'workspace-id',
+      apiKeyId: 'api-key-id',
+      scopes: [ApiKeyScope.MCP_WRITE],
+      mode: 'read-write',
+      server,
+      transport,
+    });
+    expect(server.connect).toHaveBeenCalledWith(transport);
+    expect(transport.handleRequest).toHaveBeenCalledWith(req, res, body);
+
+    transport.onclose();
+    expect(sessions.has('generated-session-id')).toBe(false);
   });
 });

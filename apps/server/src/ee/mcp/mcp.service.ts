@@ -151,31 +151,33 @@ export class McpService implements OnModuleDestroy {
     // New session (initialization). This in-memory session store is suitable for
     // single-instance deployments. Multi-instance deployments must use sticky
     // sessions or replace this with a shared store.
-    const transport = new StreamableHTTPServerTransport({
+    const server = this.createMcpServer(user, workspace, context);
+    let sid: string | undefined;
+    let transport: StreamableHTTPServerTransport;
+    transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (sessionId) => {
+        sid = sessionId;
+        this.sessions.set(sessionId, {
+          transport,
+          server,
+          userId: user.id,
+          workspaceId: workspace.id,
+          apiKeyId: context.apiKeyId,
+          scopes: context.scopes,
+          mode: context.mode,
+        });
+      },
     });
 
-    const server = this.createMcpServer(user, workspace, context);
+    transport.onclose = () => {
+      if (!sid) return;
+
+      this.sessions.delete(sid);
+      this.logger.debug(`MCP session ${sid} closed`);
+    };
+
     await server.connect(transport);
-
-    const sid = transport.sessionId;
-    if (sid) {
-      this.sessions.set(sid, {
-        transport,
-        server,
-        userId: user.id,
-        workspaceId: workspace.id,
-        apiKeyId: context.apiKeyId,
-        scopes: context.scopes,
-        mode: context.mode,
-      });
-
-      transport.onclose = () => {
-        this.sessions.delete(sid);
-        this.logger.debug(`MCP session ${sid} closed`);
-      };
-    }
-
     await transport.handleRequest(req, res, body);
   }
 
