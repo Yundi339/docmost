@@ -36,9 +36,11 @@ export class McpAuthGuard implements CanActivate {
       if (workspace) {
         response.header(
           'WWW-Authenticate',
-          this.oauthService.getWwwAuthenticateHeader(workspace, [
-            ApiKeyScope.MCP_READ,
-          ]),
+          this.oauthService.getWwwAuthenticateHeader(
+            workspace,
+            [ApiKeyScope.MCP_READ],
+            request,
+          ),
         );
       }
     };
@@ -95,6 +97,7 @@ export class McpAuthGuard implements CanActivate {
         authContext = await this.oauthService.validateAccessToken(
           payload as JwtMcpOAuthPayload,
           workspace,
+          request,
         );
       } catch {
         challenge();

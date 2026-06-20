@@ -35,6 +35,7 @@ export class OAuthMetadataController {
   protectedResourceForMcp(@Req() req: FastifyRequest) {
     return this.oauthService.getProtectedResourceMetadata(
       getWorkspaceFromRequest(req),
+      req,
     );
   }
 
@@ -43,6 +44,7 @@ export class OAuthMetadataController {
   protectedResource(@Req() req: FastifyRequest) {
     return this.oauthService.getProtectedResourceMetadata(
       getWorkspaceFromRequest(req),
+      req,
     );
   }
 
@@ -51,6 +53,7 @@ export class OAuthMetadataController {
   authorizationServer(@Req() req: FastifyRequest) {
     return this.oauthService.getAuthorizationServerMetadata(
       getWorkspaceFromRequest(req),
+      req,
     );
   }
 
@@ -59,6 +62,7 @@ export class OAuthMetadataController {
   openIdConfiguration(@Req() req: FastifyRequest) {
     return this.oauthService.getAuthorizationServerMetadata(
       getWorkspaceFromRequest(req),
+      req,
     );
   }
 }
@@ -82,6 +86,7 @@ export class OAuthController {
       return await this.oauthService.exchangeToken(
         normalizeBody(body) as OAuthTokenRequest,
         getWorkspaceFromRequest(req),
+        req,
       );
     } catch (err) {
       if (err instanceof OAuthRequestError) {
@@ -108,15 +113,19 @@ export class OAuthController {
   async listClients(
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
+    @Req() req: FastifyRequest,
   ) {
-    return this.oauthService.listClients(workspace, user);
+    return this.oauthService.listClients(workspace, user, req);
   }
 
   @UseGuards(JwtAuthGuard, SessionAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('clients/available')
-  async listAvailableClients(@AuthWorkspace() workspace: Workspace) {
-    return this.oauthService.listAvailableClients(workspace);
+  async listAvailableClients(
+    @AuthWorkspace() workspace: Workspace,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.oauthService.listAvailableClients(workspace, req);
   }
 
   @UseGuards(JwtAuthGuard, SessionAuthGuard)
@@ -132,8 +141,9 @@ export class OAuthController {
     },
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
+    @Req() req: FastifyRequest,
   ) {
-    return this.oauthService.updateClient(input, workspace, user);
+    return this.oauthService.updateClient(input, workspace, user, req);
   }
 
   @UseGuards(JwtAuthGuard, SessionAuthGuard)
@@ -171,8 +181,9 @@ export class OAuthController {
     @Body() query: OAuthAuthorizeQuery,
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
+    @Req() req: FastifyRequest,
   ) {
-    return this.oauthService.previewAuthorization(query, user, workspace);
+    return this.oauthService.previewAuthorization(query, user, workspace, req);
   }
 
   @UseGuards(JwtAuthGuard, SessionAuthGuard)
@@ -182,8 +193,9 @@ export class OAuthController {
     @Body() query: OAuthAuthorizeQuery,
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
+    @Req() req: FastifyRequest,
   ) {
-    return this.oauthService.approveAuthorization(query, user, workspace);
+    return this.oauthService.approveAuthorization(query, user, workspace, req);
   }
 
   @UseGuards(JwtAuthGuard, SessionAuthGuard)

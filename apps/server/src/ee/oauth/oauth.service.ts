@@ -6,11 +6,13 @@ import {
 } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { createHash, randomBytes } from 'crypto';
+import { FastifyRequest } from 'fastify';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { DomainService } from '../../integrations/environment/domain.service';
+import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { TokenService } from '../../core/auth/services/token.service';
 import { JwtMcpOAuthPayload } from '../../core/auth/dto/jwt-payload';
 import { isUserDisabled } from '../../common/helpers';
@@ -88,21 +90,29 @@ export class OAuthService {
     private readonly userRepo: UserRepo,
     private readonly workspaceRepo: WorkspaceRepo,
     private readonly domainService: DomainService,
+    private readonly environmentService: EnvironmentService,
   ) {}
 
-  getMcpResourceUrl(workspace: Workspace): string {
-    return normalizeResourceUrl(`${this.getIssuer(workspace)}/mcp`);
+  getMcpResourceUrl(workspace: Workspace, req?: FastifyRequest): string {
+    return normalizeResourceUrl(`${this.getIssuer(workspace, req)}/mcp`);
   }
 
-  getIssuer(workspace: Workspace): string {
+  getIssuer(workspace: Workspace, req?: FastifyRequest): string {
+    if (this.environmentService.isSelfHosted()) {
+      const origin = getRequestOrigin(req);
+      if (origin) {
+        return origin;
+      }
+    }
+
     return trimTrailingSlash(this.domainService.getUrl(workspace.hostname));
   }
 
-  getProtectedResourceMetadata(workspace: Workspace) {
-    const issuer = this.getIssuer(workspace);
+  getProtectedResourceMetadata(workspace: Workspace, req?: FastifyRequest) {
+    const issuer = this.getIssuer(workspace, req);
 
     return {
-      resource: this.getMcpResourceUrl(workspace),
+      resource: this.getMcpResourceUrl(workspace, req),
       authorization_servers: [issuer],
       scopes_supported: SUPPORTED_OAUTH_SCOPES,
       bearer_methods_supported: ['header'],
@@ -110,8 +120,8 @@ export class OAuthService {
     };
   }
 
-  getAuthorizationServerMetadata(workspace: Workspace) {
-    const issuer = this.getIssuer(workspace);
+  getAuthorizationServerMetadata(workspace: Workspace, req?: FastifyRequest) {
+    const issuer = this.getIssuer(workspace, req);
 
     return {
       issuer,
@@ -127,15 +137,19 @@ export class OAuthService {
     };
   }
 
-  getWwwAuthenticateHeader(workspace: Workspace, scopes?: string[]) {
-    const issuer = this.getIssuer(workspace);
+  getWwwAuthenticateHeader(
+    workspace: Workspace,
+    scopes?: string[],
+    req?: FastifyRequest,
+  ) {
+    const issuer = this.getIssuer(workspace, req);
     const resourceMetadataUrl = `${issuer}/.well-known/oauth-protected-resource/mcp`;
     const scope = scopes?.length ? scopes.join(' ') : OAuthScope.MCP_READ;
 
     return `Bearer resource_metadata="${resourceMetadataUrl}", scope="${scope}"`;
   }
 
-  async listClients(workspace: Workspace, user: User) {
+  async listClients(workspace: Workspace, user: User, req?: FastifyRequest) {
     this.assertOwner(user);
     await this.ensureDefaultChatGptClient(workspace.id, user.id);
     const rows = await this.db
@@ -146,10 +160,10 @@ export class OAuthService {
       .orderBy('createdAt', 'asc')
       .execute();
 
-    return rows.map((row) => this.toClientView(row, workspace));
+    return rows.map((row) => this.toClientView(row, workspace, req));
   }
 
-  async listAvailableClients(workspace: Workspace) {
+  async listAvailableClients(workspace: Workspace, req?: FastifyRequest) {
     const rows = await this.db
       .selectFrom('oauthClients')
       .selectAll()
@@ -159,7 +173,7 @@ export class OAuthService {
       .orderBy('createdAt', 'asc')
       .execute();
 
-    return rows.map((row) => this.toClientView(row, workspace));
+    return rows.map((row) => this.toClientView(row, workspace, req));
   }
 
   async updateClient(
@@ -171,6 +185,7 @@ export class OAuthService {
     },
     workspace: Workspace,
     user: User,
+    req?: FastifyRequest,
   ) {
     this.assertOwner(user);
     const allowedScopes = input.allowedScopes
@@ -202,7 +217,7 @@ export class OAuthService {
       .returningAll()
       .executeTakeFirst();
 
-    return this.toClientView(row, workspace);
+    return this.toClientView(row, workspace, req);
   }
 
   async listAuthorizations(
@@ -290,8 +305,9 @@ export class OAuthService {
     query: OAuthAuthorizeQuery,
     user: User,
     workspace: Workspace,
+    req?: FastifyRequest,
   ) {
-    const resolved = await this.resolveAuthorizeRequest(query, workspace);
+    const resolved = await this.resolveAuthorizeRequest(query, workspace, req);
     return {
       provider: resolved.oauthClient.provider,
       clientName: resolved.clientName,
@@ -312,8 +328,9 @@ export class OAuthService {
     query: OAuthAuthorizeQuery,
     user: User,
     workspace: Workspace,
+    req?: FastifyRequest,
   ) {
-    const resolved = await this.resolveAuthorizeRequest(query, workspace);
+    const resolved = await this.resolveAuthorizeRequest(query, workspace, req);
     const authorization = await this.upsertAuthorization(
       resolved,
       user,
@@ -367,13 +384,14 @@ export class OAuthService {
   async exchangeToken(
     body: OAuthTokenRequest,
     workspace: Workspace,
+    req?: FastifyRequest,
   ): Promise<OAuthTokenResponse> {
     if (body.grant_type === 'authorization_code') {
-      return this.exchangeAuthorizationCode(body, workspace);
+      return this.exchangeAuthorizationCode(body, workspace, req);
     }
 
     if (body.grant_type === 'refresh_token') {
-      return this.exchangeRefreshToken(body, workspace);
+      return this.exchangeRefreshToken(body, workspace, req);
     }
 
     throw new OAuthRequestError(
@@ -385,6 +403,7 @@ export class OAuthService {
   async validateAccessToken(
     payload: JwtMcpOAuthPayload,
     workspaceHint?: Workspace,
+    req?: FastifyRequest,
   ) {
     const workspace =
       workspaceHint ?? (await this.workspaceRepo.findById(payload.workspaceId));
@@ -392,7 +411,7 @@ export class OAuthService {
       throw new ForbiddenException('Workspace not found');
     }
 
-    const expectedResource = this.getMcpResourceUrl(workspace);
+    const expectedResource = this.getMcpResourceUrl(workspace, req);
     if (normalizeResourceUrl(payload.resource) !== expectedResource) {
       throw new ForbiddenException(
         'OAuth token audience does not match MCP resource',
@@ -495,13 +514,14 @@ export class OAuthService {
   private async exchangeAuthorizationCode(
     body: OAuthTokenRequest,
     workspace: Workspace,
+    req?: FastifyRequest,
   ): Promise<OAuthTokenResponse> {
     const code = requireString(body.code, 'code');
     const clientId = requireString(body.client_id, 'client_id');
     const redirectUri = requireString(body.redirect_uri, 'redirect_uri');
     const codeVerifier = requireString(body.code_verifier, 'code_verifier');
     const resource = requireOAuthResource(body.resource);
-    const expectedResource = this.getMcpResourceUrl(workspace);
+    const expectedResource = this.getMcpResourceUrl(workspace, req);
 
     if (resource !== expectedResource) {
       throw new OAuthRequestError('invalid_target', 'Invalid OAuth resource.');
@@ -598,11 +618,12 @@ export class OAuthService {
   private async exchangeRefreshToken(
     body: OAuthTokenRequest,
     workspace: Workspace,
+    req?: FastifyRequest,
   ): Promise<OAuthTokenResponse> {
     const token = requireString(body.refresh_token, 'refresh_token');
     const clientId = requireString(body.client_id, 'client_id');
     const resource = requireOAuthResource(body.resource);
-    const expectedResource = this.getMcpResourceUrl(workspace);
+    const expectedResource = this.getMcpResourceUrl(workspace, req);
 
     if (resource !== expectedResource) {
       throw new OAuthRequestError('invalid_target', 'Invalid OAuth resource.');
@@ -784,6 +805,7 @@ export class OAuthService {
   private async resolveAuthorizeRequest(
     query: OAuthAuthorizeQuery,
     workspace: Workspace,
+    req?: FastifyRequest,
   ): Promise<ResolvedAuthorizeRequest> {
     if (query.response_type !== 'code') {
       throw new BadRequestException('Only response_type=code is supported');
@@ -795,7 +817,7 @@ export class OAuthService {
     }
 
     const resource = requireAuthorizeResource(query.resource);
-    const expectedResource = this.getMcpResourceUrl(workspace);
+    const expectedResource = this.getMcpResourceUrl(workspace, req);
     if (resource !== expectedResource) {
       throw new BadRequestException('Invalid OAuth resource');
     }
@@ -981,8 +1003,9 @@ export class OAuthService {
   private toClientView(
     row: OAuthClientRow,
     workspace: Workspace,
+    req?: FastifyRequest,
   ): OAuthClientView {
-    const issuer = this.getIssuer(workspace);
+    const issuer = this.getIssuer(workspace, req);
 
     return {
       id: row.id,
@@ -992,7 +1015,7 @@ export class OAuthService {
       allowedScopes: row.allowedScopes,
       trustedClientIdHost: row.trustedClientIdHost,
       allowClientIdMetadataDocuments: row.allowClientIdMetadataDocuments,
-      mcpServerUrl: this.getMcpResourceUrl(workspace),
+      mcpServerUrl: this.getMcpResourceUrl(workspace, req),
       issuer,
       resourceMetadataUrl: `${issuer}/.well-known/oauth-protected-resource/mcp`,
       authorizationServerMetadataUrl: `${issuer}/.well-known/oauth-authorization-server`,
@@ -1127,6 +1150,32 @@ function normalizeResourceUrl(value: string) {
   url.search = '';
   url.pathname = trimTrailingSlash(url.pathname);
   return url.toString();
+}
+
+function getRequestOrigin(req?: FastifyRequest) {
+  if (!req) {
+    return undefined;
+  }
+
+  const forwardedProto = getFirstHeaderValue(req.headers['x-forwarded-proto']);
+  const forwardedHost = getFirstHeaderValue(req.headers['x-forwarded-host']);
+  const proto = forwardedProto || req.protocol;
+  const host = forwardedHost || getFirstHeaderValue(req.headers.host);
+
+  if (!host || (proto !== 'http' && proto !== 'https')) {
+    return undefined;
+  }
+
+  try {
+    return new URL(`${proto}://${host}`).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function getFirstHeaderValue(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw?.split(',')[0]?.trim();
 }
 
 function trimTrailingSlash(value: string) {
