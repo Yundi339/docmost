@@ -7,9 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v0.25.3)'
+        description: 'Version tag (e.g. v0.25.3). Leave empty for branch-build on manual runs.'
         required: false
-        default: 'branch-build'
       source_ref:
         description: 'Git ref/branch to build. Leave empty to use the selected workflow branch.'
         required: false
@@ -18,7 +17,7 @@ permissions:
   contents: write
 
 env:
-  VERSION: ${{ inputs.version || github.ref_name }}
+  VERSION: ${{ inputs.version || (github.event_name == 'push' && github.ref_name) || 'branch-build' }}
   SOURCE_REF: ${{ inputs.source_ref || github.ref_name }}
 
 jobs:
