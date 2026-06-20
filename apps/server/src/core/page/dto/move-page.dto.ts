@@ -1,13 +1,14 @@
 import {
-  IsString,
   IsOptional,
+  IsString,
+  IsUUID,
   MinLength,
   MaxLength,
   IsNotEmpty,
 } from 'class-validator';
 
 export class MovePageDto {
-  @IsString()
+  @IsUUID()
   pageId: string;
 
   @IsString()
@@ -16,30 +17,30 @@ export class MovePageDto {
   position: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   parentPageId?: string | null;
 }
 
 export class MovePageToSpaceDto {
   @IsNotEmpty()
-  @IsString()
+  @IsUUID()
   pageId: string;
 
   @IsNotEmpty()
-  @IsString()
+  @IsUUID()
   spaceId: string;
 }
 
 export class MovePageUnderDto {
   @IsNotEmpty()
-  @IsString()
+  @IsUUID()
   pageId: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   targetPageId?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   targetSpaceId?: string;
 }

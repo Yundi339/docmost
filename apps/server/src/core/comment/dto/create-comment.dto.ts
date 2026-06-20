@@ -1,5 +1,15 @@
-import { IsIn, IsJSON, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsIn,
+  IsJSON,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 import { z } from 'zod';
+
+export const COMMENT_CONTENT_MAX_LENGTH = 500_000;
 
 const yjsIdSchema = z.object({
   client: z.number().int().nonnegative(),
@@ -19,11 +29,13 @@ export const yjsSelectionSchema = z.object({
 });
 
 export class CreateCommentDto {
-  @IsString()
+  @IsUUID()
   pageId: string;
 
+  @IsString()
   @IsJSON()
-  content: any;
+  @MaxLength(COMMENT_CONTENT_MAX_LENGTH)
+  content: string;
 
   @IsOptional()
   @IsString()

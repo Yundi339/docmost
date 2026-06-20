@@ -51,6 +51,9 @@ jest.mock('../../core/workspace/services/workspace.service', () => ({
 }));
 
 describe('McpService access control', () => {
+  const pageId = '018f3f73-2f69-7c8d-9d79-8f3f4d7d9711';
+  const spaceId = '018f3f73-2f69-7c8d-9d79-8f3f4d7d9712';
+  const targetSpaceId = '018f3f73-2f69-7c8d-9d79-8f3f4d7d9713';
   let service: McpService;
   let auditService: { logWithContext: jest.Mock };
 
@@ -97,13 +100,13 @@ describe('McpService access control', () => {
     const pageService = overrides.pageService ?? {
       duplicatePage: jest
         .fn()
-        .mockResolvedValue({ id: 'new-page-id', title: 'Copy' }),
+        .mockResolvedValue({ id: pageId, title: 'Copy' }),
     };
     const pageRepo = overrides.pageRepo ?? {
       findById: jest.fn().mockResolvedValue({
-        id: 'page-id',
+        id: pageId,
         workspaceId: 'workspace-id',
-        spaceId: 'space-id',
+        spaceId,
         deletedAt: null,
       }),
     };
@@ -205,7 +208,6 @@ describe('McpService access control', () => {
   });
 
   it('audits MCP tool calls without sensitive content', async () => {
-    const pageId = '018f3f73-2f69-7c8d-9d79-8f3f4d7d9711';
     const result = await (service as any).runTool(
       context('read-write', [ApiKeyScope.MCP_WRITE]),
       { id: 'user-id' },
@@ -345,7 +347,7 @@ describe('McpService access control', () => {
     });
 
     await expect(
-      handlers.duplicate_page({ pageId: 'page-id' }),
+      handlers.duplicate_page({ pageId }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(pageAccessService.validateCanEdit).toHaveBeenCalled();
     expect(pageAccessService.validateCanView).not.toHaveBeenCalled();
@@ -356,11 +358,11 @@ describe('McpService access control', () => {
     const { handlers, pageService } = registerMcpTools({
       auditService,
       spaceAbility: {
-        createForUser: jest.fn(async (_user, spaceId: string) => ({
+        createForUser: jest.fn(async (_user, checkedSpaceId: string) => ({
           can: jest.fn().mockReturnValue(false),
           cannot: jest.fn(
             (action: SpaceCaslAction, subject: SpaceCaslSubject) =>
-              spaceId === 'target-space-id' &&
+              checkedSpaceId === targetSpaceId &&
               action === SpaceCaslAction.Create &&
               subject === SpaceCaslSubject.Page,
           ),
@@ -370,8 +372,8 @@ describe('McpService access control', () => {
 
     await expect(
       handlers.copy_page_to_space({
-        pageId: 'page-id',
-        spaceId: 'target-space-id',
+        pageId,
+        spaceId: targetSpaceId,
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(pageService.duplicatePage).not.toHaveBeenCalled();

@@ -1,12 +1,12 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsUUID } from 'class-validator';
 
 export class DuplicatePageDto {
   @IsNotEmpty()
-  @IsString()
+  @IsUUID()
   pageId: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   spaceId?: string;
 }
 

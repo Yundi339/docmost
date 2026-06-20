@@ -3,7 +3,6 @@ import {
   IsIn,
   IsNotEmpty,
   IsOptional,
-  IsString,
   IsUUID,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
@@ -11,8 +10,8 @@ import { Transform } from 'class-transformer';
 import { ContentFormat } from './create-page.dto';
 
 export class PageIdDto {
-  @IsString()
   @IsNotEmpty()
+  @IsUUID()
   pageId: string;
 }
 

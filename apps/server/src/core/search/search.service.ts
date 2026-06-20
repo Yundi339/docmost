@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { SearchDTO, SearchSuggestionDTO } from './dto/search.dto';
+import {
+  SEARCH_MAX_LIMIT,
+  SEARCH_MAX_OFFSET,
+  SearchDTO,
+  SearchSuggestionDTO,
+} from './dto/search.dto';
 import { SearchResponseDto } from './dto/search-response.dto';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
@@ -11,6 +16,8 @@ import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const tsquery = require('pg-tsquery')();
+const SEARCH_CANDIDATE_BATCH_SIZE = 200;
+const MAX_SEARCH_CANDIDATES_TO_SCAN = 20_000;
 
 @Injectable()
 export class SearchService {
@@ -29,77 +36,28 @@ export class SearchService {
       workspaceId: string;
     },
   ): Promise<{ items: SearchResponseDto[] }> {
-    const { query } = searchParams;
-
-    if (query.length < 1) {
+    const trimmedQuery = searchParams.query?.trim();
+    if (!trimmedQuery) {
       return { items: [] };
     }
-    const trimmedQuery = query.trim();
+
+    const requestedLimit = clampNumber(
+      searchParams.limit ?? 25,
+      1,
+      SEARCH_MAX_LIMIT,
+    );
+    const requestedOffset = clampNumber(
+      searchParams.offset ?? 0,
+      0,
+      SEARCH_MAX_OFFSET,
+    );
     // With *: used only for ts_rank/ts_headline (prefix-aware scoring/highlights)
     const searchQuery = tsquery(trimmedQuery + '*');
     // Without *: used for content FTS filter to avoid stemming-based false positives
     const filterQuery = tsquery(trimmedQuery);
 
-    let queryResults = this.db
-      .selectFrom('pages')
-      .select([
-        'id',
-        'slugId',
-        'title',
-        'icon',
-        'parentPageId',
-        'creatorId',
-        'createdAt',
-        'updatedAt',
-        sql<number>`ts_rank(tsv, to_tsquery('english', f_unaccent(${searchQuery})))`.as(
-          'rank',
-        ),
-        sql<string>`ts_headline('english', text_content, to_tsquery('english', f_unaccent(${searchQuery})),'MinWords=9, MaxWords=10, MaxFragments=3')`.as(
-          'highlight',
-        ),
-      ])
-      .where((eb) =>
-        eb.or([
-          // Title: raw text substring match (accent-insensitive, case-insensitive)
-          eb(
-            sql`LOWER(f_unaccent(pages.title))`,
-            'like',
-            sql`LOWER(f_unaccent(${`%${trimmedQuery}%`}))`,
-          ),
-          // Content: FTS without prefix wildcard to avoid stem-level false positives
-          eb(
-            'tsv',
-            '@@',
-            sql<string>`to_tsquery('english', f_unaccent(${filterQuery}))`,
-          ),
-        ]),
-      )
-      .$if(Boolean(searchParams.creatorId), (qb) =>
-        qb.where('creatorId', '=', searchParams.creatorId),
-      )
-      .where('deletedAt', 'is', null)
-      .orderBy('rank', 'desc')
-      .limit(searchParams.limit || 25)
-      .offset(searchParams.offset || 0);
-
-    if (!searchParams.shareId) {
-      queryResults = queryResults.select((eb) => this.pageRepo.withSpace(eb));
-    }
-
-    if (searchParams.spaceId) {
-      // search by spaceId
-      queryResults = queryResults.where('spaceId', '=', searchParams.spaceId);
-    } else if (opts.userId && !searchParams.spaceId) {
-      // only search spaces the user is a member of
-      queryResults = queryResults
-        .where(
-          'spaceId',
-          'in',
-          this.spaceMemberRepo.getUserSpaceIdsQuery(opts.userId),
-        )
-        .where('workspaceId', '=', opts.workspaceId);
-    } else if (searchParams.shareId && !searchParams.spaceId && !opts.userId) {
-      // search in shares
+    let sharedPageIdsToSearch: string[] | undefined;
+    if (searchParams.shareId && !searchParams.spaceId && !opts.userId) {
       const shareId = searchParams.shareId;
       const share = await this.shareRepo.findById(shareId);
       if (!share || share.workspaceId !== opts.workspaceId) {
@@ -112,7 +70,7 @@ export class SearchService {
         return { items: [] };
       }
 
-      const pageIdsToSearch = [];
+      sharedPageIdsToSearch = [];
       if (share.includeSubPages) {
         const pageList = await this.pageRepo.getPageAndDescendantsExcludingRestricted(
           share.pageId,
@@ -121,37 +79,99 @@ export class SearchService {
           },
         );
 
-        pageIdsToSearch.push(...pageList.map((page) => page.id));
+        sharedPageIdsToSearch.push(...pageList.map((page) => page.id));
       } else {
-        pageIdsToSearch.push(share.pageId);
+        sharedPageIdsToSearch.push(share.pageId);
       }
 
-      if (pageIdsToSearch.length > 0) {
-        queryResults = queryResults
-          .where('id', 'in', pageIdsToSearch)
-          .where('workspaceId', '=', opts.workspaceId);
-      } else {
+      if (sharedPageIdsToSearch.length === 0) {
         return { items: [] };
       }
-    } else {
-      return { items: [] };
     }
 
-    //@ts-ignore
-    let results: any[] = await queryResults.execute();
+    const buildQuery = (limit: number, offset: number) => {
+      let queryResults = this.db
+        .selectFrom('pages')
+        .select([
+          'id',
+          'slugId',
+          'title',
+          'icon',
+          'parentPageId',
+          'creatorId',
+          'createdAt',
+          'updatedAt',
+          sql<number>`ts_rank(tsv, to_tsquery('english', f_unaccent(${searchQuery})))`.as(
+            'rank',
+          ),
+          sql<string>`ts_headline('english', text_content, to_tsquery('english', f_unaccent(${searchQuery})),'MinWords=9, MaxWords=10, MaxFragments=3')`.as(
+            'highlight',
+          ),
+        ])
+        .where((eb) =>
+          eb.or([
+            // Title: raw text substring match (accent-insensitive, case-insensitive)
+            eb(
+              sql`LOWER(f_unaccent(pages.title))`,
+              'like',
+              sql`LOWER(f_unaccent(${`%${trimmedQuery}%`}))`,
+            ),
+            // Content: FTS without prefix wildcard to avoid stem-level false positives
+            eb(
+              'tsv',
+              '@@',
+              sql<string>`to_tsquery('english', f_unaccent(${filterQuery}))`,
+            ),
+          ]),
+        )
+        .$if(Boolean(searchParams.creatorId), (qb) =>
+          qb.where('creatorId', '=', searchParams.creatorId),
+        )
+        .where('deletedAt', 'is', null)
+        .orderBy('rank', 'desc')
+        .limit(limit)
+        .offset(offset);
 
-    // Filter results by page-level permissions (if user is authenticated)
-    if (opts.userId && results.length > 0) {
-      const pageIds = results.map((r: any) => r.id);
-      const accessibleIds =
-        await this.pagePermissionRepo.filterAccessiblePageIds({
-          pageIds,
-          userId: opts.userId,
-          spaceId: searchParams.spaceId,
-        });
-      const accessibleSet = new Set(accessibleIds);
-      results = results.filter((r: any) => accessibleSet.has(r.id));
-    }
+      if (!searchParams.shareId) {
+        queryResults = queryResults.select((eb) => this.pageRepo.withSpace(eb));
+      }
+
+      if (searchParams.spaceId) {
+        return queryResults.where('spaceId', '=', searchParams.spaceId);
+      }
+
+      if (opts.userId) {
+        return queryResults
+          .where(
+            'spaceId',
+            'in',
+            this.spaceMemberRepo.getUserSpaceIdsQuery(opts.userId),
+          )
+          .where('workspaceId', '=', opts.workspaceId);
+      }
+
+      if (sharedPageIdsToSearch) {
+        return queryResults
+          .where('id', 'in', sharedPageIdsToSearch)
+          .where('workspaceId', '=', opts.workspaceId);
+      }
+
+      return undefined;
+    };
+
+    const queryResults = buildQuery(requestedLimit, requestedOffset);
+    if (!queryResults) return { items: [] };
+
+    const results = opts.userId
+      ? await this.collectAccessiblePageResults(
+          async (limit, offset) =>
+            (await buildQuery(limit, offset)?.execute()) ?? [],
+          opts.userId,
+          searchParams.spaceId,
+          requestedOffset,
+          requestedLimit,
+        )
+      : await queryResults.execute();
 
     //@ts-ignore
     const searchResults = results.map((result: SearchResponseDto) => {
@@ -164,6 +184,45 @@ export class SearchService {
     });
 
     return { items: searchResults };
+  }
+
+  private async collectAccessiblePageResults(
+    fetchCandidates: (limit: number, offset: number) => Promise<any[]>,
+    userId: string,
+    spaceId: string | undefined,
+    requestedOffset: number,
+    requestedLimit: number,
+  ) {
+    const needed = requestedOffset + requestedLimit;
+    const accessibleResults: any[] = [];
+    let dbOffset = 0;
+
+    while (
+      accessibleResults.length < needed &&
+      dbOffset < MAX_SEARCH_CANDIDATES_TO_SCAN
+    ) {
+      const rows = await fetchCandidates(SEARCH_CANDIDATE_BATCH_SIZE, dbOffset);
+      if (rows.length === 0) break;
+
+      const accessibleIds =
+        await this.pagePermissionRepo.filterAccessiblePageIds({
+          pageIds: [...new Set(rows.map((row) => row.id))],
+          userId,
+          spaceId,
+        });
+      const accessibleSet = new Set(accessibleIds);
+      accessibleResults.push(
+        ...rows.filter((row) => accessibleSet.has(row.id)),
+      );
+
+      dbOffset += rows.length;
+      if (rows.length < SEARCH_CANDIDATE_BATCH_SIZE) break;
+    }
+
+    return accessibleResults.slice(
+      requestedOffset,
+      requestedOffset + requestedLimit,
+    );
   }
 
   async searchSuggestions(
@@ -328,4 +387,11 @@ export class SearchService {
     }
     return result;
   }
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.min(Math.max(Math.trunc(value), min), max);
 }
