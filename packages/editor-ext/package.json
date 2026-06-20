@@ -1,7 +1,7 @@
 {
   "name": "@docmost/editor-ext",
   "private": true,
-  "version": "26.6.0",
+  "version": "26.06.20.0",
   "scripts": {
     "build": "tsc --build",
     "dev": "tsc --watch"
