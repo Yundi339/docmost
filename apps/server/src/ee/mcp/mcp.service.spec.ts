@@ -3,6 +3,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { McpService, McpRequestContext } from './mcp.service';
 import { resolveMcpMode } from './mcp.controller';
 import { ApiKeyScope } from '../../core/api-key/api-key-scopes';
+import { PageInfoDto } from '../../core/page/dto/page.dto';
 
 jest.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
   StreamableHTTPServerTransport: jest.fn().mockImplementation((options) => ({
@@ -211,6 +212,30 @@ describe('McpService access control', () => {
     expect(
       JSON.stringify(auditService.logWithContext.mock.calls),
     ).not.toContain('sensitive search');
+  });
+
+  it('requires MCP tool registrations to declare DTO handling', async () => {
+    await expect(
+      (service as any).prepareMcpToolInput('unsafe_tool', {}, undefined),
+    ).rejects.toThrow('MCP tool unsafe_tool must declare a DTO or noDto');
+  });
+
+  it('validates MCP tool input through the registration template', async () => {
+    await expect(
+      (service as any).prepareMcpToolInput(
+        'get_page',
+        { format: 'xml' },
+        { dto: PageInfoDto },
+      ),
+    ).rejects.toThrow('format must be one of the following values');
+
+    await expect(
+      (service as any).prepareMcpToolInput(
+        'current_user',
+        { ignored: true },
+        { noDto: true },
+      ),
+    ).resolves.toEqual({ ignored: true });
   });
 
   it('rejects session owner mismatch', async () => {

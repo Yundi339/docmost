@@ -438,6 +438,7 @@ export class OAuthService {
     }
 
     const scopes = normalizeScopes(payload.scopes, DEFAULT_OAUTH_SCOPES);
+    this.assertMcpScopesAllowed(workspace, scopes);
     if (!isSubset(scopes, authorization.scopes)) {
       throw new ForbiddenException('OAuth token scopes are no longer valid');
     }
@@ -542,6 +543,8 @@ export class OAuthService {
     if (!user || isUserDisabled(user)) {
       throw new OAuthRequestError('invalid_grant', 'User not found.');
     }
+    const scopes = normalizeScopes(codeRow.scopes, DEFAULT_OAUTH_SCOPES);
+    this.assertMcpScopesAllowed(workspace, scopes);
 
     const refreshToken = this.generateOpaqueToken();
     const refreshTokenExpiresAt = new Date(
@@ -587,7 +590,7 @@ export class OAuthService {
       oauthClientId: authorization.oauthClientId ?? undefined,
       clientId,
       resource,
-      scopes: normalizeScopes(codeRow.scopes, DEFAULT_OAUTH_SCOPES),
+      scopes,
       refreshToken,
     });
   }
@@ -640,6 +643,7 @@ export class OAuthService {
         'Requested scope is not allowed.',
       );
     }
+    this.assertMcpScopesAllowed(workspace, requestedScopes);
 
     const authorization = await this.getValidAuthorization(
       refreshRow.authorizationId,
@@ -796,10 +800,11 @@ export class OAuthService {
       throw new BadRequestException('Invalid OAuth resource');
     }
 
-    const mode = resolveMcpMode((workspace.settings as any)?.ai);
-    if (mode === 'off') {
-      throw new ForbiddenException('MCP is not enabled for this workspace');
-    }
+    const requestedScopes = normalizeScopes(
+      parseScopes(query.scope),
+      DEFAULT_OAUTH_SCOPES,
+    );
+    this.assertMcpScopesAllowed(workspace, requestedScopes);
 
     const oauthClient = await this.getEnabledChatGptClient(workspace.id);
     const clientId = requireString(query.client_id, 'client_id');
@@ -823,16 +828,6 @@ export class OAuthService {
       throw new BadRequestException('OAuth client is not registered');
     }
 
-    const requestedScopes = normalizeScopes(
-      parseScopes(query.scope),
-      DEFAULT_OAUTH_SCOPES,
-    );
-    if (
-      mode === 'read-only' &&
-      requestedScopes.includes(OAuthScope.MCP_WRITE)
-    ) {
-      throw new ForbiddenException('MCP is enabled in read-only mode');
-    }
     if (!isSubset(requestedScopes, oauthClient.allowedScopes)) {
       throw new ForbiddenException('Requested OAuth scope is not allowed');
     }
@@ -1037,6 +1032,19 @@ export class OAuthService {
 
   private generateOpaqueToken(bytes = 32) {
     return randomBytes(bytes).toString('base64url');
+  }
+
+  private assertMcpScopesAllowed(
+    workspace: Workspace,
+    scopes: readonly string[],
+  ) {
+    const mode = resolveMcpMode((workspace.settings as any)?.ai);
+    if (mode === 'off') {
+      throw new ForbiddenException('MCP is not enabled for this workspace');
+    }
+    if (mode === 'read-only' && scopes.includes(OAuthScope.MCP_WRITE)) {
+      throw new ForbiddenException('MCP is enabled in read-only mode');
+    }
   }
 }
 

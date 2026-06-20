@@ -91,6 +91,25 @@ interface McpSession {
   mode: McpMode;
 }
 
+type DtoClass<T extends object = Record<string, any>> = new () => T;
+
+type McpToolRegistrationOptions<T extends object = Record<string, any>> =
+  | {
+      dto: DtoClass<T>;
+      mapArgs?: (args: any) => Record<string, unknown>;
+      noDto?: never;
+    }
+  | {
+      noDto: true;
+      dto?: never;
+      mapArgs?: never;
+    };
+
+type McpToolHandler<T extends object = Record<string, any>> = (
+  input: T,
+  rawArgs: Record<string, any>,
+) => Promise<any>;
+
 @Injectable()
 export class McpService implements OnModuleDestroy {
   private readonly logger = new Logger(McpService.name);
@@ -270,6 +289,13 @@ export class McpService implements OnModuleDestroy {
     }
   }
 
+  private async assertSpaceSettingsRead(user: User, spaceId: string) {
+    const ability = await this.spaceAbility.createForUser(user, spaceId);
+    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Settings)) {
+      throw new ForbiddenException('Forbidden: space settings read required');
+    }
+  }
+
   private async runTool(
     context: McpRequestContext,
     user: User,
@@ -394,6 +420,59 @@ export class McpService implements OnModuleDestroy {
     return server;
   }
 
+  private registerMcpTool<T extends object = Record<string, any>>(
+    server: McpServer,
+    user: User,
+    workspace: Workspace,
+    context: McpRequestContext,
+    access: McpToolAccess,
+    name: string,
+    description: string,
+    schema: any,
+    options: McpToolRegistrationOptions<T>,
+    handler: McpToolHandler<T>,
+  ) {
+    server.registerTool(
+      name,
+      toolOptions(description, schema, access),
+      (args: any) =>
+        this.runTool(
+          context,
+          user,
+          workspace,
+          name,
+          access,
+          args ?? {},
+          async () => {
+            const input = await this.prepareMcpToolInput(name, args, options);
+            return handler(input, args ?? {});
+          },
+        ),
+    );
+  }
+
+  private async prepareMcpToolInput<T extends object>(
+    name: string,
+    args: Record<string, any> | undefined,
+    options: McpToolRegistrationOptions<T>,
+  ): Promise<T> {
+    if (!options) {
+      throw new Error(`MCP tool ${name} must declare a DTO or noDto`);
+    }
+
+    const rawArgs = args ?? {};
+    if ('noDto' in options && options.noDto) {
+      return rawArgs as T;
+    }
+
+    if (!('dto' in options) || !options.dto) {
+      throw new Error(`MCP tool ${name} must declare a DTO or noDto`);
+    }
+
+    const input = options.mapArgs ? options.mapArgs(rawArgs) : rawArgs;
+    return validateDto(options.dto, input);
+  }
+
   private registerTools(
     server: McpServer,
     user: User,
@@ -402,33 +481,43 @@ export class McpService implements OnModuleDestroy {
   ): void {
     const userId = user.id;
     const workspaceId = workspace.id;
-    const readTool = (
+    const readTool = <T extends object = Record<string, any>>(
       name: string,
       description: string,
       schema: any,
-      handler: (args: any) => Promise<any>,
+      options: McpToolRegistrationOptions<T>,
+      handler: McpToolHandler<T>,
     ) =>
-      server.registerTool(
+      this.registerMcpTool(
+        server,
+        user,
+        workspace,
+        context,
+        'read',
         name,
-        toolOptions(description, schema, 'read'),
-        (args: any) =>
-          this.runTool(context, user, workspace, name, 'read', args, () =>
-            handler(args),
-          ),
+        description,
+        schema,
+        options,
+        handler,
       );
-    const writeTool = (
+    const writeTool = <T extends object = Record<string, any>>(
       name: string,
       description: string,
       schema: any,
-      handler: (args: any) => Promise<any>,
+      options: McpToolRegistrationOptions<T>,
+      handler: McpToolHandler<T>,
     ) =>
-      server.registerTool(
+      this.registerMcpTool(
+        server,
+        user,
+        workspace,
+        context,
+        'write',
         name,
-        toolOptions(description, schema, 'write'),
-        (args: any) =>
-          this.runTool(context, user, workspace, name, 'write', args, () =>
-            handler(args),
-          ),
+        description,
+        schema,
+        options,
+        handler,
       );
 
     // 1. search_pages
@@ -440,13 +529,16 @@ export class McpService implements OnModuleDestroy {
         spaceId: z.string().optional(),
         limit: z.number().optional(),
       },
-      async ({ query, spaceId, limit }) => {
-        const input = await validateDto(SearchDTO, {
+      {
+        dto: SearchDTO,
+        mapArgs: ({ query, spaceId, limit }) => ({
           query,
           spaceId,
           limit: this.paginate(limit).limit,
           offset: 0,
-        });
+        }),
+      },
+      async (input) => {
         delete input.shareId;
 
         if (input.spaceId) {
@@ -475,8 +567,8 @@ export class McpService implements OnModuleDestroy {
         pageId: z.string(),
         format: z.enum(['json', 'markdown', 'html']).optional(),
       },
-      async ({ pageId, format }) => {
-        const input = await validateDto(PageInfoDto, { pageId, format });
+      { dto: PageInfoDto },
+      async (input) => {
         const page = await this.pageRepo.findById(input.pageId, {
           includeContent: true,
           includeSpace: true,
@@ -528,14 +620,8 @@ export class McpService implements OnModuleDestroy {
         format: z.enum(['json', 'markdown', 'html']).optional(),
         parentPageId: z.string().optional(),
       },
-      async ({ spaceId, title, content, format, parentPageId }) => {
-        const input = await validateDto(CreatePageDto, {
-          spaceId,
-          title,
-          content,
-          format,
-          parentPageId,
-        });
+      { dto: CreatePageDto },
+      async (input) => {
         if (input.parentPageId) {
           const parentPage = await this.pageRepo.findById(input.parentPageId);
           if (
@@ -590,14 +676,8 @@ export class McpService implements OnModuleDestroy {
         format: z.enum(['json', 'markdown', 'html']).optional(),
         operation: z.enum(['append', 'prepend', 'replace']).optional(),
       },
-      async ({ pageId, title, content, format, operation }) => {
-        const input = await validateDto(UpdatePageDto, {
-          pageId,
-          title,
-          content,
-          format,
-          operation,
-        });
+      { dto: UpdatePageDto },
+      async (input) => {
         const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
@@ -633,8 +713,8 @@ export class McpService implements OnModuleDestroy {
       'list_pages',
       'List root-level pages in a space',
       { spaceId: z.string(), limit: z.number().optional() },
-      async ({ spaceId, limit }) => {
-        const input = await validateDto(SidebarPageDto, { spaceId });
+      { dto: SidebarPageDto, mapArgs: ({ spaceId }) => ({ spaceId }) },
+      async (input, { limit }) => {
         const spaceCanEdit = await this.getSpacePageEditAccess(
           user,
           input.spaceId,
@@ -657,8 +737,8 @@ export class McpService implements OnModuleDestroy {
       'list_child_pages',
       'List child pages of a specific page',
       { spaceId: z.string(), pageId: z.string(), limit: z.number().optional() },
-      async ({ spaceId, pageId, limit }) => {
-        const input = await validateDto(SidebarPageDto, { spaceId, pageId });
+      { dto: SidebarPageDto },
+      async (input, { limit }) => {
         const page = await this.pageRepo.findById(input.pageId);
         if (
           !page ||
@@ -694,8 +774,8 @@ export class McpService implements OnModuleDestroy {
       'duplicate_page',
       'Duplicate a page within the same space',
       { pageId: z.string() },
-      async ({ pageId }) => {
-        const input = await validateDto(DuplicatePageDto, { pageId });
+      { dto: DuplicatePageDto, mapArgs: ({ pageId }) => ({ pageId }) },
+      async (input) => {
         const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
@@ -730,8 +810,8 @@ export class McpService implements OnModuleDestroy {
       'copy_page_to_space',
       'Copy a page to a different space',
       { pageId: z.string(), spaceId: z.string() },
-      async ({ pageId, spaceId }) => {
-        const input = await validateDto(DuplicatePageDto, { pageId, spaceId });
+      { dto: DuplicatePageDto },
+      async (input) => {
         const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
@@ -771,11 +851,14 @@ export class McpService implements OnModuleDestroy {
       'move_page',
       'Move a page under a new parent within the same space',
       { pageId: z.string(), parentPageId: z.string().optional() },
-      async ({ pageId, parentPageId }) => {
-        const input = await validateDto(MovePageUnderDto, {
+      {
+        dto: MovePageUnderDto,
+        mapArgs: ({ pageId, parentPageId }) => ({
           pageId,
           targetPageId: parentPageId,
-        });
+        }),
+      },
+      async (input) => {
         const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
@@ -821,11 +904,8 @@ export class McpService implements OnModuleDestroy {
       'move_page_to_space',
       'Move a page to a different space',
       { pageId: z.string(), spaceId: z.string() },
-      async ({ pageId, spaceId }) => {
-        const input = await validateDto(MovePageToSpaceDto, {
-          pageId,
-          spaceId,
-        });
+      { dto: MovePageToSpaceDto },
+      async (input) => {
         const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
@@ -861,13 +941,9 @@ export class McpService implements OnModuleDestroy {
       'get_space',
       'Get space information by ID',
       { spaceId: z.string() },
-      async ({ spaceId }) => {
-        const input = await validateDto(SpaceInfoDto, { spaceId });
-        await this.assertSpacePageAccess(
-          user,
-          input.spaceId,
-          SpaceCaslAction.Read,
-        );
+      { dto: SpaceInfoDto },
+      async (input) => {
+        await this.assertSpaceSettingsRead(user, input.spaceId);
         const space = await this.spaceService.getSpaceInfo(
           input.spaceId,
           workspaceId,
@@ -881,6 +957,7 @@ export class McpService implements OnModuleDestroy {
       'list_spaces',
       'List all spaces the user has access to',
       {},
+      { noDto: true },
       async () => {
         const result = await this.spaceMemberService.getUserSpaces(
           userId,
@@ -899,12 +976,8 @@ export class McpService implements OnModuleDestroy {
         slug: z.string(),
         description: z.string().optional(),
       },
-      async ({ name, slug, description }) => {
-        const input = await validateDto(CreateSpaceDto, {
-          name,
-          slug,
-          description,
-        });
+      { dto: CreateSpaceDto },
+      async (input) => {
         const ability = this.workspaceAbility.createForUser(user, workspace);
         if (
           ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Space)
@@ -940,12 +1013,8 @@ export class McpService implements OnModuleDestroy {
         name: z.string().optional(),
         description: z.string().optional(),
       },
-      async ({ spaceId, name, description }) => {
-        const input = await validateDto(UpdateSpaceDto, {
-          spaceId,
-          name,
-          description,
-        });
+      { dto: UpdateSpaceDto },
+      async (input) => {
         await this.assertSpaceSettingsManage(user, input.spaceId);
         const space = await this.spaceService.updateSpace(
           input as any,
@@ -960,8 +1029,8 @@ export class McpService implements OnModuleDestroy {
       'get_comments',
       'Get comments on a page',
       { pageId: z.string(), limit: z.number().optional() },
-      async ({ pageId, limit }) => {
-        const input = await validateDto(PageIdDto, { pageId });
+      { dto: PageIdDto, mapArgs: ({ pageId }) => ({ pageId }) },
+      async (input, { limit }) => {
         const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
@@ -986,12 +1055,15 @@ export class McpService implements OnModuleDestroy {
         pageId: z.string(),
         content: z.string().describe('JSON ProseMirror content string'),
       },
-      async ({ pageId, content }) => {
-        const input = await validateDto(CreateCommentDto, {
+      {
+        dto: CreateCommentDto,
+        mapArgs: ({ pageId, content }) => ({
           pageId,
           content,
           type: 'page',
-        });
+        }),
+      },
+      async (input) => {
         const page = await this.pageRepo.findById(input.pageId);
         if (!page || page.workspaceId !== workspaceId) {
           return {
@@ -1018,11 +1090,8 @@ export class McpService implements OnModuleDestroy {
         commentId: z.string(),
         content: z.string().describe('JSON ProseMirror content string'),
       },
-      async ({ commentId, content }) => {
-        const input = await validateDto(UpdateCommentDto, {
-          commentId,
-          content,
-        });
+      { dto: UpdateCommentDto },
+      async (input) => {
         const existingComment = await this.commentService.findById(
           input.commentId,
           workspaceId,
@@ -1054,12 +1123,15 @@ export class McpService implements OnModuleDestroy {
       'search_attachments',
       'Search attachments (PDF, DOCX) by text content',
       { query: z.string(), limit: z.number().optional() },
-      async ({ query, limit }) => {
-        const input = await validateDto(SearchDTO, {
+      {
+        dto: SearchDTO,
+        mapArgs: ({ query, limit }) => ({
           query,
           limit: this.paginate(limit).limit,
           offset: 0,
-        });
+        }),
+      },
+      async (input) => {
         const result = await this.searchAttachmentsService.searchAttachments(
           input,
           userId,
@@ -1077,6 +1149,7 @@ export class McpService implements OnModuleDestroy {
       'list_workspace_members',
       'List workspace members',
       { limit: z.number().optional() },
+      { noDto: true },
       async ({ limit }) => {
         const ability = this.workspaceAbility.createForUser(user, workspace);
         if (
@@ -1099,6 +1172,7 @@ export class McpService implements OnModuleDestroy {
       'get_current_user',
       'Get information about the currently authenticated user',
       {},
+      { noDto: true },
       async () => {
         const u = await this.userRepo.findById(userId, workspaceId);
         return {
