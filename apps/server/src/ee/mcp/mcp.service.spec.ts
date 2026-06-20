@@ -65,8 +65,6 @@ describe('McpService access control', () => {
       {} as any,
       {} as any,
       {} as any,
-      {} as any,
-      {} as any,
       auditService as any,
     );
   });

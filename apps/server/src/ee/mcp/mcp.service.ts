@@ -11,15 +11,13 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import { InjectKysely } from 'nestjs-kysely';
-import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { PageService } from '../../core/page/services/page.service';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
 import { SpaceService } from '../../core/space/services/space.service';
 import { SpaceMemberService } from '../../core/space/services/space-member.service';
-import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { CommentService } from '../../core/comment/comment.service';
 import { SearchService } from '../../core/search/search.service';
+import { SearchAttachmentsService } from '../../core/search/search-attachments.service';
 import { WorkspaceService } from '../../core/workspace/services/workspace.service';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import SpaceAbilityFactory from '../../core/casl/abilities/space-ability.factory';
@@ -36,7 +34,6 @@ import {
   jsonToMarkdown,
   jsonToHtml,
 } from '../../collaboration/collaboration.util';
-import { sql } from 'kysely';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { PaginationOptions } from '../../database/pagination/pagination-options';
 import {
@@ -46,7 +43,6 @@ import {
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import { ApiKeyScope, hasApiKeyScope } from '../../core/api-key/api-key-scopes';
 import { PageAccessService } from '../../core/page/page-access/page-access.service';
-import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
 import { validateDto } from '../../common/helpers/validate-dto';
 import { CreatePageDto } from '../../core/page/dto/create-page.dto';
 import { UpdatePageDto } from '../../core/page/dto/update-page.dto';
@@ -61,9 +57,9 @@ import { CreateCommentDto } from '../../core/comment/dto/create-comment.dto';
 import { UpdateCommentDto } from '../../core/comment/dto/update-comment.dto';
 import { CreateSpaceDto } from '../../core/space/dto/create-space.dto';
 import { UpdateSpaceDto } from '../../core/space/dto/update-space.dto';
+import { SpaceIdDto as SpaceInfoDto } from '../../core/space/dto/space-id.dto';
+import { SearchDTO } from '../../core/search/dto/search.dto';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const tsquery = require('pg-tsquery')();
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const packageJson = require('../../../package.json');
 
@@ -101,20 +97,18 @@ export class McpService implements OnModuleDestroy {
   private sessions = new Map<string, McpSession>();
 
   constructor(
-    @InjectKysely() private readonly db: KyselyDB,
     private readonly pageService: PageService,
     private readonly pageRepo: PageRepo,
     private readonly spaceService: SpaceService,
     private readonly spaceMemberService: SpaceMemberService,
-    private readonly spaceMemberRepo: SpaceMemberRepo,
     private readonly commentService: CommentService,
     private readonly searchService: SearchService,
+    private readonly searchAttachmentsService: SearchAttachmentsService,
     private readonly workspaceService: WorkspaceService,
     private readonly userRepo: UserRepo,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly workspaceAbility: WorkspaceAbilityFactory,
     private readonly pageAccessService: PageAccessService,
-    private readonly pagePermissionRepo: PagePermissionRepo,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -447,8 +441,24 @@ export class McpService implements OnModuleDestroy {
         limit: z.number().optional(),
       },
       async ({ query, spaceId, limit }) => {
+        const input = await validateDto(SearchDTO, {
+          query,
+          spaceId,
+          limit: this.paginate(limit).limit,
+          offset: 0,
+        });
+        delete input.shareId;
+
+        if (input.spaceId) {
+          await this.assertSpacePageAccess(
+            user,
+            input.spaceId,
+            SpaceCaslAction.Read,
+          );
+        }
+
         const result = await this.searchService.searchPage(
-          { query, spaceId, limit: limit ?? 25, offset: 0 },
+          input,
           { userId, workspaceId },
         );
         return {
@@ -794,17 +804,13 @@ export class McpService implements OnModuleDestroy {
           }
           await this.pageAccessService.validateCanEdit(parentPage, user);
         }
-        await this.pageService.movePage(
-          {
-            pageId: input.pageId,
-            position: page.position ?? 'a0',
-            parentPageId: input.targetPageId ?? null,
-          },
+        await this.pageService.movePageToParent(
           page,
+          input.targetPageId ?? null,
         );
         return {
           content: [
-            { type: 'text', text: `Page ${pageId} moved successfully` },
+            { type: 'text', text: `Page ${input.pageId} moved successfully` },
           ],
         };
       },
@@ -856,9 +862,14 @@ export class McpService implements OnModuleDestroy {
       'Get space information by ID',
       { spaceId: z.string() },
       async ({ spaceId }) => {
-        await this.assertSpacePageAccess(user, spaceId, SpaceCaslAction.Read);
+        const input = await validateDto(SpaceInfoDto, { spaceId });
+        await this.assertSpacePageAccess(
+          user,
+          input.spaceId,
+          SpaceCaslAction.Read,
+        );
         const space = await this.spaceService.getSpaceInfo(
-          spaceId,
+          input.spaceId,
           workspaceId,
         );
         return { content: [{ type: 'text', text: JSON.stringify(space) }] };
@@ -1044,57 +1055,20 @@ export class McpService implements OnModuleDestroy {
       'Search attachments (PDF, DOCX) by text content',
       { query: z.string(), limit: z.number().optional() },
       async ({ query, limit }) => {
-        if (query.length < 1) {
-          return { content: [{ type: 'text', text: '[]' }] };
-        }
-        const requestedLimit = Math.min(Math.max(1, limit ?? 25), MAX_LIMIT);
-        const searchQuery = tsquery(query.trim() + '*');
-        const userSpaceIds = this.spaceMemberRepo.getUserSpaceIdsQuery(userId);
+        const input = await validateDto(SearchDTO, {
+          query,
+          limit: this.paginate(limit).limit,
+          offset: 0,
+        });
+        const result = await this.searchAttachmentsService.searchAttachments(
+          input,
+          userId,
+          workspaceId,
+        );
 
-        const rows = await this.db
-          .selectFrom('attachments as a')
-          .innerJoin('pages as p', 'p.id', 'a.pageId')
-          .innerJoin('spaces as s', 's.id', 'a.spaceId')
-          .select([
-            'a.id',
-            'a.fileName',
-            'a.pageId',
-            'a.creatorId',
-            'a.createdAt',
-            sql<number>`ts_rank(a.tsv, to_tsquery('english', f_unaccent(${searchQuery})))`.as(
-              'rank',
-            ),
-            sql<string>`ts_headline('english', a.text_content, to_tsquery('english', f_unaccent(${searchQuery})), 'MinWords=9,MaxWords=10,MaxFragments=3')`.as(
-              'highlight',
-            ),
-            's.name as spaceName',
-            'p.title as pageTitle',
-            'p.slugId as pageSlugId',
-          ])
-          .where(
-            'a.tsv',
-            '@@',
-            sql<string>`to_tsquery('english', f_unaccent(${searchQuery}))`,
-          )
-          .where('a.workspaceId', '=', workspaceId)
-          .where('a.spaceId', 'in', userSpaceIds)
-          .where('a.deletedAt', 'is', null)
-          .where('p.deletedAt', 'is', null)
-          .orderBy('rank', 'desc')
-          .limit(MAX_LIMIT)
-          .execute();
-
-        const accessiblePageIds =
-          await this.pagePermissionRepo.filterAccessiblePageIds({
-            pageIds: [...new Set(rows.map((item) => item.pageId))],
-            userId,
-          });
-        const accessiblePageIdSet = new Set(accessiblePageIds);
-        const items = rows
-          .filter((item) => accessiblePageIdSet.has(item.pageId))
-          .slice(0, requestedLimit);
-
-        return { content: [{ type: 'text', text: JSON.stringify(items) }] };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result.items) }],
+        };
       },
     );
 
@@ -1106,7 +1080,7 @@ export class McpService implements OnModuleDestroy {
       async ({ limit }) => {
         const ability = this.workspaceAbility.createForUser(user, workspace);
         if (
-          ability.cannot(WorkspaceCaslAction.Read, WorkspaceCaslSubject.Member)
+          ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Member)
         ) {
           throw new ForbiddenException(
             'Forbidden: cannot list workspace members',
