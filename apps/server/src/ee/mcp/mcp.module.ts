@@ -10,6 +10,7 @@ import { ApiKeyModule } from '../../core/api-key/api-key.module';
 import { OAuthModule } from '../oauth/oauth.module';
 import { McpAuthGuard } from './mcp-auth.guard';
 import { PageAccessModule } from '../../core/page/page-access/page-access.module';
+import { TokenModule } from '../../core/auth/token.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PageAccessModule } from '../../core/page/page-access/page-access.module
     WorkspaceModule,
     ApiKeyModule,
     OAuthModule,
+    TokenModule,
     PageAccessModule,
   ],
   controllers: [McpController],
