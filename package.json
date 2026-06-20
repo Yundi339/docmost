@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "build": "nx run-many -t build",
+    "version:check": "node scripts/check-package-versions.mjs",
     "start": "pnpm --filter ./apps/server run start:prod",
     "collab": "pnpm --filter ./apps/server run collab:prod",
     "collab:dev": "pnpm --filter ./apps/server run collab:dev",
