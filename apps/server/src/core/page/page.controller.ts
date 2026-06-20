@@ -768,23 +768,17 @@ export class PageController {
       throw new NotFoundException('Page to copy not found');
     }
 
-    // Check page-level view permission on the source page (need to read to copy)
+    // Copying a page requires edit permission on the source page.
     // Inaccessible child branches are automatically skipped during duplication
-    await this.pageAccessService.validateCanView(copiedPage, user);
+    await this.pageAccessService.validateCanEdit(copiedPage, user);
 
     let result;
 
     // If spaceId is provided, it's a copy to different space
     if (dto.spaceId) {
-      const abilities = await Promise.all([
-        this.spaceAbility.createForUser(user, copiedPage.spaceId),
-        this.spaceAbility.createForUser(user, dto.spaceId),
-      ]);
-
+      const ability = await this.spaceAbility.createForUser(user, dto.spaceId);
       if (
-        abilities.some((ability) =>
-          ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page),
-        )
+        ability.cannot(SpaceCaslAction.Create, SpaceCaslSubject.Page)
       ) {
         throw new ForbiddenException();
       }
@@ -816,7 +810,7 @@ export class PageController {
         user,
         copiedPage.spaceId,
       );
-      if (ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page)) {
+      if (ability.cannot(SpaceCaslAction.Create, SpaceCaslSubject.Page)) {
         throw new ForbiddenException();
       }
 

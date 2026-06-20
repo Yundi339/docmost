@@ -806,11 +806,11 @@ export class McpService implements OnModuleDestroy {
             isError: true,
           };
         }
-        await this.pageAccessService.validateCanView(page, user);
+        await this.pageAccessService.validateCanEdit(page, user);
         await this.assertSpacePageAccess(
           user,
           page.spaceId,
-          SpaceCaslAction.Edit,
+          SpaceCaslAction.Create,
         );
         const newPage = await this.pageService.duplicatePage(
           page,
@@ -845,16 +845,11 @@ export class McpService implements OnModuleDestroy {
             isError: true,
           };
         }
-        await this.pageAccessService.validateCanView(page, user);
-        await this.assertSpacePageAccess(
-          user,
-          page.spaceId,
-          SpaceCaslAction.Edit,
-        );
+        await this.pageAccessService.validateCanEdit(page, user);
         await this.assertSpacePageAccess(
           user,
           input.spaceId,
-          SpaceCaslAction.Edit,
+          SpaceCaslAction.Create,
         );
         const newPage = await this.pageService.duplicatePage(
           page,

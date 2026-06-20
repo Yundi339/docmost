@@ -53,6 +53,11 @@ export class PageAccessService {
       throw new ForbiddenException();
     }
 
+    const spaceCanEdit = ability.can(
+      SpaceCaslAction.Edit,
+      SpaceCaslSubject.Page,
+    );
+
     const { hasAnyRestriction, canAccess, canEdit } =
       await this.pagePermissionRepo.canUserEditPage(user.id, page.id);
 
@@ -61,17 +66,15 @@ export class PageAccessService {
     }
 
     return {
-      canEdit: hasAnyRestriction
-        ? canEdit
-        : ability.can(SpaceCaslAction.Edit, SpaceCaslSubject.Page),
+      canEdit: spaceCanEdit && (hasAnyRestriction ? canEdit : true),
       hasRestriction: hasAnyRestriction,
     };
   }
 
   /**
    * Validate user can edit page, throws ForbiddenException if not.
-   * If page has restrictions: page-level writer permission determines access.
-   * If no restrictions: space-level edit permission determines access.
+   * Space edit permission is the upper bound for all page edits.
+   * If page has restrictions, page-level writer permission must also allow edit.
    */
   async validateCanEdit(
     page: Page,
@@ -84,19 +87,15 @@ export class PageAccessService {
       throw new ForbiddenException();
     }
 
+    if (ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException();
+    }
+
     const { hasAnyRestriction, canEdit } =
       await this.pagePermissionRepo.canUserEditPage(user.id, page.id);
 
-    if (hasAnyRestriction) {
-      // Page has restrictions - use page-level permission
-      if (!canEdit) {
-        throw new ForbiddenException();
-      }
-    } else {
-      // No restrictions - use space-level permission
-      if (ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page)) {
-        throw new ForbiddenException();
-      }
+    if (hasAnyRestriction && !canEdit) {
+      throw new ForbiddenException();
     }
 
     return { hasRestriction: hasAnyRestriction };

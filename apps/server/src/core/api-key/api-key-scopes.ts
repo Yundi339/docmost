@@ -26,13 +26,20 @@ export function normalizeApiKeyScopes(
   fallback: ApiKeyScope[] = DEFAULT_API_KEY_SCOPES,
 ): ApiKeyScope[] {
   const source = scopes?.length ? scopes : fallback;
-  return Array.from(
-    new Set(
-      source.filter((scope): scope is ApiKeyScope =>
-        API_KEY_SCOPES.includes(scope as ApiKeyScope),
-      ),
+  const normalized = new Set(
+    source.filter((scope): scope is ApiKeyScope =>
+      API_KEY_SCOPES.includes(scope as ApiKeyScope),
     ),
   );
+
+  if (normalized.has(ApiKeyScope.REST_WRITE)) {
+    normalized.add(ApiKeyScope.REST_READ);
+  }
+  if (normalized.has(ApiKeyScope.MCP_WRITE)) {
+    normalized.add(ApiKeyScope.MCP_READ);
+  }
+
+  return API_KEY_SCOPES.filter((scope) => normalized.has(scope));
 }
 
 export function hasApiKeyScope(

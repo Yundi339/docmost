@@ -75,6 +75,8 @@ export class AuthenticationExtension implements Extension {
     const { hasAnyRestriction, canAccess, canEdit } =
       await this.pagePermissionRepo.canUserEditPage(user.id, page.id);
 
+    const spaceCanEdit = userSpaceRole !== SpaceRole.READER;
+
     if (hasAnyRestriction) {
       if (!canAccess) {
         this.logger.warn(
@@ -83,7 +85,7 @@ export class AuthenticationExtension implements Extension {
         throw new UnauthorizedException();
       }
 
-      if (!canEdit) {
+      if (!spaceCanEdit || !canEdit) {
         data.connectionConfig.readOnly = true;
         this.logger.debug(
           `User ${user.id} granted readonly access to restricted page: ${pageId}`,

@@ -4,6 +4,10 @@ import { McpService, McpRequestContext } from './mcp.service';
 import { resolveMcpMode } from './mcp.controller';
 import { ApiKeyScope } from '../../core/api-key/api-key-scopes';
 import { PageInfoDto } from '../../core/page/dto/page.dto';
+import {
+  SpaceCaslAction,
+  SpaceCaslSubject,
+} from '../../core/casl/interfaces/space-ability.type';
 
 jest.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
   StreamableHTTPServerTransport: jest.fn().mockImplementation((options) => ({
@@ -82,6 +86,68 @@ describe('McpService access control', () => {
     ipAddress: '203.0.113.10',
     userAgent: 'test-agent',
   });
+
+  function registerMcpTools(overrides: Record<string, any> = {}) {
+    const handlers: Record<string, (args: any) => Promise<any>> = {};
+    const server = {
+      registerTool: jest.fn((name: string, _options: any, handler: any) => {
+        handlers[name] = handler;
+      }),
+    };
+    const pageService = overrides.pageService ?? {
+      duplicatePage: jest
+        .fn()
+        .mockResolvedValue({ id: 'new-page-id', title: 'Copy' }),
+    };
+    const pageRepo = overrides.pageRepo ?? {
+      findById: jest.fn().mockResolvedValue({
+        id: 'page-id',
+        workspaceId: 'workspace-id',
+        spaceId: 'space-id',
+        deletedAt: null,
+      }),
+    };
+    const pageAccessService = overrides.pageAccessService ?? {
+      validateCanEdit: jest.fn().mockResolvedValue({ hasRestriction: false }),
+      validateCanView: jest.fn().mockResolvedValue(undefined),
+    };
+    const spaceAbility = overrides.spaceAbility ?? {
+      createForUser: jest.fn(async () => ({
+        can: jest.fn().mockReturnValue(true),
+        cannot: jest.fn().mockReturnValue(false),
+      })),
+    };
+    const mcp = new McpService(
+      pageService as any,
+      pageRepo as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      spaceAbility as any,
+      {} as any,
+      pageAccessService as any,
+      overrides.auditService ?? auditService,
+    );
+
+    (mcp as any).registerTools(
+      server,
+      { id: 'user-id' },
+      { id: 'workspace-id' },
+      context('read-write', [ApiKeyScope.MCP_WRITE]),
+    );
+
+    return {
+      handlers,
+      pageAccessService,
+      pageService,
+      pageRepo,
+      spaceAbility,
+    };
+  }
 
   it('resolves legacy and mode-based MCP settings', () => {
     expect(resolveMcpMode({ mcpMode: 'read-only', mcp: true })).toBe(
@@ -265,6 +331,50 @@ describe('McpService access control', () => {
     await expect(
       (mcp as any).findActiveWorkspacePage('page-id', 'workspace-id'),
     ).resolves.toBeNull();
+  });
+
+  it('requires source page edit permission for duplicate_page', async () => {
+    const { handlers, pageAccessService, pageService } = registerMcpTools({
+      auditService,
+      pageAccessService: {
+        validateCanEdit: jest
+          .fn()
+          .mockRejectedValue(new ForbiddenException()),
+        validateCanView: jest.fn(),
+      },
+    });
+
+    await expect(
+      handlers.duplicate_page({ pageId: 'page-id' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(pageAccessService.validateCanEdit).toHaveBeenCalled();
+    expect(pageAccessService.validateCanView).not.toHaveBeenCalled();
+    expect(pageService.duplicatePage).not.toHaveBeenCalled();
+  });
+
+  it('requires target space create permission for copy_page_to_space', async () => {
+    const { handlers, pageService } = registerMcpTools({
+      auditService,
+      spaceAbility: {
+        createForUser: jest.fn(async (_user, spaceId: string) => ({
+          can: jest.fn().mockReturnValue(false),
+          cannot: jest.fn(
+            (action: SpaceCaslAction, subject: SpaceCaslSubject) =>
+              spaceId === 'target-space-id' &&
+              action === SpaceCaslAction.Create &&
+              subject === SpaceCaslSubject.Page,
+          ),
+        })),
+      },
+    });
+
+    await expect(
+      handlers.copy_page_to_space({
+        pageId: 'page-id',
+        spaceId: 'target-space-id',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(pageService.duplicatePage).not.toHaveBeenCalled();
   });
 
   it('rejects session owner mismatch', async () => {
