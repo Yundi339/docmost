@@ -11,9 +11,8 @@ on:
         required: false
         default: 'branch-build'
       source_ref:
-        description: 'Git ref/branch to build (for example feat_fastopt or feat/apitable-fusion-db)'
+        description: 'Git ref/branch to build. Leave empty to use the selected workflow branch.'
         required: false
-        default: 'feat_fastopt'
 
 permissions:
   contents: write
