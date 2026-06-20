@@ -1,4 +1,10 @@
-import { Logger, Module } from '@nestjs/common';
+import {
+  Logger,
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -27,6 +33,8 @@ import { ClsModule } from 'nestjs-cls';
 import { NoopAuditModule } from './integrations/audit/audit.module';
 import { ThrottleModule } from './integrations/throttle/throttle.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { DomainMiddleware } from './common/middlewares/domain.middleware';
+import { AuditContextMiddleware } from './common/middlewares/audit-context.middleware';
 
 const enterpriseModules = [];
 try {
@@ -96,4 +104,23 @@ try {
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    const excludedRoutes = [
+      { path: 'auth/setup', method: RequestMethod.POST },
+      { path: 'health', method: RequestMethod.GET },
+      { path: 'health/live', method: RequestMethod.GET },
+      { path: 'billing/stripe/webhook', method: RequestMethod.POST },
+    ];
+
+    consumer
+      .apply(DomainMiddleware)
+      .exclude(...excludedRoutes)
+      .forRoutes('*');
+
+    consumer
+      .apply(AuditContextMiddleware)
+      .exclude(...excludedRoutes)
+      .forRoutes('*');
+  }
+}

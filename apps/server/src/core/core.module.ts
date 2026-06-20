@@ -1,9 +1,4 @@
-import {
-  MiddlewareConsumer,
-  Module,
-  NestModule,
-  RequestMethod,
-} from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { WorkspaceModule } from './workspace/workspace.module';
@@ -15,8 +10,6 @@ import { SpaceModule } from './space/space.module';
 import { GroupModule } from './group/group.module';
 import { CaslModule } from './casl/casl.module';
 import { PageAccessModule } from './page/page-access/page-access.module';
-import { DomainMiddleware } from '../common/middlewares/domain.middleware';
-import { AuditContextMiddleware } from '../common/middlewares/audit-context.middleware';
 import { ShareModule } from './share/share.module';
 import { LabelModule } from './label/label.module';
 import { NotificationModule } from './notification/notification.module';
@@ -27,7 +20,6 @@ import { TemplateModule } from './template/template.module';
 import { ApiKeyModule } from './api-key/api-key.module';
 import { SystemStatusModule } from './system-status/system-status.module';
 import { DatabaseFeatureModule } from './database/database.module';
-import { ClsMiddleware } from 'nestjs-cls';
 
 @Module({
   imports: [
@@ -54,23 +46,4 @@ import { ClsMiddleware } from 'nestjs-cls';
     DatabaseFeatureModule,
   ],
 })
-export class CoreModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    const excludedRoutes = [
-      { path: 'auth/setup', method: RequestMethod.POST },
-      { path: 'health', method: RequestMethod.GET },
-      { path: 'health/live', method: RequestMethod.GET },
-      { path: 'billing/stripe/webhook', method: RequestMethod.POST },
-    ];
-
-    consumer
-      .apply(DomainMiddleware)
-      .exclude(...excludedRoutes)
-      .forRoutes('*');
-
-    consumer
-      .apply(AuditContextMiddleware)
-      .exclude(...excludedRoutes)
-      .forRoutes('*');
-  }
-}
+export class CoreModule {}
