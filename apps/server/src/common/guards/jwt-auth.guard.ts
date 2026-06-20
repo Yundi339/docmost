@@ -47,7 +47,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
   private assertApiKeyRestScope(ctx: ExecutionContext) {
     const req = ctx.switchToHttp().getRequest();
-    if (req.raw?.authType !== JwtType.API_KEY || isMcpRequest(req)) {
+    if (req.raw?.authType !== JwtType.API_KEY) {
       return;
     }
 
@@ -101,9 +101,4 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
 function isReadMethod(method?: string) {
   return ['GET', 'HEAD', 'OPTIONS'].includes(method ?? '');
-}
-
-function isMcpRequest(req: any) {
-  const url = req.url ?? req.raw?.url ?? '';
-  return url === '/mcp' || url.startsWith('/mcp/') || url.includes('/mcp');
 }

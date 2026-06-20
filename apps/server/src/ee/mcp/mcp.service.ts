@@ -34,7 +34,7 @@ import {
   jsonToMarkdown,
   jsonToHtml,
 } from '../../collaboration/collaboration.util';
-import { User, Workspace } from '@docmost/db/types/entity.types';
+import { Page, User, Workspace } from '@docmost/db/types/entity.types';
 import { PaginationOptions } from '../../database/pagination/pagination-options';
 import {
   AUDIT_SERVICE,
@@ -259,6 +259,18 @@ export class McpService implements OnModuleDestroy {
     opts.query = '';
     opts.adminView = false;
     return opts;
+  }
+
+  private async findActiveWorkspacePage(
+    pageId: string,
+    workspaceId: string,
+    opts?: Parameters<PageRepo['findById']>[1],
+  ): Promise<Page | null> {
+    const page = await this.pageRepo.findById(pageId, opts);
+    if (!page || page.workspaceId !== workspaceId || page.deletedAt) {
+      return null;
+    }
+    return page;
   }
 
   private async assertSpacePageAccess(
@@ -569,11 +581,15 @@ export class McpService implements OnModuleDestroy {
       },
       { dto: PageInfoDto },
       async (input) => {
-        const page = await this.pageRepo.findById(input.pageId, {
-          includeContent: true,
-          includeSpace: true,
-        });
-        if (!page || page.workspaceId !== workspaceId) {
+        const page = await this.findActiveWorkspacePage(
+          input.pageId,
+          workspaceId,
+          {
+            includeContent: true,
+            includeSpace: true,
+          },
+        );
+        if (!page) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
             isError: true,
@@ -678,8 +694,11 @@ export class McpService implements OnModuleDestroy {
       },
       { dto: UpdatePageDto },
       async (input) => {
-        const page = await this.pageRepo.findById(input.pageId);
-        if (!page || page.workspaceId !== workspaceId) {
+        const page = await this.findActiveWorkspacePage(
+          input.pageId,
+          workspaceId,
+        );
+        if (!page) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
             isError: true,
@@ -739,11 +758,12 @@ export class McpService implements OnModuleDestroy {
       { spaceId: z.string(), pageId: z.string(), limit: z.number().optional() },
       { dto: SidebarPageDto },
       async (input, { limit }) => {
-        const page = await this.pageRepo.findById(input.pageId);
+        const page = await this.findActiveWorkspacePage(
+          input.pageId,
+          workspaceId,
+        );
         if (
           !page ||
-          page.deletedAt ||
-          page.workspaceId !== workspaceId ||
           page.spaceId !== input.spaceId
         ) {
           return {
@@ -776,8 +796,11 @@ export class McpService implements OnModuleDestroy {
       { pageId: z.string() },
       { dto: DuplicatePageDto, mapArgs: ({ pageId }) => ({ pageId }) },
       async (input) => {
-        const page = await this.pageRepo.findById(input.pageId);
-        if (!page || page.workspaceId !== workspaceId) {
+        const page = await this.findActiveWorkspacePage(
+          input.pageId,
+          workspaceId,
+        );
+        if (!page) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
             isError: true,
@@ -812,8 +835,11 @@ export class McpService implements OnModuleDestroy {
       { pageId: z.string(), spaceId: z.string() },
       { dto: DuplicatePageDto },
       async (input) => {
-        const page = await this.pageRepo.findById(input.pageId);
-        if (!page || page.workspaceId !== workspaceId) {
+        const page = await this.findActiveWorkspacePage(
+          input.pageId,
+          workspaceId,
+        );
+        if (!page) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
             isError: true,
@@ -859,8 +885,11 @@ export class McpService implements OnModuleDestroy {
         }),
       },
       async (input) => {
-        const page = await this.pageRepo.findById(input.pageId);
-        if (!page || page.workspaceId !== workspaceId) {
+        const page = await this.findActiveWorkspacePage(
+          input.pageId,
+          workspaceId,
+        );
+        if (!page) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
             isError: true,
@@ -906,8 +935,11 @@ export class McpService implements OnModuleDestroy {
       { pageId: z.string(), spaceId: z.string() },
       { dto: MovePageToSpaceDto },
       async (input) => {
-        const page = await this.pageRepo.findById(input.pageId);
-        if (!page || page.workspaceId !== workspaceId) {
+        const page = await this.findActiveWorkspacePage(
+          input.pageId,
+          workspaceId,
+        );
+        if (!page) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
             isError: true,
@@ -1031,8 +1063,11 @@ export class McpService implements OnModuleDestroy {
       { pageId: z.string(), limit: z.number().optional() },
       { dto: PageIdDto, mapArgs: ({ pageId }) => ({ pageId }) },
       async (input, { limit }) => {
-        const page = await this.pageRepo.findById(input.pageId);
-        if (!page || page.workspaceId !== workspaceId) {
+        const page = await this.findActiveWorkspacePage(
+          input.pageId,
+          workspaceId,
+        );
+        if (!page) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
             isError: true,
@@ -1064,8 +1099,11 @@ export class McpService implements OnModuleDestroy {
         }),
       },
       async (input) => {
-        const page = await this.pageRepo.findById(input.pageId);
-        if (!page || page.workspaceId !== workspaceId) {
+        const page = await this.findActiveWorkspacePage(
+          input.pageId,
+          workspaceId,
+        );
+        if (!page) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
             isError: true,
@@ -1102,8 +1140,11 @@ export class McpService implements OnModuleDestroy {
         if (existingComment.creatorId !== userId) {
           throw new ForbiddenException('You can only edit your own comments');
         }
-        const page = await this.pageRepo.findById(existingComment.pageId);
-        if (!page || page.workspaceId !== workspaceId) {
+        const page = await this.findActiveWorkspacePage(
+          existingComment.pageId,
+          workspaceId,
+        );
+        if (!page) {
           throw new NotFoundException('Page not found');
         }
         await this.pageAccessService.validateCanComment(page, user, workspaceId);

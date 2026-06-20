@@ -238,6 +238,35 @@ describe('McpService access control', () => {
     ).resolves.toEqual({ ignored: true });
   });
 
+  it('treats deleted pages as missing for MCP page tools', async () => {
+    const pageRepo = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'page-id',
+        workspaceId: 'workspace-id',
+        deletedAt: new Date(),
+      }),
+    };
+    const mcp = new McpService(
+      {} as any,
+      pageRepo as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      auditService as any,
+    );
+
+    await expect(
+      (mcp as any).findActiveWorkspacePage('page-id', 'workspace-id'),
+    ).resolves.toBeNull();
+  });
+
   it('rejects session owner mismatch', async () => {
     const end = jest.fn();
     const res = {

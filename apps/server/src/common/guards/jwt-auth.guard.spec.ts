@@ -89,18 +89,19 @@ describe('JwtAuthGuard', () => {
     expect(guard.handleRequest(null, user, null, context(req))).toBe(user);
   });
 
-  it('does not apply REST scopes to MCP requests', () => {
-    const user = { id: 'user-id', workspace: { id: 'workspace-id' } };
+  it('does not skip REST scope checks when a REST URL contains /mcp', () => {
     const req = {
       method: 'POST',
-      url: '/mcp',
+      url: '/pages/update?next=/mcp',
       raw: {
         authType: JwtType.API_KEY,
-        apiKey: { scopes: [ApiKeyScope.MCP_READ] },
+        apiKey: { scopes: [ApiKeyScope.MCP_WRITE] },
       },
       cookies: {},
     };
 
-    expect(guard.handleRequest(null, user, null, context(req))).toBe(user);
+    expect(() =>
+      guard.handleRequest(null, { id: 'user-id' }, null, context(req)),
+    ).toThrow(ForbiddenException);
   });
 });
