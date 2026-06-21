@@ -24,6 +24,8 @@ const CHATGPT_CORS_PATHS = [
   '/.well-known/oauth-protected-resource',
   '/.well-known/oauth-authorization-server',
   '/.well-known/openid-configuration',
+  '/.well-known/oauth-authorization-server/mcp',
+  '/.well-known/openid-configuration/mcp',
   '/api/oauth/register',
   '/api/oauth/token',
   '/mcp',
@@ -89,7 +91,9 @@ async function bootstrap() {
       '.well-known/oauth-protected-resource',
       '.well-known/oauth-protected-resource/mcp',
       '.well-known/oauth-authorization-server',
+      '.well-known/oauth-authorization-server/mcp',
       '.well-known/openid-configuration',
+      '.well-known/openid-configuration/mcp',
     ],
   });
 

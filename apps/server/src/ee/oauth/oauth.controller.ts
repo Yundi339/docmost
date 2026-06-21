@@ -59,8 +59,26 @@ export class OAuthMetadataController {
   }
 
   @SkipTransform()
+  @Get('oauth-authorization-server/mcp')
+  async authorizationServerForMcp(@Req() req: FastifyRequest) {
+    return this.oauthService.getAuthorizationServerMetadata(
+      await getWorkspaceFromRequest(this.oauthService, req),
+      req,
+    );
+  }
+
+  @SkipTransform()
   @Get('openid-configuration')
   async openIdConfiguration(@Req() req: FastifyRequest) {
+    return this.oauthService.getAuthorizationServerMetadata(
+      await getWorkspaceFromRequest(this.oauthService, req),
+      req,
+    );
+  }
+
+  @SkipTransform()
+  @Get('openid-configuration/mcp')
+  async openIdConfigurationForMcp(@Req() req: FastifyRequest) {
     return this.oauthService.getAuthorizationServerMetadata(
       await getWorkspaceFromRequest(this.oauthService, req),
       req,
