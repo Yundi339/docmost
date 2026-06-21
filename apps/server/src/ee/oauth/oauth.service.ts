@@ -73,6 +73,9 @@ type RegisteredDcrClient = {
   clientName: string;
   clientUri?: string;
   redirectUris: string[];
+  grantTypes: string[];
+  responseTypes: string[];
+  tokenEndpointAuthMethod: 'none';
   scopes: OAuthScopeValue[];
   createdAt: string;
   updatedAt?: string;
@@ -226,13 +229,14 @@ export class OAuthService {
       this.assertSafeChatGptRedirectUri(redirectUri);
     }
 
-    const tokenEndpointAuthMethod =
+    const requestedTokenEndpointAuthMethod =
       input.token_endpoint_auth_method?.trim() || 'none';
-    if (tokenEndpointAuthMethod !== 'none') {
+    if (requestedTokenEndpointAuthMethod !== 'none') {
       throw new BadRequestException(
         'Only token_endpoint_auth_method "none" is supported',
       );
     }
+    const tokenEndpointAuthMethod: 'none' = 'none';
 
     const grantTypes = input.grant_types?.length
       ? input.grant_types
@@ -272,6 +276,9 @@ export class OAuthService {
       clientName: truncate(input.client_name?.trim() || 'ChatGPT', 255),
       clientUri: sanitizeOptionalUrl(input.client_uri),
       redirectUris,
+      grantTypes,
+      responseTypes,
+      tokenEndpointAuthMethod,
       scopes,
       createdAt: existing?.createdAt || now,
       updatedAt: now,
@@ -1424,6 +1431,12 @@ function normalizeRegisteredDcrClient(
     clientName,
     clientUri: typeof raw.clientUri === 'string' ? raw.clientUri : undefined,
     redirectUris,
+    grantTypes: normalizeStringArray(raw.grantTypes, [
+      'authorization_code',
+      'refresh_token',
+    ]),
+    responseTypes: normalizeStringArray(raw.responseTypes, ['code']),
+    tokenEndpointAuthMethod: 'none',
     scopes,
     createdAt: createdAt || new Date(0).toISOString(),
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
@@ -1453,12 +1466,23 @@ function toRegistrationResponse(
     client_name: client.clientName,
     client_uri: client.clientUri,
     redirect_uris: client.redirectUris,
-    grant_types: ['authorization_code', 'refresh_token'],
-    response_types: ['code'],
-    token_endpoint_auth_method: 'none',
+    grant_types: client.grantTypes,
+    response_types: client.responseTypes,
+    token_endpoint_auth_method: client.tokenEndpointAuthMethod,
     scope: client.scopes.join(' '),
     client_id_issued_at: Math.floor(Date.parse(client.createdAt) / 1000),
   };
+}
+
+function normalizeStringArray(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const values = value.filter(
+    (item): item is string => typeof item === 'string' && item.length > 0,
+  );
+  return values.length ? values : fallback;
 }
 
 function sanitizeOptionalUrl(value?: string) {
