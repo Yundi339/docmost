@@ -180,6 +180,10 @@ export default function WorkspaceOAuthManagement() {
               label={t("Authorization server metadata")}
               value={chatgptClient.authorizationServerMetadataUrl}
             />
+            <CopyRow
+              label={t("Dynamic client registration")}
+              value={chatgptClient.registrationEndpoint}
+            />
           </Stack>
         </Paper>
       ) : (

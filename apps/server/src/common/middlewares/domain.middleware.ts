@@ -1,4 +1,4 @@
-import { Injectable, NestMiddleware, NotFoundException } from '@nestjs/common';
+import { Injectable, NestMiddleware } from '@nestjs/common';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
@@ -17,29 +17,50 @@ export class DomainMiddleware implements NestMiddleware {
     if (this.environmentService.isSelfHosted()) {
       const workspace = await this.workspaceRepo.findFirst();
       if (!workspace) {
-        //throw new NotFoundException('Workspace not found');
-        (req as any).workspaceId = null;
+        setWorkspaceContext(req, null);
         return next();
       }
 
-      // TODO: unify
-      (req as any).workspaceId = workspace.id;
-      (req as any).workspace = workspace;
+      setWorkspaceContext(req, workspace);
     } else if (this.environmentService.isCloud()) {
-      const header = req.headers.host;
-      const subdomain = header.split('.')[0];
+      const host = getRequestHost(req);
+      const subdomain = host?.split('.')[0];
 
-      const workspace = await this.workspaceRepo.findByHostname(subdomain);
+      const workspace = subdomain
+        ? await this.workspaceRepo.findByHostname(subdomain)
+        : null;
 
       if (!workspace) {
-        (req as any).workspaceId = null;
+        setWorkspaceContext(req, null);
         return next();
       }
 
-      (req as any).workspaceId = workspace.id;
-      (req as any).workspace = workspace;
+      setWorkspaceContext(req, workspace);
     }
 
     next();
   }
+}
+
+function setWorkspaceContext(req: unknown, workspace: any | null) {
+  const request = req as any;
+  const raw = request.raw ?? request;
+  const workspaceId = workspace?.id ?? null;
+
+  request.workspaceId = workspaceId;
+  request.workspace = workspace ?? undefined;
+
+  raw.workspaceId = workspaceId;
+  raw.workspace = workspace ?? undefined;
+}
+
+function getRequestHost(req: FastifyRequest['raw']) {
+  const forwardedHost = getFirstHeaderValue(req.headers['x-forwarded-host']);
+  const host = forwardedHost || getFirstHeaderValue(req.headers.host);
+  return host?.split(':')[0]?.trim().toLowerCase();
+}
+
+function getFirstHeaderValue(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw?.split(',')[0]?.trim();
 }

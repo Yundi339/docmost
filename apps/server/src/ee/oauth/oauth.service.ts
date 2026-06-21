@@ -31,6 +31,8 @@ import {
 import {
   OAuthAuthorizeQuery,
   OAuthClientMetadata,
+  OAuthClientRegistrationRequest,
+  OAuthClientRegistrationResponse,
   OAuthRequestError,
   OAuthTokenRequest,
   OAuthTokenResponse,
@@ -66,6 +68,20 @@ type ResolvedAuthorizeRequest = {
   codeChallengeMethod: 'S256';
 };
 
+type RegisteredDcrClient = {
+  clientId: string;
+  clientName: string;
+  clientUri?: string;
+  redirectUris: string[];
+  scopes: OAuthScopeValue[];
+  createdAt: string;
+  updatedAt?: string;
+};
+
+type OAuthClientSettings = {
+  dcrClients?: RegisteredDcrClient[];
+};
+
 export type OAuthClientView = {
   id: string;
   provider: string;
@@ -80,6 +96,7 @@ export type OAuthClientView = {
   authorizationServerMetadataUrl: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
+  registrationEndpoint: string;
 };
 
 @Injectable()
@@ -95,6 +112,29 @@ export class OAuthService {
 
   getMcpResourceUrl(workspace: Workspace, req?: FastifyRequest): string {
     return normalizeResourceUrl(`${this.getIssuer(workspace, req)}/mcp`);
+  }
+
+  async resolveWorkspaceFromRequest(
+    req?: FastifyRequest,
+  ): Promise<Workspace | undefined> {
+    const workspace = getRequestValue<Workspace>(req, 'workspace');
+    if (workspace) {
+      return workspace;
+    }
+
+    if (this.environmentService.isSelfHosted()) {
+      return this.workspaceRepo.findFirst();
+    }
+
+    if (this.environmentService.isCloud()) {
+      const host = getRequestHost(req);
+      const subdomain = host?.split('.')[0];
+      if (subdomain) {
+        return this.workspaceRepo.findByHostname(subdomain);
+      }
+    }
+
+    return undefined;
   }
 
   getIssuer(workspace: Workspace, req?: FastifyRequest): string {
@@ -131,7 +171,7 @@ export class OAuthService {
       grant_types_supported: ['authorization_code', 'refresh_token'],
       code_challenge_methods_supported: ['S256'],
       scopes_supported: SUPPORTED_OAUTH_SCOPES,
-      client_id_metadata_document_supported: true,
+      registration_endpoint: `${issuer}/api/oauth/register`,
       token_endpoint_auth_methods_supported: ['none'],
       resource_documentation: `${issuer}/settings/account/oauth`,
     };
@@ -174,6 +214,89 @@ export class OAuthService {
       .execute();
 
     return rows.map((row) => this.toClientView(row, workspace, req));
+  }
+
+  async registerClient(
+    input: OAuthClientRegistrationRequest,
+    workspace: Workspace,
+  ): Promise<OAuthClientRegistrationResponse> {
+    const oauthClient = await this.getEnabledChatGptClient(workspace.id);
+    const redirectUris = normalizeRedirectUris(input.redirect_uris);
+    for (const redirectUri of redirectUris) {
+      this.assertSafeChatGptRedirectUri(redirectUri);
+    }
+
+    const tokenEndpointAuthMethod =
+      input.token_endpoint_auth_method?.trim() || 'none';
+    if (tokenEndpointAuthMethod !== 'none') {
+      throw new BadRequestException(
+        'Only token_endpoint_auth_method "none" is supported',
+      );
+    }
+
+    const grantTypes = input.grant_types?.length
+      ? input.grant_types
+      : ['authorization_code', 'refresh_token'];
+    if (
+      grantTypes.some(
+        (grantType) =>
+          grantType !== 'authorization_code' && grantType !== 'refresh_token',
+      )
+    ) {
+      throw new BadRequestException('Unsupported OAuth grant type');
+    }
+
+    const responseTypes = input.response_types?.length
+      ? input.response_types
+      : ['code'];
+    if (responseTypes.some((responseType) => responseType !== 'code')) {
+      throw new BadRequestException('Unsupported OAuth response type');
+    }
+
+    const scopes = normalizeScopes(
+      parseScopes(input.scope),
+      DEFAULT_OAUTH_SCOPES,
+    );
+    this.assertMcpScopesAllowed(workspace, scopes);
+    if (!isSubset(scopes, oauthClient.allowedScopes)) {
+      throw new ForbiddenException('Requested OAuth scope is not allowed');
+    }
+
+    const settings = normalizeOAuthClientSettings(oauthClient.settings);
+    const existing = settings.dcrClients?.find((client) =>
+      sameStringSet(client.redirectUris, redirectUris),
+    );
+    const now = new Date().toISOString();
+    const registeredClient: RegisteredDcrClient = {
+      clientId: existing?.clientId || `docmost-${this.generateOpaqueToken(24)}`,
+      clientName: truncate(input.client_name?.trim() || 'ChatGPT', 255),
+      clientUri: sanitizeOptionalUrl(input.client_uri),
+      redirectUris,
+      scopes,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    };
+    const dcrClients = [
+      registeredClient,
+      ...(settings.dcrClients ?? []).filter(
+        (client) => client.clientId !== registeredClient.clientId,
+      ),
+    ].slice(0, 50);
+
+    await this.db
+      .updateTable('oauthClients')
+      .set({
+        settings: {
+          ...settings,
+          dcrClients,
+        },
+        updatedAt: new Date(),
+      })
+      .where('id', '=', oauthClient.id)
+      .where('workspaceId', '=', workspace.id)
+      .execute();
+
+    return toRegistrationResponse(registeredClient);
   }
 
   async updateClient(
@@ -837,6 +960,9 @@ export class OAuthService {
       oauthClient,
       clientId,
     );
+    const registeredClient = clientMetadata
+      ? undefined
+      : getRegisteredDcrClient(oauthClient.settings, clientId);
     if (clientMetadata) {
       if (clientMetadata.client_id !== clientId) {
         throw new BadRequestException(
@@ -846,11 +972,20 @@ export class OAuthService {
       if (!clientMetadata.redirect_uris?.includes(redirectUri)) {
         throw new BadRequestException('OAuth redirect_uri is not registered');
       }
+    } else if (registeredClient) {
+      if (!registeredClient.redirectUris.includes(redirectUri)) {
+        throw new BadRequestException('OAuth redirect_uri is not registered');
+      }
     } else if (oauthClient.clientId !== clientId) {
       throw new BadRequestException('OAuth client is not registered');
     }
 
-    if (!isSubset(requestedScopes, oauthClient.allowedScopes)) {
+    const clientAllowedScopes =
+      registeredClient?.scopes ?? oauthClient.allowedScopes;
+    if (
+      !isSubset(requestedScopes, oauthClient.allowedScopes) ||
+      !isSubset(requestedScopes, clientAllowedScopes)
+    ) {
       throw new ForbiddenException('Requested OAuth scope is not allowed');
     }
 
@@ -858,10 +993,15 @@ export class OAuthService {
       oauthClient,
       clientId,
       clientName: truncate(
-        clientMetadata?.client_name?.trim() || oauthClient.name || 'ChatGPT',
+        clientMetadata?.client_name?.trim() ||
+          registeredClient?.clientName ||
+          oauthClient.name ||
+          'ChatGPT',
         255,
       ),
-      clientUri: sanitizeOptionalUrl(clientMetadata?.client_uri),
+      clientUri:
+        sanitizeOptionalUrl(clientMetadata?.client_uri) ||
+        registeredClient?.clientUri,
       redirectUri,
       resource,
       scopes: requestedScopes,
@@ -1021,6 +1161,7 @@ export class OAuthService {
       authorizationServerMetadataUrl: `${issuer}/.well-known/oauth-authorization-server`,
       authorizationEndpoint: `${issuer}/oauth/authorize`,
       tokenEndpoint: `${issuer}/api/oauth/token`,
+      registrationEndpoint: `${issuer}/api/oauth/register`,
     };
   }
 
@@ -1092,7 +1233,24 @@ function normalizeScopes(input: string[] | undefined, defaults: string[]) {
 }
 
 function parseScopes(scope?: string) {
-  return scope?.split(/\s+/).filter(Boolean) ?? [];
+  return scope?.split(/[\s,]+/).filter(Boolean) ?? [];
+}
+
+function normalizeRedirectUris(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new BadRequestException('redirect_uris is required');
+  }
+
+  const redirectUris = [...new Set(value)]
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (!redirectUris.length || redirectUris.length !== value.length) {
+    throw new BadRequestException('redirect_uris is invalid');
+  }
+
+  return redirectUris;
 }
 
 function isSubset(left: readonly string[], right: readonly string[]) {
@@ -1173,6 +1331,27 @@ function getRequestOrigin(req?: FastifyRequest) {
   }
 }
 
+function getRequestHost(req?: FastifyRequest) {
+  if (!req) {
+    return undefined;
+  }
+
+  const forwardedHost = getFirstHeaderValue(req.headers['x-forwarded-host']);
+  const host = forwardedHost || getFirstHeaderValue(req.headers.host);
+  return host?.split(':')[0]?.trim().toLowerCase();
+}
+
+function getRequestValue<T>(
+  req: FastifyRequest | undefined,
+  key: string,
+): T | undefined {
+  if (!req) {
+    return undefined;
+  }
+
+  return ((req.raw as any)?.[key] ?? (req as any)?.[key]) as T | undefined;
+}
+
 function getFirstHeaderValue(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;
   return raw?.split(',')[0]?.trim();
@@ -1193,6 +1372,93 @@ function appendRedirectParams(
     }
   }
   return url.toString();
+}
+
+function normalizeOAuthClientSettings(settings: unknown): OAuthClientSettings {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+    return {};
+  }
+
+  const raw = settings as Record<string, unknown>;
+  const dcrClients = Array.isArray(raw.dcrClients)
+    ? raw.dcrClients.map(normalizeRegisteredDcrClient).filter(Boolean)
+    : undefined;
+
+  return {
+    ...raw,
+    dcrClients,
+  } as OAuthClientSettings;
+}
+
+function normalizeRegisteredDcrClient(
+  value: unknown,
+): RegisteredDcrClient | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const raw = value as Record<string, unknown>;
+  const clientId = typeof raw.clientId === 'string' ? raw.clientId : undefined;
+  const clientName =
+    typeof raw.clientName === 'string' ? raw.clientName : undefined;
+  const redirectUris = Array.isArray(raw.redirectUris)
+    ? raw.redirectUris.filter(
+        (redirectUri): redirectUri is string =>
+          typeof redirectUri === 'string' && redirectUri.length > 0,
+      )
+    : undefined;
+  const scopes = Array.isArray(raw.scopes)
+    ? raw.scopes.filter((scope): scope is OAuthScopeValue =>
+        SUPPORTED_OAUTH_SCOPES.includes(scope as OAuthScopeValue),
+      )
+    : undefined;
+  const createdAt =
+    typeof raw.createdAt === 'string' ? raw.createdAt : undefined;
+
+  if (!clientId || !clientName || !redirectUris?.length || !scopes?.length) {
+    return undefined;
+  }
+
+  return {
+    clientId,
+    clientName,
+    clientUri: typeof raw.clientUri === 'string' ? raw.clientUri : undefined,
+    redirectUris,
+    scopes,
+    createdAt: createdAt || new Date(0).toISOString(),
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+  };
+}
+
+function getRegisteredDcrClient(settings: unknown, clientId: string) {
+  return normalizeOAuthClientSettings(settings).dcrClients?.find(
+    (client) => client.clientId === clientId,
+  );
+}
+
+function sameStringSet(left: readonly string[], right: readonly string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const rightSet = new Set(right);
+  return left.every((item) => rightSet.has(item));
+}
+
+function toRegistrationResponse(
+  client: RegisteredDcrClient,
+): OAuthClientRegistrationResponse {
+  return {
+    client_id: client.clientId,
+    client_name: client.clientName,
+    client_uri: client.clientUri,
+    redirect_uris: client.redirectUris,
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+    token_endpoint_auth_method: 'none',
+    scope: client.scopes.join(' '),
+    client_id_issued_at: Math.floor(Date.parse(client.createdAt) / 1000),
+  };
 }
 
 function sanitizeOptionalUrl(value?: string) {

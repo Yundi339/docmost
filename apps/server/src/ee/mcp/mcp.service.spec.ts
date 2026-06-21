@@ -292,7 +292,10 @@ describe('McpService access control', () => {
     await expect(
       (service as any).prepareMcpToolInput(
         'get_page',
-        { format: 'xml' },
+        {
+          pageId: '018f3f73-2f69-7c8d-9d79-8f3f4d7d9711',
+          format: 'xml',
+        },
         { dto: PageInfoDto },
       ),
     ).rejects.toThrow('format must be one of the following values');

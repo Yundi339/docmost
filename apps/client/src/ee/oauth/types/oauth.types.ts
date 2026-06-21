@@ -14,6 +14,7 @@ export interface IOAuthClient {
   authorizationServerMetadataUrl: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
+  registrationEndpoint: string;
 }
 
 export interface IOAuthAuthorization {

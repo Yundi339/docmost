@@ -17,6 +17,29 @@ export type OAuthClientMetadata = {
   scope?: string;
 };
 
+export type OAuthClientRegistrationRequest = {
+  redirect_uris?: string[];
+  token_endpoint_auth_method?: string;
+  grant_types?: string[];
+  response_types?: string[];
+  client_name?: string;
+  client_uri?: string;
+  logo_uri?: string;
+  scope?: string;
+};
+
+export type OAuthClientRegistrationResponse = {
+  client_id: string;
+  client_name: string;
+  client_uri?: string;
+  redirect_uris: string[];
+  grant_types: string[];
+  response_types: string[];
+  token_endpoint_auth_method: string;
+  scope: string;
+  client_id_issued_at: number;
+};
+
 export type OAuthAuthorizeQuery = {
   response_type?: string;
   client_id?: string;

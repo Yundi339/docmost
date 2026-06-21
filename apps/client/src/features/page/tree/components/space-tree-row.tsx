@@ -94,13 +94,17 @@ export function SpaceTreeRow({
 
   const prefetchPage = () => {
     timerRef.current = setTimeout(async () => {
+      const pageKey = node.slugId || node.id;
       const page = await queryClient.fetchQuery({
-        queryKey: ["pages", node.id],
-        queryFn: () => getPageById({ pageId: node.id }),
+        queryKey: ["pages", pageKey],
+        queryFn: () => getPageById({ pageId: pageKey }),
         staleTime: 5 * 60 * 1000,
       });
       if (page?.slugId) {
         queryClient.setQueryData(["pages", page.slugId], page);
+      }
+      if (page?.id) {
+        queryClient.setQueryData(["pages", page.id], page);
       }
     }, 150);
   };

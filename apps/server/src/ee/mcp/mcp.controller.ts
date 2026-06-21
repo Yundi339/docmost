@@ -43,7 +43,7 @@ export class McpController {
     if (mode === 'off') {
       throw new ForbiddenException('MCP is not enabled for this workspace');
     }
-    const mcpAuth = (req as any).raw?.mcpAuth;
+    const mcpAuth = (req as any).raw?.mcpAuth ?? (req as any).mcpAuth;
     if (!mcpAuth?.credentialId) {
       throw new ForbiddenException('A valid MCP bearer token is required');
     }

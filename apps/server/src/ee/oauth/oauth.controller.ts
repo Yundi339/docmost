@@ -22,6 +22,7 @@ import { User } from '@docmost/db/types/entity.types';
 import { OAuthService } from './oauth.service';
 import {
   OAuthAuthorizeQuery,
+  OAuthClientRegistrationRequest,
   OAuthRequestError,
   OAuthTokenRequest,
 } from './oauth.types';
@@ -32,36 +33,36 @@ export class OAuthMetadataController {
 
   @SkipTransform()
   @Get('oauth-protected-resource/mcp')
-  protectedResourceForMcp(@Req() req: FastifyRequest) {
+  async protectedResourceForMcp(@Req() req: FastifyRequest) {
     return this.oauthService.getProtectedResourceMetadata(
-      getWorkspaceFromRequest(req),
+      await getWorkspaceFromRequest(this.oauthService, req),
       req,
     );
   }
 
   @SkipTransform()
   @Get('oauth-protected-resource')
-  protectedResource(@Req() req: FastifyRequest) {
+  async protectedResource(@Req() req: FastifyRequest) {
     return this.oauthService.getProtectedResourceMetadata(
-      getWorkspaceFromRequest(req),
+      await getWorkspaceFromRequest(this.oauthService, req),
       req,
     );
   }
 
   @SkipTransform()
   @Get('oauth-authorization-server')
-  authorizationServer(@Req() req: FastifyRequest) {
+  async authorizationServer(@Req() req: FastifyRequest) {
     return this.oauthService.getAuthorizationServerMetadata(
-      getWorkspaceFromRequest(req),
+      await getWorkspaceFromRequest(this.oauthService, req),
       req,
     );
   }
 
   @SkipTransform()
   @Get('openid-configuration')
-  openIdConfiguration(@Req() req: FastifyRequest) {
+  async openIdConfiguration(@Req() req: FastifyRequest) {
     return this.oauthService.getAuthorizationServerMetadata(
-      getWorkspaceFromRequest(req),
+      await getWorkspaceFromRequest(this.oauthService, req),
       req,
     );
   }
@@ -70,6 +71,23 @@ export class OAuthMetadataController {
 @Controller('oauth')
 export class OAuthController {
   constructor(private readonly oauthService: OAuthService) {}
+
+  @SkipTransform()
+  @HttpCode(HttpStatus.CREATED)
+  @Post('register')
+  async register(
+    @Body() body: OAuthClientRegistrationRequest,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    reply.header('Cache-Control', 'no-store');
+    reply.header('Pragma', 'no-cache');
+
+    return this.oauthService.registerClient(
+      body || {},
+      await getWorkspaceFromRequest(this.oauthService, req),
+    );
+  }
 
   @SkipTransform()
   @HttpCode(HttpStatus.OK)
@@ -85,7 +103,7 @@ export class OAuthController {
     try {
       return await this.oauthService.exchangeToken(
         normalizeBody(body) as OAuthTokenRequest,
-        getWorkspaceFromRequest(req),
+        await getWorkspaceFromRequest(this.oauthService, req),
         req,
       );
     } catch (err) {
@@ -209,8 +227,11 @@ export class OAuthController {
   }
 }
 
-function getWorkspaceFromRequest(req: FastifyRequest): Workspace {
-  const workspace = (req.raw as any)?.workspace;
+async function getWorkspaceFromRequest(
+  oauthService: OAuthService,
+  req: FastifyRequest,
+): Promise<Workspace> {
+  const workspace = await oauthService.resolveWorkspaceFromRequest(req);
   if (!workspace) {
     throw new NotFoundException('Workspace not found');
   }

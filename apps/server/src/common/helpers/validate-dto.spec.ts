@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { CreateSpaceDto } from '../../core/space/dto/create-space.dto';
 import { CreateCommentDto } from '../../core/comment/dto/create-comment.dto';
 import { MovePageToSpaceDto } from '../../core/page/dto/move-page.dto';
+import { PageInfoDto } from '../../core/page/dto/page.dto';
 import { SearchDTO } from '../../core/search/dto/search.dto';
 import { validateDto } from './validate-dto';
 
@@ -45,6 +46,24 @@ describe('validateDto', () => {
       validateDto(MovePageToSpaceDto, {
         pageId: 'page-id',
         spaceId: 'space-id',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('accepts page slug identifiers for page info requests', async () => {
+    await expect(
+      validateDto(PageInfoDto, {
+        pageId: 'AbC123xYz9',
+      }),
+    ).resolves.toMatchObject({
+      pageId: 'AbC123xYz9',
+    });
+  });
+
+  it('rejects invalid page info identifiers', async () => {
+    await expect(
+      validateDto(PageInfoDto, {
+        pageId: 'not-a-page-id',
       }),
     ).rejects.toThrow(BadRequestException);
   });

@@ -4,10 +4,37 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
+  registerDecorator,
+  ValidationOptions,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { validate as isValidUUID } from 'uuid';
 
 import { ContentFormat } from './create-page.dto';
+
+const PAGE_SLUG_ID_PATTERN = /^[0-9A-Za-z]{10}$/;
+
+function IsPageIdentifier(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isPageIdentifier',
+      target: object.constructor,
+      propertyName,
+      options: {
+        message: '$property must be a UUID or page slug ID',
+        ...validationOptions,
+      },
+      validator: {
+        validate(value: unknown) {
+          return (
+            typeof value === 'string' &&
+            (isValidUUID(value) || PAGE_SLUG_ID_PATTERN.test(value))
+          );
+        },
+      },
+    });
+  };
+}
 
 export class PageIdDto {
   @IsNotEmpty()
@@ -25,7 +52,11 @@ export class PageHistoryIdDto {
   historyId: string;
 }
 
-export class PageInfoDto extends PageIdDto {
+export class PageInfoDto {
+  @IsNotEmpty()
+  @IsPageIdentifier()
+  pageId: string;
+
   @IsOptional()
   @IsBoolean()
   includeSpace: boolean;

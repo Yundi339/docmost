@@ -30,7 +30,13 @@ export class McpAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const response = context.switchToHttp().getResponse();
     const token = extractBearerTokenFromHeader(request);
-    const workspace = (request.raw as any)?.workspace as Workspace | undefined;
+    const workspace =
+      getRequestValue<Workspace>(request, 'workspace') ??
+      (await this.oauthService.resolveWorkspaceFromRequest(request));
+    if (workspace) {
+      setRequestValue(request, 'workspace', workspace);
+      setRequestValue(request, 'workspaceId', workspace.id);
+    }
 
     const challenge = () => {
       if (workspace) {
@@ -80,14 +86,14 @@ export class McpAuthGuard implements CanActivate {
         user: authContext.user,
         workspace: authContext.workspace,
       };
-      (request.raw as any).authType = JwtType.API_KEY;
-      (request.raw as any).apiKey = authContext.apiKey;
-      (request.raw as any).mcpAuth = {
+      setRequestValue(request, 'authType', JwtType.API_KEY);
+      setRequestValue(request, 'apiKey', authContext.apiKey);
+      setRequestValue(request, 'mcpAuth', {
         authType: 'api_key',
         credentialId: authContext.apiKey.id,
         apiKeyId: authContext.apiKey.id,
         scopes,
-      };
+      });
       return true;
     }
 
@@ -116,21 +122,35 @@ export class McpAuthGuard implements CanActivate {
         user: authContext.user,
         workspace: authContext.workspace,
       };
-      (request.raw as any).authType = JwtType.MCP_OAUTH;
-      (request.raw as any).mcpAuth = {
+      setRequestValue(request, 'authType', JwtType.MCP_OAUTH);
+      setRequestValue(request, 'mcpAuth', {
         authType: 'oauth',
         credentialId: authContext.oauth.authorizationId,
         oauthAuthorizationId: authContext.oauth.authorizationId,
         oauthClientId: authContext.oauth.oauthClientId,
         clientId: authContext.oauth.clientId,
         scopes,
-      };
+      });
       return true;
     }
 
     challenge();
     throw new UnauthorizedException('Unsupported bearer token');
   }
+}
+
+function getRequestValue<T>(
+  request: FastifyRequest,
+  key: string,
+): T | undefined {
+  return ((request.raw as any)?.[key] ?? (request as any)?.[key]) as
+    | T
+    | undefined;
+}
+
+function setRequestValue(request: FastifyRequest, key: string, value: unknown) {
+  (request as any)[key] = value;
+  (request.raw as any)[key] = value;
 }
 
 function getAuthMetadata(req: FastifyRequest) {

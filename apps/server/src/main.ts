@@ -15,6 +15,49 @@ import { InternalLogFilter } from './common/logger/internal-log-filter';
 import { EnvironmentService } from './integrations/environment/environment.service';
 import { resolveFrameHeader } from './common/helpers';
 
+const CHATGPT_CORS_ORIGINS = new Set([
+  'https://chatgpt.com',
+  'https://chat.openai.com',
+]);
+
+const CHATGPT_CORS_PATHS = [
+  '/.well-known/oauth-protected-resource',
+  '/.well-known/oauth-authorization-server',
+  '/.well-known/openid-configuration',
+  '/api/oauth/register',
+  '/api/oauth/token',
+  '/mcp',
+];
+
+function isChatGptCorsPath(url?: string) {
+  return CHATGPT_CORS_PATHS.some((path) => url?.startsWith(path));
+}
+
+function applyChatGptCorsHeaders(req: any, reply: any) {
+  const origin = req.headers.origin;
+  if (
+    typeof origin !== 'string' ||
+    !CHATGPT_CORS_ORIGINS.has(origin) ||
+    !isChatGptCorsPath(req.url)
+  ) {
+    return false;
+  }
+
+  reply.header('Access-Control-Allow-Origin', origin);
+  reply.header('Vary', 'Origin');
+  reply.header('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+  reply.header(
+    'Access-Control-Allow-Headers',
+    'Authorization, Content-Type, Mcp-Session-Id, MCP-Protocol-Version',
+  );
+  reply.header(
+    'Access-Control-Expose-Headers',
+    'Mcp-Session-Id, WWW-Authenticate',
+  );
+
+  return true;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
@@ -133,10 +176,31 @@ async function bootstrap() {
     }),
   );
 
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onRequest', (req, reply, done) => {
+      const matched = applyChatGptCorsHeaders(req, reply);
+      if (matched && req.method === 'OPTIONS') {
+        reply.code(204).send();
+        return;
+      }
+      done();
+    });
+
   app.enableCors({
     origin: process.env.APP_URL || 'http://localhost:3000',
     credentials: true,
   });
+
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onSend', (req, reply, payload, done) => {
+      applyChatGptCorsHeaders(req, reply);
+      done(null, payload);
+    });
+
   app.useGlobalInterceptors(new TransformHttpResponseInterceptor(reflector));
   app.enableShutdownHooks();
 
