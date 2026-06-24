@@ -109,13 +109,15 @@ function taskList(turndownService: _TurndownService) {
     replacement: function (_content: string, node: HTMLInputElement) {
       const isChecked = node.getAttribute('data-checked') === 'true';
       const div = node.querySelector('div');
-      const text = div ? div.textContent.trim() : node.textContent.trim();
+      const text = div
+        ? turndownService.turndown(div.innerHTML).trim()
+        : node.textContent.trim();
 
       const prefix = `- ${isChecked ? '[x]' : '[ ]'} `;
 
       return (
         prefix +
-        text +
+        text.replace(/\n/gm, '\n  ') +
         (node.nextSibling && !/\n$/.test(text) ? '\n' : '')
       );
     },
