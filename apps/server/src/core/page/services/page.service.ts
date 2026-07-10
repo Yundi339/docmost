@@ -56,6 +56,7 @@ import {
 import { markdownToHtml } from '@docmost/editor-ext';
 import { WatcherService } from '../../watcher/watcher.service';
 import { sql } from 'kysely';
+import { WsTreeService } from '../../../ws/ws-tree.service';
 
 @Injectable()
 export class PageService {
@@ -73,6 +74,7 @@ export class PageService {
     private eventEmitter: EventEmitter2,
     private collaborationGateway: CollaborationGateway,
     private readonly watcherService: WatcherService,
+    private readonly wsTreeService: WsTreeService,
   ) {}
 
   async findById(
@@ -253,13 +255,19 @@ export class PageService {
       );
     }
 
-    return await this.pageRepo.findById(page.id, {
+    const updatedPage = await this.pageRepo.findById(page.id, {
       includeSpace: true,
       includeContent: true,
       includeCreator: true,
       includeLastUpdatedBy: true,
       includeContributors: true,
     });
+
+    if (updatePageDto.title !== undefined || updatePageDto.icon !== undefined) {
+      await this.wsTreeService.notifyPageUpdated(updatedPage);
+    }
+
+    return updatedPage;
   }
 
   async updatePageContent(

@@ -6,6 +6,23 @@ import { WsService } from './ws.service';
 export class WsTreeService {
   constructor(private readonly wsService: WsService) {}
 
+  async notifyPageUpdated(page: Page): Promise<void> {
+    await this.wsService.emitTreeEvent({
+      operation: 'updateOne',
+      spaceId: page.spaceId,
+      entity: ['pages'],
+      id: page.id,
+      payload: {
+        title: page.title,
+        icon: page.icon,
+        slugId: page.slugId,
+        parentPageId: page.parentPageId,
+        updatedAt: page.updatedAt,
+        lastUpdatedById: page.lastUpdatedById,
+      },
+    });
+  }
+
   async notifyPageRestricted(page: Page, excludeUserId: string): Promise<void> {
     await this.wsService.emitToSpaceExceptUsers(page.spaceId, [excludeUserId], {
       operation: 'deleteTreeNode',

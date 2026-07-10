@@ -64,6 +64,15 @@ function createService() {
     findById: jest.fn(),
     updatePage: jest.fn(),
   };
+  const generalQueue = {
+    add: jest.fn().mockResolvedValue(undefined),
+  };
+  const collaborationGateway = {
+    handleYjsEvent: jest.fn().mockResolvedValue(undefined),
+  };
+  const wsTreeService = {
+    notifyPageUpdated: jest.fn().mockResolvedValue(undefined),
+  };
   const db = {
     transaction: jest.fn(() => ({
       execute: jest.fn((callback) => callback(trx)),
@@ -78,10 +87,11 @@ function createService() {
     {} as any,
     {} as any,
     {} as any,
+    generalQueue as any,
     {} as any,
+    collaborationGateway as any,
     {} as any,
-    {} as any,
-    {} as any,
+    wsTreeService as any,
   );
 
   jest
@@ -89,8 +99,54 @@ function createService() {
     .mockResolvedValue(undefined);
   jest.spyOn(service as any, 'isPageInSubtree').mockResolvedValue(false);
 
-  return { db, pageRepo, service, trx };
+  return {
+    collaborationGateway,
+    db,
+    generalQueue,
+    pageRepo,
+    service,
+    trx,
+    wsTreeService,
+  };
 }
+
+describe('PageService.update', () => {
+  it('broadcasts metadata updates from server-side callers', async () => {
+    const { pageRepo, service, wsTreeService } = createService();
+    const existingPage = page({ contributorIds: [] });
+    const updatedPage = page({ title: 'Updated page' });
+    pageRepo.findById.mockResolvedValue(updatedPage);
+
+    await service.update(
+      existingPage,
+      { pageId: existingPage.id, title: updatedPage.title },
+      { id: 'mcp-user' } as any,
+    );
+
+    expect(wsTreeService.notifyPageUpdated).toHaveBeenCalledWith(updatedPage);
+  });
+
+  it('leaves content-only updates to the collaboration channel', async () => {
+    const { collaborationGateway, pageRepo, service, wsTreeService } =
+      createService();
+    const existingPage = page({ contributorIds: [] });
+    pageRepo.findById.mockResolvedValue(existingPage);
+
+    await service.update(
+      existingPage,
+      {
+        pageId: existingPage.id,
+        content: '# Updated',
+        format: 'markdown',
+        operation: 'replace',
+      },
+      { id: 'mcp-user' } as any,
+    );
+
+    expect(collaborationGateway.handleYjsEvent).toHaveBeenCalled();
+    expect(wsTreeService.notifyPageUpdated).not.toHaveBeenCalled();
+  });
+});
 
 describe('PageService.movePage', () => {
   it('updates only the moved page when changing parent', async () => {

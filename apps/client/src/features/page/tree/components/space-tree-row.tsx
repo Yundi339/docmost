@@ -19,7 +19,6 @@ import { queryClient } from "@/main.tsx";
 import { buildPageUrl } from "@/features/page/page.utils.ts";
 import { getPageById } from "@/features/page/services/page-service.ts";
 import { useUpdatePageMutation } from "@/features/page/queries/page-query.ts";
-import { useQueryEmit } from "@/features/websocket/use-query-emit.ts";
 import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 
@@ -64,7 +63,6 @@ export function SpaceTreeRow({
   const { spaceSlug } = useParams();
   const updatePageMutation = useUpdatePageMutation();
   const [, setTreeData] = useAtom(treeDataAtom);
-  const emit = useQueryEmit();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mobileSidebarOpened] = useAtom(mobileSidebarAtom);
   const toggleMobileSidebar = useToggleSidebar(mobileSidebarAtom);
@@ -136,34 +134,12 @@ export function SpaceTreeRow({
 
   const handleEmojiSelect = (emoji: { native: string }) => {
     handleUpdateNodeIcon(node.id, emoji.native);
-    updatePageMutation
-      .mutateAsync({ pageId: node.id, icon: emoji.native })
-      .then((data) => {
-        setTimeout(() => {
-          emit({
-            operation: "updateOne",
-            spaceId: node.spaceId,
-            entity: ["pages"],
-            id: node.id,
-            payload: { icon: emoji.native, parentPageId: data.parentPageId },
-          });
-        }, 50);
-      });
+    updatePageMutation.mutate({ pageId: node.id, icon: emoji.native });
   };
 
   const handleRemoveEmoji = () => {
     handleUpdateNodeIcon(node.id, null);
-    updatePageMutation.mutateAsync({ pageId: node.id, icon: null });
-
-    setTimeout(() => {
-      emit({
-        operation: "updateOne",
-        spaceId: node.spaceId,
-        entity: ["pages"],
-        id: node.id,
-        payload: { icon: null },
-      });
-    }, 50);
+    updatePageMutation.mutate({ pageId: node.id, icon: null });
   };
 
   return (

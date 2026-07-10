@@ -57,6 +57,35 @@ export class WsService {
     await this.broadcastToAuthorizedUsers(room, client.id, pageId, data);
   }
 
+  async emitTreeEvent(data: any): Promise<void> {
+    if (!this.server || !this.isTreeEvent(data)) return;
+
+    const room = getSpaceRoomName(data.spaceId);
+
+    if (data.operation === 'refetchRootTreeNodeEvent') {
+      this.server.to(room).emit('message', data);
+      return;
+    }
+
+    const pageId = this.extractPageId(data);
+    if (!pageId) return;
+
+    const hasRestrictions = await this.spaceHasRestrictions(data.spaceId);
+    if (!hasRestrictions) {
+      this.server.to(room).emit('message', data);
+      return;
+    }
+
+    const isRestricted =
+      await this.pagePermissionRepo.hasRestrictedAncestor(pageId);
+    if (!isRestricted) {
+      this.server.to(room).emit('message', data);
+      return;
+    }
+
+    await this.broadcastToAuthorizedUsers(room, null, pageId, data);
+  }
+
   async invalidateSpaceRestrictionCache(spaceId: string): Promise<void> {
     await this.cacheManager.del(
       `${WS_SPACE_RESTRICTION_CACHE_PREFIX}${spaceId}`,
@@ -164,9 +193,9 @@ export class WsService {
     const cacheKey = `${WS_SPACE_RESTRICTION_CACHE_PREFIX}${spaceId}`;
 
     const cached = await this.cacheManager.get<boolean>(cacheKey);
-    if (cached !== undefined && cached !== null) {
-      return cached;
-    }
+    // A stale false would expose newly restricted tree nodes until the TTL
+    // expires. Only positive restriction results are safe to cache.
+    if (cached === true) return true;
 
     const hasRestrictions =
       await this.pagePermissionRepo.hasRestrictedPagesInSpace(spaceId);
