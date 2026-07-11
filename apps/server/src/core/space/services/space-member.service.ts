@@ -383,7 +383,8 @@ export class SpaceMemberService {
   async getUserSpaces(
     userId: string,
     pagination: PaginationOptions,
+    workspaceId?: string,
   ): Promise<CursorPaginationResult<Space>> {
-    return this.spaceMemberRepo.getUserSpaces(userId, pagination);
+    return this.spaceMemberRepo.getUserSpaces(userId, pagination, workspaceId);
   }
 }

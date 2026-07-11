@@ -12,6 +12,7 @@
     "server:build": "nx run server:build",
     "client:build": "nx run client:build",
     "editor-ext:build": "nx run @docmost/editor-ext:build",
+    "lint": "pnpm exec eslint apps/server/src apps/client/src",
     "client:dev": "nx run client:dev",
     "server:dev": "nx run server:start:dev",
     "server:start": "nx run server:start:prod",
@@ -93,7 +94,7 @@
       "packages/*"
     ]
   },
-  "packageManager": "pnpm@10.4.0",
+  "packageManager": "pnpm@10.34.5",
   "pnpm": {
     "overrides": {
       "prosemirror-changeset": "2.4.0",

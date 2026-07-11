@@ -54,7 +54,7 @@ export type AddTreeNodeEvent = {
   spaceId: string;
   payload: {
     parentId: string | null;
-    index: number;
+    index?: number;
     data: SpaceTreeNode;
   };
 };

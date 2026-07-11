@@ -1,7 +1,7 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AuditController } from './audit.controller';
 import { UserRole } from '../../common/helpers/types/permission';
-import { AuditEvent, AuditResource } from '../../common/events/audit-events';
+import { AuditResource } from '../../common/events/audit-events';
 
 describe('AuditController', () => {
   let controller: AuditController;
@@ -17,7 +17,7 @@ describe('AuditController', () => {
   const workspace = () =>
     ({
       id: 'workspace-id',
-      trashRetentionDays: 90,
+      auditRetentionDays: 365,
     }) as any;
   const params = () =>
     ({
@@ -66,9 +66,14 @@ describe('AuditController', () => {
     expect(auditRepo.findAuditLogs).toHaveBeenCalledWith(
       'workspace-id',
       expect.objectContaining({
-        actorId: 'member-id',
-        event: AuditEvent.MCP_TOOL_CALLED,
-        resourceType: AuditResource.MCP_TOOL,
+        actorId: undefined,
+        relatedUserId: 'member-id',
+        resourceTypes: [
+          AuditResource.MCP_TOOL,
+          AuditResource.MCP_SESSION,
+          AuditResource.MCP_AUTH,
+          AuditResource.MCP_OAUTH_AUTHORIZATION,
+        ],
       }),
     );
   });
@@ -77,6 +82,28 @@ describe('AuditController', () => {
     await expect(
       controller.updateRetention(30, user(UserRole.ADMIN), workspace()),
     ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(auditService.updateRetention).not.toHaveBeenCalled();
+  });
+
+  it('persists a valid audit retention period for owners', async () => {
+    await expect(
+      controller.updateRetention(30, user(UserRole.OWNER), workspace()),
+    ).resolves.toEqual({ retentionDays: 30 });
+
+    expect(auditService.updateRetention).toHaveBeenCalledWith(
+      'workspace-id',
+      30,
+    );
+  });
+
+  it('rejects invalid audit retention periods', async () => {
+    await expect(
+      controller.updateRetention(0, user(UserRole.OWNER), workspace()),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      controller.updateRetention(36_501, user(UserRole.OWNER), workspace()),
+    ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(auditService.updateRetention).not.toHaveBeenCalled();
   });

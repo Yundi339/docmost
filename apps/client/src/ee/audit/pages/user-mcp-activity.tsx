@@ -35,9 +35,7 @@ export default function UserMcpActivity() {
       <SettingsTitle title={t("MCP activity")} />
 
       <Text size="sm" c="dimmed" mb="md">
-        {t(
-          "Review MCP tool calls made by your API keys and OAuth connections.",
-        )}
+        {t("Review activity from your MCP API keys and OAuth connections.")}
       </Text>
 
       <AuditLogsTable items={data?.items} isLoading={isLoading} />

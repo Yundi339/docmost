@@ -25,6 +25,14 @@ export const AuditEvent = {
 
   // MCP
   MCP_TOOL_CALLED: 'mcp.tool_called',
+  MCP_SESSION_STARTED: 'mcp.session_started',
+  MCP_SESSION_CLOSED: 'mcp.session_closed',
+  MCP_SESSION_EXPIRED: 'mcp.session_expired',
+  MCP_AUTH_FAILED: 'mcp.auth_failed',
+  MCP_OAUTH_CLIENT_REGISTERED: 'mcp.oauth_client_registered',
+  MCP_OAUTH_CLIENT_UPDATED: 'mcp.oauth_client_updated',
+  MCP_OAUTH_AUTHORIZED: 'mcp.oauth_authorized',
+  MCP_OAUTH_REVOKED: 'mcp.oauth_revoked',
 
   // Space
   SPACE_CREATED: 'space.created',
@@ -123,6 +131,10 @@ export const AuditResource = {
   SHARE: 'share',
   API_KEY: 'api_key',
   MCP_TOOL: 'mcp_tool',
+  MCP_SESSION: 'mcp_session',
+  MCP_AUTH: 'mcp_auth',
+  MCP_OAUTH_CLIENT: 'mcp_oauth_client',
+  MCP_OAUTH_AUTHORIZATION: 'mcp_oauth_authorization',
   SSO_PROVIDER: 'sso_provider',
   WORKSPACE_INVITATION: 'workspace_invitation',
   ATTACHMENT: 'attachment',

@@ -116,9 +116,35 @@ export class WsService {
   }
 
   async emitToUsers(userIds: string[], data: any): Promise<void> {
-    if (userIds.length === 0) return;
+    if (!this.server || userIds.length === 0) return;
     const rooms = userIds.map((id) => getUserRoomName(id));
     this.server.to(rooms).emit('message', data);
+  }
+
+  async getAuthorizedTreeUserIds(
+    spaceId: string,
+    pageId: string,
+  ): Promise<string[]> {
+    if (!this.server) return [];
+
+    const sockets = await this.server
+      .in(getSpaceRoomName(spaceId))
+      .fetchSockets();
+    const userIds = Array.from(
+      new Set(
+        sockets
+          .map((socket) => socket.data.userId as string | undefined)
+          .filter((userId): userId is string => !!userId),
+      ),
+    );
+    if (userIds.length === 0) return [];
+
+    if (!(await this.spaceHasRestrictions(spaceId))) return userIds;
+    if (!(await this.pagePermissionRepo.hasRestrictedAncestor(pageId))) {
+      return userIds;
+    }
+
+    return this.pagePermissionRepo.getUserIdsWithPageAccess(pageId, userIds);
   }
 
   async emitToSpaceExceptUsers(

@@ -98,9 +98,7 @@ describe('McpService access control', () => {
       }),
     };
     const pageService = overrides.pageService ?? {
-      duplicatePage: jest
-        .fn()
-        .mockResolvedValue({ id: pageId, title: 'Copy' }),
+      duplicatePage: jest.fn().mockResolvedValue({ id: pageId, title: 'Copy' }),
     };
     const pageRepo = overrides.pageRepo ?? {
       findById: jest.fn().mockResolvedValue({
@@ -114,6 +112,9 @@ describe('McpService access control', () => {
       validateCanEdit: jest.fn().mockResolvedValue({ hasRestriction: false }),
       validateCanView: jest.fn().mockResolvedValue(undefined),
     };
+    const spaceMemberService = overrides.spaceMemberService ?? {
+      getUserSpaces: jest.fn().mockResolvedValue({ items: [] }),
+    };
     const spaceAbility = overrides.spaceAbility ?? {
       createForUser: jest.fn(async () => ({
         can: jest.fn().mockReturnValue(true),
@@ -124,7 +125,7 @@ describe('McpService access control', () => {
       pageService as any,
       pageRepo as any,
       {} as any,
-      {} as any,
+      spaceMemberService as any,
       {} as any,
       {} as any,
       {} as any,
@@ -149,6 +150,7 @@ describe('McpService access control', () => {
       pageService,
       pageRepo,
       spaceAbility,
+      spaceMemberService,
     };
   }
 
@@ -282,6 +284,55 @@ describe('McpService access control', () => {
     ).not.toContain('sensitive search');
   });
 
+  it('audits created resources without storing page content', async () => {
+    await (service as any).runTool(
+      context('read-write', [ApiKeyScope.MCP_WRITE]),
+      { id: 'user-id' },
+      { id: 'workspace-id' },
+      'create_page',
+      'write',
+      {
+        spaceId,
+        title: 'MCP audit page',
+        content: 'sensitive page content',
+      },
+      async () => ({
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ id: pageId, title: 'MCP audit page' }),
+          },
+        ],
+      }),
+    );
+
+    expect(auditService.logWithContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceId: pageId,
+        metadata: expect.objectContaining({
+          target: { spaceId, title: 'MCP audit page' },
+          result: { id: pageId, title: 'MCP audit page' },
+        }),
+      }),
+      expect.anything(),
+    );
+    expect(
+      JSON.stringify(auditService.logWithContext.mock.calls),
+    ).not.toContain('sensitive page content');
+  });
+
+  it('limits list_spaces to the authenticated workspace', async () => {
+    const { handlers, spaceMemberService } = registerMcpTools();
+
+    await handlers.list_spaces({});
+
+    expect(spaceMemberService.getUserSpaces).toHaveBeenCalledWith(
+      'user-id',
+      expect.objectContaining({ limit: 100 }),
+      'workspace-id',
+    );
+  });
+
   it('requires MCP tool registrations to declare DTO handling', async () => {
     await expect(
       (service as any).prepareMcpToolInput('unsafe_tool', {}, undefined),
@@ -342,16 +393,14 @@ describe('McpService access control', () => {
     const { handlers, pageAccessService, pageService } = registerMcpTools({
       auditService,
       pageAccessService: {
-        validateCanEdit: jest
-          .fn()
-          .mockRejectedValue(new ForbiddenException()),
+        validateCanEdit: jest.fn().mockRejectedValue(new ForbiddenException()),
         validateCanView: jest.fn(),
       },
     });
 
-    await expect(
-      handlers.duplicate_page({ pageId }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(handlers.duplicate_page({ pageId })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
     expect(pageAccessService.validateCanEdit).toHaveBeenCalled();
     expect(pageAccessService.validateCanView).not.toHaveBeenCalled();
     expect(pageService.duplicatePage).not.toHaveBeenCalled();
@@ -457,6 +506,68 @@ describe('McpService access control', () => {
     );
   });
 
+  it('expires idle sessions and audits the expiry', async () => {
+    const close = jest.fn().mockResolvedValue(undefined);
+    const session = {
+      sessionId: 'expired-session-id',
+      userId: 'user-id',
+      workspaceId: 'workspace-id',
+      authType: 'api_key',
+      credentialId: 'api-key-id',
+      mode: 'read-write',
+      scopes: [ApiKeyScope.MCP_WRITE],
+      context: context('read-write', [ApiKeyScope.MCP_WRITE]),
+      lastActivityAt: 0,
+      transport: { close },
+    };
+    (service as any).sessions.set('expired-session-id', session);
+
+    await (service as any).pruneExpiredSessions();
+
+    expect(close).toHaveBeenCalled();
+    expect((service as any).sessions.has('expired-session-id')).toBe(false);
+    expect(auditService.logWithContext).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'mcp.session_expired' }),
+      expect.objectContaining({ actorId: 'user-id' }),
+    );
+  });
+
+  it('rejects new sessions when the active session limit is reached', async () => {
+    const end = jest.fn();
+    const res = {
+      writeHead: jest.fn().mockReturnValue({ end }),
+    };
+    (service as any).maxSessions = 1;
+    (service as any).sessions.set('active-session-id', {
+      sessionId: 'active-session-id',
+      userId: 'user-id',
+      workspaceId: 'workspace-id',
+      authType: 'api_key',
+      credentialId: 'api-key-id',
+      mode: 'read-write',
+      scopes: [ApiKeyScope.MCP_WRITE],
+      context: context('read-write', [ApiKeyScope.MCP_WRITE]),
+      lastActivityAt: Date.now(),
+      transport: { close: jest.fn() },
+    });
+
+    await service.handleRequest(
+      { headers: {} } as any,
+      res as any,
+      { jsonrpc: '2.0', id: 1, method: 'initialize' },
+      { id: 'user-id' } as any,
+      { id: 'workspace-id' } as any,
+      context('read-write', [ApiKeyScope.MCP_WRITE]),
+    );
+
+    expect(res.writeHead).toHaveBeenCalledWith(429, {
+      'Content-Type': 'application/json',
+    });
+    expect(end).toHaveBeenCalledWith(
+      JSON.stringify({ error: 'Too many active MCP sessions' }),
+    );
+  });
+
   it('stores new sessions when the streamable HTTP transport initializes them', async () => {
     const body = { jsonrpc: '2.0', id: 1, method: 'initialize' };
     const req = { headers: {} };
@@ -494,7 +605,16 @@ describe('McpService access control', () => {
     expect(server.connect).toHaveBeenCalledWith(transport);
     expect(transport.handleRequest).toHaveBeenCalledWith(req, res, body);
 
+    expect(auditService.logWithContext).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'mcp.session_started' }),
+      expect.objectContaining({ actorId: 'user-id' }),
+    );
+
     transport.onclose();
     expect(sessions.has('generated-session-id')).toBe(false);
+    expect(auditService.logWithContext).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'mcp.session_closed' }),
+      expect.objectContaining({ actorId: 'user-id' }),
+    );
   });
 });

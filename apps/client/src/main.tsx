@@ -1,7 +1,7 @@
 import "@mantine/core/styles.css";
 import "@mantine/spotlight/styles.css";
 import "@mantine/notifications/styles.css";
-import '@mantine/dates/styles.css';
+import "@mantine/dates/styles.css";
 import "@/styles/a11y-overrides.css";
 
 // Polyfill URL.canParse for older browsers (required by mermaid v11)
@@ -25,6 +25,7 @@ import { ModalsProvider } from "@mantine/modals";
 import { Notifications } from "@mantine/notifications";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HelmetProvider } from "react-helmet-async";
+import { AppUpdateNotifier } from "@/features/version/components/app-update-notifier";
 import "./i18n";
 
 export const queryClient = new QueryClient({
@@ -39,7 +40,8 @@ export const queryClient = new QueryClient({
 });
 
 const container = document.getElementById("root") as HTMLElement;
-const root = (container as any).__reactRoot ??= ReactDOM.createRoot(container);
+const root = ((container as any).__reactRoot ??=
+  ReactDOM.createRoot(container));
 
 function renderApp() {
   const appContent = (
@@ -54,6 +56,7 @@ function renderApp() {
         <ModalsProvider>
           <QueryClientProvider client={queryClient}>
             <Notifications position="bottom-center" limit={3} zIndex={10000} />
+            <AppUpdateNotifier />
             {appContent}
           </QueryClientProvider>
         </ModalsProvider>

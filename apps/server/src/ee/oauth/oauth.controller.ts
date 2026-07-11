@@ -11,6 +11,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { Workspace } from '@docmost/db/types/entity.types';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
@@ -26,6 +27,13 @@ import {
   OAuthRequestError,
   OAuthTokenRequest,
 } from './oauth.types';
+import {
+  AI_CHAT_THROTTLER,
+  AUTH_THROTTLER,
+  FORGOT_PASSWORD_THROTTLER,
+  OAUTH_REGISTRATION_THROTTLER,
+  OAUTH_TOKEN_THROTTLER,
+} from '../../integrations/throttle/throttler-names';
 
 @Controller('.well-known')
 export class OAuthMetadataController {
@@ -91,6 +99,14 @@ export class OAuthController {
   constructor(private readonly oauthService: OAuthService) {}
 
   @SkipTransform()
+  @UseGuards(ThrottlerGuard)
+  @SkipThrottle({
+    [AUTH_THROTTLER]: true,
+    [AI_CHAT_THROTTLER]: true,
+    [FORGOT_PASSWORD_THROTTLER]: true,
+    [OAUTH_TOKEN_THROTTLER]: true,
+  })
+  @Throttle({ [OAUTH_REGISTRATION_THROTTLER]: { ttl: 60_000, limit: 10 } })
   @HttpCode(HttpStatus.CREATED)
   @Post('register')
   async register(
@@ -104,10 +120,19 @@ export class OAuthController {
     return this.oauthService.registerClient(
       body || {},
       await getWorkspaceFromRequest(this.oauthService, req),
+      req,
     );
   }
 
   @SkipTransform()
+  @UseGuards(ThrottlerGuard)
+  @SkipThrottle({
+    [AUTH_THROTTLER]: true,
+    [AI_CHAT_THROTTLER]: true,
+    [FORGOT_PASSWORD_THROTTLER]: true,
+    [OAUTH_REGISTRATION_THROTTLER]: true,
+  })
+  @Throttle({ [OAUTH_TOKEN_THROTTLER]: { ttl: 60_000, limit: 120 } })
   @HttpCode(HttpStatus.OK)
   @Post('token')
   async token(
@@ -202,11 +227,13 @@ export class OAuthController {
     @Body() input: { authorizationId: string },
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
+    @Req() req: FastifyRequest,
   ) {
     await this.oauthService.revokeAuthorization(
       input.authorizationId,
       workspace,
       user,
+      req,
     );
   }
 

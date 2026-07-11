@@ -1,0 +1,97 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - feat/native-database-fusion
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docmost-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ${{ vars.PRODUCTION_REGISTRY }}
+  IMAGE_REPOSITORY: docmost/docmost-aio
+
+jobs:
+  authorize-production:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the production source branch
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          test "$REF" = 'refs/heads/feat/native-database-fusion' || {
+            echo '::error::Production deployment only accepts feat/native-database-fusion.'
+            exit 1
+          }
+
+  build:
+    needs: authorize-production
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout production source branch
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        run: |
+          set -euo pipefail
+          test -n "$REGISTRY" || {
+            echo '::error::The PRODUCTION_REGISTRY variable is not configured.'
+            exit 1
+          }
+
+      - name: Build metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          node scripts/check-package-versions.mjs
+          short_sha="${source_sha:0:12}"
+          build_prefix="$(TZ=Asia/Shanghai date '+%y.%m.%d.%H%M')"
+          app_version="${build_prefix}+g${short_sha}"
+          printf 'version=%s\n' "$app_version" >> "$GITHUB_OUTPUT"
+          printf 'tag=%s-%s\n' "$build_prefix" "$short_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to private Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push production AIO image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/aio/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.metadata.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:production
+          build-args: APP_VERSION=${{ steps.metadata.outputs.version }}
+          cache-from: type=gha,scope=docmost-aio-amd64
+          cache-to: type=gha,scope=docmost-aio-amd64,mode=max
+          provenance: false
+
+      - name: Record published image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test -n "$DIGEST"
+          printf 'Pushed %s/%s:%s and advanced the production tag to %s\n' \
+            "$REGISTRY" "$IMAGE_REPOSITORY" "$TAG" "$DIGEST"

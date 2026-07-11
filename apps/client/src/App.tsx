@@ -4,9 +4,12 @@ import { isCloud } from "@/lib/config.ts";
 import { useTranslation } from "react-i18next";
 import { useRedirectToCloudSelect } from "@/ee/hooks/use-redirect-to-cloud-select.tsx";
 import { useTrackOrigin } from "@/hooks/use-track-origin";
-import Layout from "@/components/layouts/global/layout.tsx";
-import ShareLayout from "@/features/share/components/share-layout.tsx";
 import { Error404 } from "@/components/ui/error-404.tsx";
+
+const Layout = lazy(() => import("@/components/layouts/global/layout.tsx"));
+const ShareLayout = lazy(
+  () => import("@/features/share/components/share-layout.tsx"),
+);
 
 // Auth pages
 const SetupWorkspace = lazy(() => import("@/pages/auth/setup-workspace.tsx"));

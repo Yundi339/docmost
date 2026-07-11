@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { AuditLogPayload, ActorType, EXCLUDED_AUDIT_EVENTS } from '../../common/events/audit-events';
 import { ClsService } from 'nestjs-cls';
 import { AuditContext, AUDIT_CONTEXT_KEY } from '../../common/middlewares/audit-context.middleware';
 import { AuditRepo } from '@docmost/db/repos/audit/audit.repo';
+import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 
 export type AuditLogContext = {
   workspaceId: string;
@@ -72,6 +74,7 @@ export class RealAuditService implements IAuditService {
   constructor(
     private readonly cls: ClsService,
     private readonly auditRepo: AuditRepo,
+    private readonly workspaceRepo: WorkspaceRepo,
   ) {}
 
   log(payload: AuditLogPayload): void {
@@ -131,7 +134,21 @@ export class RealAuditService implements IAuditService {
     workspaceId: string,
     retentionDays: number,
   ): Promise<void> {
+    await this.workspaceRepo.updateWorkspace(
+      { auditRetentionDays: retentionDays },
+      workspaceId,
+    );
     await this.auditRepo.deleteOldAuditLogs(workspaceId, retentionDays);
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async pruneExpiredAuditLogs(): Promise<void> {
+    try {
+      await this.auditRepo.deleteExpiredAuditLogs();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`Failed to prune expired audit logs: ${message}`);
+    }
   }
 
   private persistLog(payload: AuditLogPayload, context: AuditLogContext): void {

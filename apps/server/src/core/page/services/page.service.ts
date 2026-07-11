@@ -422,6 +422,15 @@ export class PageService {
         p.parentPageId &&
         accessibleIds.has(p.parentPageId),
     );
+    const pagesToSynchronize = [rootPage, ...pagesToOrphan];
+    const pageAudiences = new Map(
+      await Promise.all(
+        pagesToSynchronize.map(async (page) => [
+          page.id,
+          await this.wsTreeService.capturePageAudience(page),
+        ] as const),
+      ),
+    );
 
     await executeTx(
       this.db,
@@ -528,6 +537,21 @@ export class PageService {
       existingTrx,
     );
 
+    for (const page of pagesToSynchronize) {
+      const relocatedPage = await this.pageRepo.findById(page.id, {
+        includeHasChildren: true,
+      });
+      const audience = pageAudiences.get(page.id);
+      if (!relocatedPage || !audience) continue;
+
+      await this.wsTreeService.notifyPageRelocated(
+        page,
+        relocatedPage,
+        Boolean((relocatedPage as Page & { hasChildren?: boolean }).hasChildren),
+        audience,
+      );
+    }
+
     return { childPageIds };
   }
 
@@ -536,6 +560,9 @@ export class PageService {
     parentPageId: string | null,
     existingTrx?: KyselyTransaction,
   ) {
+    const previousAudience =
+      await this.wsTreeService.capturePageAudience(movedPage);
+
     await executeTx(
       this.db,
       async (trx) => {
@@ -591,6 +618,18 @@ export class PageService {
       },
       existingTrx,
     );
+
+    const relocatedPage = await this.pageRepo.findById(movedPage.id, {
+      includeHasChildren: true,
+    });
+    if (relocatedPage) {
+      await this.wsTreeService.notifyPageRelocated(
+        movedPage,
+        relocatedPage,
+        Boolean((relocatedPage as Page & { hasChildren?: boolean }).hasChildren),
+        previousAudience,
+      );
+    }
   }
 
   async duplicatePage(
@@ -849,6 +888,9 @@ export class PageService {
   }
 
   async movePage(dto: MovePageDto, movedPage: Page) {
+    const previousAudience =
+      await this.wsTreeService.capturePageAudience(movedPage);
+
     // validate position value by attempting to generate a key
     try {
       generateJitteredKeyBetween(dto.position, null);
@@ -909,6 +951,18 @@ export class PageService {
         trx,
       );
     });
+
+    const relocatedPage = await this.pageRepo.findById(movedPage.id, {
+      includeHasChildren: true,
+    });
+    if (relocatedPage) {
+      await this.wsTreeService.notifyPageRelocated(
+        movedPage,
+        relocatedPage,
+        Boolean((relocatedPage as Page & { hasChildren?: boolean }).hasChildren),
+        previousAudience,
+      );
+    }
   }
 
   private async lockSpaceTreeForMove(spaceId: string, trx: KyselyTransaction) {

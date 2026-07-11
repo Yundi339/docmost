@@ -102,8 +102,5 @@ export function resolveMcpMode(aiSettings: any): McpMode {
 }
 
 function getClientIp(req: FastifyRequest) {
-  const forwardedFor = req.headers?.['x-forwarded-for'];
-  return Array.isArray(forwardedFor)
-    ? forwardedFor[0]
-    : forwardedFor?.split(',')[0]?.trim() || req.ip;
+  return req.ip;
 }

@@ -55,10 +55,12 @@ export class SpaceController {
     @Body()
     pagination: PaginationOptions,
     @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
     const result = await this.spaceMemberService.getUserSpaces(
       user.id,
       pagination,
+      workspace.id,
     );
 
     if (result.items.length > 0) {

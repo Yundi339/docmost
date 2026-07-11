@@ -36,15 +36,24 @@ export default defineConfig(({ mode }) => {
       },
       APP_VERSION: JSON.stringify(appVersion),
     },
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: "runtime-version-manifest",
+        generateBundle() {
+          this.emitFile({
+            type: "asset",
+            fileName: "version.json",
+            source: `${JSON.stringify({ version: appVersion })}\n`,
+          });
+        },
+      },
+    ],
     build: {
       rolldownOptions: {
         output: {
           codeSplitting: {
-            groups: [
-              { name: "vendor-mantine", test: /@mantine/ },
-              { name: "vendor-katex", test: /katex/ },
-            ],
+            groups: [{ name: "vendor-katex", test: /katex/ }],
           },
         },
       },

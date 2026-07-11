@@ -161,9 +161,14 @@ function DocTreeRowInner<T extends object>(props: Props<T>) {
 
     if (!dropDisabled) {
       const mode = getTreeItemMode({ isLastSibling, isOpen, hasChildren });
-      // Block 'reorder-below' when the row is open with children — ambiguous gesture,
-      // force users to drop into the folder via 'make-child' instead.
-      const block = getBlockedTreeInstructions({ isOpen, hasChildren });
+      // Expanded non-final nodes reserve their lower area for making a child.
+      // The final sibling keeps its bottom edge available so an item can be
+      // placed at the end of the group.
+      const block = getBlockedTreeInstructions({
+        isLastSibling,
+        isOpen,
+        hasChildren,
+      });
 
       cleanups.push(
         dropTargetForElements({

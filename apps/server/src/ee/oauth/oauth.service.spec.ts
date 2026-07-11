@@ -20,6 +20,7 @@ describe('OAuthService public origin', () => {
         isSelfHosted: jest.fn().mockReturnValue(true),
         isCloud: jest.fn().mockReturnValue(false),
       },
+      overrides.auditService ?? { logWithContext: jest.fn() },
     );
   }
 
@@ -55,7 +56,7 @@ describe('OAuthService public origin', () => {
     expect(workspaceRepo.findByHostname).not.toHaveBeenCalled();
   });
 
-  it('uses forwarded host to resolve cloud workspace metadata requests', async () => {
+  it('uses the request host to resolve cloud workspace metadata requests', async () => {
     const workspaceRepo = {
       findFirst: jest.fn(),
       findByHostname: jest.fn().mockResolvedValue(workspace),
@@ -69,8 +70,8 @@ describe('OAuthService public origin', () => {
     });
     const req = {
       headers: {
-        host: '127.0.0.1:3000',
-        'x-forwarded-host': 'Workspace.Example.com:23000',
+        host: 'Workspace.Example.com:23000',
+        'x-forwarded-host': 'attacker.example',
       },
     } as any;
 
@@ -81,14 +82,18 @@ describe('OAuthService public origin', () => {
     expect(workspaceRepo.findByHostname).toHaveBeenCalledWith('workspace');
   });
 
-  it('uses forwarded request origin for self-hosted OAuth metadata', () => {
-    const service = createService();
+  it('uses the configured origin for self-hosted OAuth metadata', () => {
+    const service = createService({
+      domainService: {
+        getUrl: jest.fn().mockReturnValue('https://docs.example.test:23000'),
+      },
+    });
     const req = {
       protocol: 'http',
       headers: {
         host: '127.0.0.1:3006',
         'x-forwarded-proto': 'https',
-        'x-forwarded-host': 'docs.example.test:23000',
+        'x-forwarded-host': 'attacker.example',
       },
     } as any;
 
@@ -160,7 +165,8 @@ describe('OAuthService public origin', () => {
       selectFrom: jest.fn().mockReturnValue(selectQuery),
       updateTable: jest.fn().mockReturnValue(updateQuery),
     };
-    const service = createService({ db });
+    const auditService = { logWithContext: jest.fn() };
+    const service = createService({ db, auditService });
     const readWriteWorkspace = {
       ...workspace,
       settings: { ai: { mcpMode: 'read-write' } },
@@ -205,6 +211,153 @@ describe('OAuthService public origin', () => {
         }),
       }),
     );
+    expect(auditService.logWithContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'mcp.oauth_client_registered',
+        metadata: expect.objectContaining({
+          clientName: 'Docmost connector',
+          scopes: ['mcp:read', 'mcp:write'],
+        }),
+      }),
+      expect.objectContaining({
+        workspaceId: 'workspace-id',
+        actorType: 'system',
+      }),
+    );
+  });
+
+  it('limits the number of dynamic-registration redirect URIs', async () => {
+    const oauthClient = {
+      id: 'oauth-client-id',
+      workspaceId: workspace.id,
+      creatorId: null,
+      provider: 'chatgpt',
+      name: 'ChatGPT',
+      clientId: null,
+      trustedClientIdHost: 'chatgpt.com',
+      allowClientIdMetadataDocuments: true,
+      allowedScopes: ['mcp:read', 'mcp:write'],
+      isEnabled: true,
+      settings: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    };
+    const db = {
+      selectFrom: jest.fn().mockReturnValue(createSelectQuery(oauthClient)),
+    };
+    const service = createService({ db });
+
+    await expect(
+      service.registerClient(
+        {
+          redirect_uris: Array.from(
+            { length: 11 },
+            (_, index) =>
+              `https://chatgpt.com/connector/oauth/callback-${index}`,
+          ),
+        },
+        workspace,
+      ),
+    ).rejects.toThrow('redirect_uris cannot contain more than 10 entries');
+  });
+
+  it('audits OAuth authorization without storing authorization codes', async () => {
+    const insertQuery = createInsertQuery();
+    const auditService = { logWithContext: jest.fn() };
+    const service = createService({
+      db: { insertInto: jest.fn().mockReturnValue(insertQuery) },
+      auditService,
+    });
+    jest.spyOn(service as any, 'resolveAuthorizeRequest').mockResolvedValue({
+      oauthClient: { id: 'oauth-client-id', provider: 'chatgpt' },
+      clientId: 'docmost-client-id',
+      clientName: 'Docmost connector',
+      redirectUri: 'https://chatgpt.com/connector/oauth/callback-id',
+      resource: 'https://docs.example.test/mcp',
+      scopes: ['mcp:read'],
+      state: 'state',
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+    });
+    jest
+      .spyOn(service as any, 'upsertAuthorization')
+      .mockResolvedValue({ id: 'authorization-id' });
+
+    await service.approveAuthorization(
+      {} as any,
+      { id: 'user-id' } as any,
+      workspace,
+      {
+        ip: '203.0.113.10',
+        headers: { 'user-agent': 'test-agent' },
+      } as any,
+    );
+
+    expect(auditService.logWithContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'mcp.oauth_authorized',
+        resourceId: 'authorization-id',
+        metadata: expect.objectContaining({
+          clientName: 'Docmost connector',
+          redirectHost: 'chatgpt.com',
+          authorizationUserId: 'user-id',
+        }),
+      }),
+      expect.objectContaining({
+        workspaceId: 'workspace-id',
+        actorId: 'user-id',
+        actorType: 'user',
+      }),
+    );
+    expect(JSON.stringify(auditService.logWithContext.mock.calls)).not.toContain(
+      'challenge',
+    );
+  });
+
+  it('audits an owner revoking another user OAuth authorization', async () => {
+    const authorization = {
+      id: 'authorization-id',
+      userId: 'member-id',
+      provider: 'chatgpt',
+      clientId: 'docmost-client-id',
+      clientName: 'Docmost connector',
+      redirectUri: 'https://chatgpt.com/connector/oauth/callback-id',
+      scopes: ['mcp:read'],
+    };
+    const auditService = { logWithContext: jest.fn() };
+    const service = createService({
+      db: {
+        selectFrom: jest.fn().mockReturnValue(createSelectQuery(authorization)),
+        transaction: jest.fn().mockReturnValue({
+          execute: async (callback: (trx: any) => Promise<void>) =>
+            callback({ updateTable: jest.fn().mockReturnValue(createUpdateQuery()) }),
+        }),
+      },
+      auditService,
+    });
+
+    await service.revokeAuthorization(
+      authorization.id,
+      workspace,
+      { id: 'owner-id', role: 'owner' } as any,
+      {
+        ip: '203.0.113.11',
+        headers: { 'user-agent': 'owner-agent' },
+      } as any,
+    );
+
+    expect(auditService.logWithContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'mcp.oauth_revoked',
+        resourceId: authorization.id,
+        metadata: expect.objectContaining({
+          authorizationUserId: 'member-id',
+          revokedByAdmin: true,
+        }),
+      }),
+      expect.objectContaining({ actorId: 'owner-id', actorType: 'user' }),
+    );
   });
 });
 
@@ -221,6 +374,14 @@ function createUpdateQuery() {
   const query: Record<string, jest.Mock> = {
     set: jest.fn(() => query),
     where: jest.fn(() => query),
+    execute: jest.fn().mockResolvedValue([]),
+  };
+  return query;
+}
+
+function createInsertQuery() {
+  const query: Record<string, jest.Mock> = {
+    values: jest.fn(() => query),
     execute: jest.fn().mockResolvedValue([]),
   };
   return query;

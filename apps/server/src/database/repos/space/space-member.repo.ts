@@ -335,12 +335,20 @@ export class SpaceMemberRepo {
       .execute();
   }
 
-  async getUserSpaces(userId: string, pagination: PaginationOptions) {
+  async getUserSpaces(
+    userId: string,
+    pagination: PaginationOptions,
+    workspaceId?: string,
+  ) {
     let query = this.db
       .selectFrom('spaces')
       .selectAll()
       .select((eb) => [this.spaceRepo.withMemberCount(eb)])
       .where('id', 'in', this.getUserSpaceIdsQuery(userId));
+
+    if (workspaceId) {
+      query = query.where('spaces.workspaceId', '=', workspaceId);
+    }
 
     if (pagination.query) {
       query = query.where((eb) =>

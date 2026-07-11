@@ -65,6 +65,7 @@ describe('DocTree hitbox mode', () => {
       { id: 'target' },
       {
         block: getBlockedTreeInstructions({
+          isLastSibling: true,
           isOpen: true,
           hasChildren: true,
         }),
@@ -89,6 +90,43 @@ describe('DocTree hitbox mode', () => {
     expect(extractInstruction(data)).toMatchObject({
       type: 'reparent',
       desiredLevel: 0,
+    });
+  });
+
+  it('allows placing a node after the expanded final sibling', () => {
+    const mode = getTreeItemMode({
+      isLastSibling: true,
+      isOpen: true,
+      hasChildren: true,
+    });
+    const data = attachInstruction(
+      { id: 'target' },
+      {
+        block: getBlockedTreeInstructions({
+          isLastSibling: true,
+          isOpen: true,
+          hasChildren: true,
+        }),
+        currentLevel: 0,
+        element: element({
+          left: 0,
+          right: 200,
+          top: 0,
+          bottom: 40,
+          width: 200,
+          height: 40,
+        }),
+        indentPerLevel: 16,
+        input: {
+          clientX: 100,
+          clientY: 36,
+        } as Parameters<typeof attachInstruction>[1]['input'],
+        mode,
+      },
+    );
+
+    expect(extractInstruction(data)).toMatchObject({
+      type: 'reorder-below',
     });
   });
 });

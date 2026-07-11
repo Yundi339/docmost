@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -17,6 +18,11 @@ import { TokenService } from '../../core/auth/services/token.service';
 import { JwtMcpOAuthPayload } from '../../core/auth/dto/jwt-payload';
 import { isUserDisabled } from '../../common/helpers';
 import { UserRole } from '../../common/helpers/types/permission';
+import { AuditEvent, AuditResource } from '../../common/events/audit-events';
+import {
+  AUDIT_SERVICE,
+  IAuditService,
+} from '../../integrations/audit/audit.service';
 import {
   CHATGPT_TRUSTED_CLIENT_ID_HOST,
   DEFAULT_OAUTH_SCOPES,
@@ -85,6 +91,9 @@ type OAuthClientSettings = {
   dcrClients?: RegisteredDcrClient[];
 };
 
+const MAX_DCR_REDIRECT_URIS = 10;
+const MAX_DCR_REDIRECT_URI_LENGTH = 2048;
+
 export type OAuthClientView = {
   id: string;
   provider: string;
@@ -111,6 +120,7 @@ export class OAuthService {
     private readonly workspaceRepo: WorkspaceRepo,
     private readonly domainService: DomainService,
     private readonly environmentService: EnvironmentService,
+    @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
   getMcpResourceUrl(workspace: Workspace, req?: FastifyRequest): string {
@@ -140,14 +150,9 @@ export class OAuthService {
     return undefined;
   }
 
-  getIssuer(workspace: Workspace, req?: FastifyRequest): string {
-    if (this.environmentService.isSelfHosted()) {
-      const origin = getRequestOrigin(req);
-      if (origin) {
-        return origin;
-      }
-    }
-
+  getIssuer(workspace: Workspace, _req?: FastifyRequest): string {
+    // APP_URL is the canonical public origin in self-hosted deployments.
+    // Never derive an OAuth issuer from Host or X-Forwarded-* headers.
     return trimTrailingSlash(this.domainService.getUrl(workspace.hostname));
   }
 
@@ -222,6 +227,7 @@ export class OAuthService {
   async registerClient(
     input: OAuthClientRegistrationRequest,
     workspace: Workspace,
+    req?: FastifyRequest,
   ): Promise<OAuthClientRegistrationResponse> {
     const oauthClient = await this.getEnabledChatGptClient(workspace.id);
     const redirectUris = normalizeRedirectUris(input.redirect_uris);
@@ -236,7 +242,7 @@ export class OAuthService {
         'Only token_endpoint_auth_method "none" is supported',
       );
     }
-    const tokenEndpointAuthMethod: 'none' = 'none';
+    const tokenEndpointAuthMethod = 'none' as const;
 
     const grantTypes = input.grant_types?.length
       ? input.grant_types
@@ -303,6 +309,30 @@ export class OAuthService {
       .where('workspaceId', '=', workspace.id)
       .execute();
 
+    this.auditService.logWithContext(
+      {
+        event: AuditEvent.MCP_OAUTH_CLIENT_REGISTERED,
+        resourceType: AuditResource.MCP_OAUTH_CLIENT,
+        resourceId: oauthClient.id,
+        metadata: {
+          provider: oauthClient.provider,
+          clientId: truncate(registeredClient.clientId, 255),
+          clientName: registeredClient.clientName,
+          redirectHosts: registeredClient.redirectUris
+            .map(getUrlHost)
+            .filter(Boolean),
+          scopes: registeredClient.scopes,
+          existingRegistration: !!existing,
+          userAgent: getRequestUserAgent(req),
+        },
+      },
+      {
+        workspaceId: workspace.id,
+        actorType: 'system',
+        ipAddress: req?.ip,
+      },
+    );
+
     return toRegistrationResponse(registeredClient);
   }
 
@@ -346,6 +376,37 @@ export class OAuthService {
       .where('workspaceId', '=', workspace.id)
       .returningAll()
       .executeTakeFirst();
+
+    this.auditService.logWithContext(
+      {
+        event: AuditEvent.MCP_OAUTH_CLIENT_UPDATED,
+        resourceType: AuditResource.MCP_OAUTH_CLIENT,
+        resourceId: client.id,
+        changes: {
+          before: {
+            name: client.name,
+            isEnabled: client.isEnabled,
+            allowedScopes: client.allowedScopes,
+          },
+          after: {
+            name: row.name,
+            isEnabled: row.isEnabled,
+            allowedScopes: row.allowedScopes,
+          },
+        },
+        metadata: {
+          provider: row.provider,
+          clientName: row.name,
+          userAgent: getRequestUserAgent(req),
+        },
+      },
+      {
+        workspaceId: workspace.id,
+        actorId: user.id,
+        actorType: 'user',
+        ipAddress: req?.ip,
+      },
+    );
 
     return this.toClientView(row, workspace, req);
   }
@@ -395,6 +456,7 @@ export class OAuthService {
     authorizationId: string,
     workspace: Workspace,
     user: User,
+    req?: FastifyRequest,
   ) {
     const authorization = await this.db
       .selectFrom('oauthAuthorizations')
@@ -429,6 +491,30 @@ export class OAuthService {
         .where('revokedAt', 'is', null)
         .execute();
     });
+
+    this.auditService.logWithContext(
+      {
+        event: AuditEvent.MCP_OAUTH_REVOKED,
+        resourceType: AuditResource.MCP_OAUTH_AUTHORIZATION,
+        resourceId: authorization.id,
+        metadata: {
+          provider: authorization.provider,
+          clientId: truncate(authorization.clientId, 255),
+          clientName: authorization.clientName,
+          redirectHost: getUrlHost(authorization.redirectUri),
+          scopes: authorization.scopes,
+          authorizationUserId: authorization.userId,
+          revokedByAdmin: authorization.userId !== user.id,
+          userAgent: getRequestUserAgent(req),
+        },
+      },
+      {
+        workspaceId: workspace.id,
+        actorId: user.id,
+        actorType: 'user',
+        ipAddress: req?.ip,
+      },
+    );
   }
 
   async previewAuthorization(
@@ -489,6 +575,29 @@ export class OAuthService {
         expiresAt,
       })
       .execute();
+
+    this.auditService.logWithContext(
+      {
+        event: AuditEvent.MCP_OAUTH_AUTHORIZED,
+        resourceType: AuditResource.MCP_OAUTH_AUTHORIZATION,
+        resourceId: authorization.id,
+        metadata: {
+          provider: resolved.oauthClient.provider,
+          clientId: truncate(resolved.clientId, 255),
+          clientName: resolved.clientName,
+          redirectHost: getUrlHost(resolved.redirectUri),
+          scopes: resolved.scopes,
+          authorizationUserId: user.id,
+          userAgent: getRequestUserAgent(req),
+        },
+      },
+      {
+        workspaceId: workspace.id,
+        actorId: user.id,
+        actorType: 'user',
+        ipAddress: req?.ip,
+      },
+    );
 
     return {
       redirectUri: appendRedirectParams(resolved.redirectUri, {
@@ -1247,6 +1356,11 @@ function normalizeRedirectUris(value: unknown) {
   if (!Array.isArray(value) || value.length === 0) {
     throw new BadRequestException('redirect_uris is required');
   }
+  if (value.length > MAX_DCR_REDIRECT_URIS) {
+    throw new BadRequestException(
+      `redirect_uris cannot contain more than ${MAX_DCR_REDIRECT_URIS} entries`,
+    );
+  }
 
   const redirectUris = [...new Set(value)]
     .filter((item): item is string => typeof item === 'string')
@@ -1255,6 +1369,9 @@ function normalizeRedirectUris(value: unknown) {
 
   if (!redirectUris.length || redirectUris.length !== value.length) {
     throw new BadRequestException('redirect_uris is invalid');
+  }
+  if (redirectUris.some((uri) => uri.length > MAX_DCR_REDIRECT_URI_LENGTH)) {
+    throw new BadRequestException('redirect_uri is too long');
   }
 
   return redirectUris;
@@ -1317,34 +1434,12 @@ function normalizeResourceUrl(value: string) {
   return url.toString();
 }
 
-function getRequestOrigin(req?: FastifyRequest) {
-  if (!req) {
-    return undefined;
-  }
-
-  const forwardedProto = getFirstHeaderValue(req.headers['x-forwarded-proto']);
-  const forwardedHost = getFirstHeaderValue(req.headers['x-forwarded-host']);
-  const proto = forwardedProto || req.protocol;
-  const host = forwardedHost || getFirstHeaderValue(req.headers.host);
-
-  if (!host || (proto !== 'http' && proto !== 'https')) {
-    return undefined;
-  }
-
-  try {
-    return new URL(`${proto}://${host}`).origin;
-  } catch {
-    return undefined;
-  }
-}
-
 function getRequestHost(req?: FastifyRequest) {
   if (!req) {
     return undefined;
   }
 
-  const forwardedHost = getFirstHeaderValue(req.headers['x-forwarded-host']);
-  const host = forwardedHost || getFirstHeaderValue(req.headers.host);
+  const host = req.hostname || getFirstHeaderValue(req.headers.host);
   return host?.split(':')[0]?.trim().toLowerCase();
 }
 
@@ -1494,6 +1589,19 @@ function sanitizeOptionalUrl(value?: string) {
   } catch {
     return undefined;
   }
+}
+
+function getUrlHost(value?: string) {
+  if (!value) return undefined;
+  try {
+    return new URL(value).host;
+  } catch {
+    return undefined;
+  }
+}
+
+function getRequestUserAgent(req?: FastifyRequest) {
+  return truncate(getFirstHeaderValue(req?.headers?.['user-agent']) ?? '', 1000);
 }
 
 function truncate(value: string, maxLength: number) {

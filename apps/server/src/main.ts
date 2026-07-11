@@ -31,6 +31,25 @@ const CHATGPT_CORS_PATHS = [
   '/mcp',
 ];
 
+function getTrustedProxyConfig(value = process.env.TRUST_PROXY) {
+  if (!value || value.trim().toLowerCase() === 'false') {
+    return false;
+  }
+
+  if (['true', '1', 'all'].includes(value.trim().toLowerCase())) {
+    throw new Error(
+      'TRUST_PROXY must list known proxy IP ranges instead of trusting every request.',
+    );
+  }
+
+  const proxies = value
+    .split(',')
+    .map((proxy) => proxy.trim())
+    .filter(Boolean);
+
+  return proxies.length ? proxies : false;
+}
+
 function isChatGptCorsPath(url?: string) {
   return CHATGPT_CORS_PATHS.some((path) => url?.startsWith(path));
 }
@@ -64,7 +83,9 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
-      trustProxy: true,
+      // Forwarded headers are attacker-controlled unless a known proxy is
+      // explicitly configured. OAuth uses APP_URL, never these headers.
+      trustProxy: getTrustedProxyConfig(),
       routerOptions: {
         maxParamLength: 1000,
         ignoreTrailingSlash: true,

@@ -6,6 +6,9 @@ data
 /dist
 /node_modules
 _env
+
+# Served separately by the production update-log reverse proxy.
+/updatelog/log.json
 _doc
 skills
 instructions

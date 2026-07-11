@@ -107,4 +107,4 @@ export interface CreateDatabaseInput {
   viewType?: DatabaseViewType;
 }
 
-export interface DatabaseUser extends Pick<IUser, 'id' | 'name' | 'email' | 'avatarUrl'> {}
+export type DatabaseUser = Pick<IUser, 'id' | 'name' | 'email' | 'avatarUrl'>;

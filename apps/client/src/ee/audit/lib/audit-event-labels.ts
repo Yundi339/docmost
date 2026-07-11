@@ -34,6 +34,14 @@ export const auditEventLabels: Record<string, string> = {
   "api_key.deleted": "Deleted API key",
 
   "mcp.tool_called": "Called MCP tool",
+  "mcp.session_started": "Started MCP session",
+  "mcp.session_closed": "Closed MCP session",
+  "mcp.session_expired": "Expired MCP session",
+  "mcp.auth_failed": "Rejected MCP authentication",
+  "mcp.oauth_client_registered": "Registered MCP OAuth client",
+  "mcp.oauth_client_updated": "Updated MCP OAuth settings",
+  "mcp.oauth_authorized": "Authorized MCP OAuth connection",
+  "mcp.oauth_revoked": "Revoked MCP OAuth connection",
 
   "space.created": "Created space",
   "space.updated": "Updated space",
@@ -129,7 +137,29 @@ export const eventFilterOptions: EventGroup[] = [
   },
   {
     group: "MCP",
-    items: [{ value: "mcp.tool_called", label: "Called MCP tool" }],
+    items: [
+      { value: "mcp.tool_called", label: "Called MCP tool" },
+      { value: "mcp.session_started", label: "Started MCP session" },
+      { value: "mcp.session_closed", label: "Closed MCP session" },
+      { value: "mcp.session_expired", label: "Expired MCP session" },
+      { value: "mcp.auth_failed", label: "Rejected MCP authentication" },
+      {
+        value: "mcp.oauth_client_registered",
+        label: "Registered MCP OAuth client",
+      },
+      {
+        value: "mcp.oauth_client_updated",
+        label: "Updated MCP OAuth settings",
+      },
+      {
+        value: "mcp.oauth_authorized",
+        label: "Authorized MCP OAuth connection",
+      },
+      {
+        value: "mcp.oauth_revoked",
+        label: "Revoked MCP OAuth connection",
+      },
+    ],
   },
   {
     group: "Comment",

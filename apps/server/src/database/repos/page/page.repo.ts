@@ -155,6 +155,26 @@ export class PageRepo {
     return result;
   }
 
+  async getSiblingIndex(
+    page: Pick<Page, 'id' | 'spaceId' | 'parentPageId'>,
+  ): Promise<number> {
+    let query = this.db
+      .selectFrom('pages')
+      .select('id')
+      .where('spaceId', '=', page.spaceId)
+      .where('deletedAt', 'is', null);
+
+    query = page.parentPageId
+      ? query.where('parentPageId', '=', page.parentPageId)
+      : query.where('parentPageId', 'is', null);
+
+    const siblings = await query
+      .orderBy('position', (ob) => ob.collate('C').asc())
+      .execute();
+    const index = siblings.findIndex((sibling) => sibling.id === page.id);
+    return index === -1 ? siblings.length : index;
+  }
+
   async deletePage(pageId: string): Promise<void> {
     let query = this.db.deleteFrom('pages');
 

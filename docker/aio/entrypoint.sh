@@ -16,7 +16,7 @@ log() { echo "[aio-entrypoint] $*"; }
 : "${REDIS_DATA:=/app/data/redis}"
 : "${AIO_STATE_DIR:=/app/data/aio}"
 : "${DOCMOST_DATA:=/app/data/storage}"
-: "${PG_VERSION:=15}"
+: "${PG_VERSION:=18}"
 
 SECRETS_FILE="${AIO_STATE_DIR}/secrets.env"
 
@@ -90,7 +90,7 @@ if [[ "$BUNDLE_POSTGRES" == "true" && ! -s "$PG_DATA/PG_VERSION" ]]; then
 fi
 
 # --- upgrade-safety check: PG major version must match the cluster on disk --
-# The image bundles PostgreSQL $PG_VERSION (currently 15). If a previous
+# The image bundles PostgreSQL $PG_VERSION (currently 18). If a previous
 # container wrote data with a different major (e.g. user mounts a volume
 # initialised against a future PG 16 image), refuse to start instead of
 # letting Postgres corrupt or crash silently.

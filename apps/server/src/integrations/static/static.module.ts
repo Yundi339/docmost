@@ -62,9 +62,24 @@ export class StaticModule implements OnModuleInit {
 
       const RENDER_PATH = '*';
 
+      app.addHook('onSend', (req: any, reply: any, payload: any, done: any) => {
+        if (req.url.startsWith('/assets/')) {
+          const vary = new Set(
+            String(reply.getHeader('Vary') ?? '')
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean),
+          );
+          vary.add('Accept-Encoding');
+          reply.header('Vary', Array.from(vary).join(', '));
+        }
+        done(null, payload);
+      });
+
       await app.register(fastifyStatic, {
         root: clientDistPath,
         wildcard: false,
+        preCompressed: true,
       });
 
       app.get(RENDER_PATH, (req: any, res: any) => {

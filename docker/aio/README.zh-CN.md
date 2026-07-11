@@ -112,7 +112,9 @@ docker run -d --name docmost \
 
 - `docker rm` 只删容器，**不**删命名卷 → 数据完整保留。
 - 升级新镜像：`docker stop -t 120 docmost && docker rm docmost && docker pull ... && docker run ... -v docmost-aio-data:/app/data ...`，应用迁移会在启动时自动跑。
-- AIO 镜像内 PostgreSQL 主版本固定为 **15**。如果未来 AIO 升级到 PG 16+，需要走 `pg_upgrade` 或 dump/restore；届时会在 release notes 中说明。
+- 镜像内置 **PostgreSQL 18.4** 和 **Redis 8.6.3**。旧版 PostgreSQL 15
+  镜像创建的数据卷不能直接由 PostgreSQL 18 打开，必须先通过 dump/restore
+  或 `pg_upgrade` 迁移。入口脚本会拒绝启动主版本不匹配的数据目录，以保护原数据。
 
 ## 通过 GitHub Actions 构建
 

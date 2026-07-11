@@ -28,6 +28,7 @@ import {
   ISystemStatusDatabase,
   ISystemStatusRedis,
 } from "@/features/system-status/types/system-status.types";
+import UpdateLog from "@/features/system-status/components/update-log";
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -211,6 +212,8 @@ export default function SystemStatus() {
           <RedisCard data={data.redis} />
         </SimpleGrid>
       )}
+
+      <UpdateLog />
     </>
   );
 }

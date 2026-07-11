@@ -6,6 +6,7 @@ import {
   HttpStatus,
   UseGuards,
   ForbiddenException,
+  BadRequestException,
   Inject,
 } from '@nestjs/common';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
@@ -19,7 +20,7 @@ import {
 } from '@docmost/db/repos/audit/audit.repo';
 import { UserRole } from '../../common/helpers/types/permission';
 import { AUDIT_SERVICE, IAuditService } from './audit.service';
-import { AuditEvent, AuditResource } from '../../common/events/audit-events';
+import { AuditResource } from '../../common/events/audit-events';
 
 @UseGuards(JwtAuthGuard, SessionAuthGuard)
 @Controller('audit')
@@ -49,9 +50,15 @@ export class AuditController {
   ) {
     return this.auditRepo.findAuditLogs(workspace.id, {
       ...params,
-      actorId: user.id,
-      event: AuditEvent.MCP_TOOL_CALLED,
-      resourceType: AuditResource.MCP_TOOL,
+      actorId: undefined,
+      relatedUserId: user.id,
+      resourceType: undefined,
+      resourceTypes: [
+        AuditResource.MCP_TOOL,
+        AuditResource.MCP_SESSION,
+        AuditResource.MCP_AUTH,
+        AuditResource.MCP_OAUTH_AUTHORIZATION,
+      ],
     });
   }
 
@@ -62,7 +69,7 @@ export class AuditController {
     @AuthWorkspace() workspace: Workspace,
   ) {
     this.validateOwnerAccess(user);
-    return { retentionDays: workspace['trashRetentionDays'] ?? 90 };
+    return { retentionDays: workspace.auditRetentionDays ?? 365 };
   }
 
   @HttpCode(HttpStatus.OK)
@@ -74,9 +81,17 @@ export class AuditController {
   ) {
     this.validateOwnerAccess(user);
 
-    if (auditRetentionDays && auditRetentionDays > 0) {
-      await this.auditService.updateRetention(workspace.id, auditRetentionDays);
+    if (
+      !Number.isSafeInteger(auditRetentionDays) ||
+      auditRetentionDays < 1 ||
+      auditRetentionDays > 36_500
+    ) {
+      throw new BadRequestException(
+        'Audit retention must be between 1 and 36500 days',
+      );
     }
+
+    await this.auditService.updateRetention(workspace.id, auditRetentionDays);
 
     return { retentionDays: auditRetentionDays };
   }

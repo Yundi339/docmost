@@ -23,8 +23,14 @@ export type IAuditLog = {
   resource?: {
     id: string;
     name: string;
+    type?: string;
     slug?: string;
     slugId?: string;
+    path?: string;
+    spaceId?: string;
+    spaceName?: string;
+    spaceSlug?: string;
+    deleted?: boolean;
   };
 };
 

@@ -106,7 +106,10 @@ AIO to a split deployment without switching images.
 
 - `docker rm` only removes the container; the named volume keeps your data.
 - To upgrade: `docker stop -t 120 docmost && docker rm docmost && docker pull <new-tag> && docker run ... -v docmost-aio-data:/app/data <new-tag>`. App migrations run on startup.
-- The bundled PostgreSQL major version is pinned to **15**. A future bump (PG 16+) will require `pg_upgrade` or dump/restore and will be called out in the release notes.
+- The image bundles **PostgreSQL 18.4** and **Redis 8.6.3**. A volume created
+  by the previous PostgreSQL 15 image cannot be opened directly by PostgreSQL
+  18; migrate it with dump/restore or `pg_upgrade` before using this image.
+  The entrypoint refuses a mismatched PostgreSQL data directory to protect it.
 
 ## Building via GitHub Actions
 

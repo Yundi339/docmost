@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
   OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -64,6 +65,9 @@ import { SearchDTO } from '../../core/search/dto/search.dto';
 const packageJson = require('../../../package.json');
 
 const MAX_LIMIT = 200;
+const DEFAULT_MAX_MCP_SESSIONS = 500;
+const DEFAULT_MAX_MCP_SESSIONS_PER_CREDENTIAL = 10;
+const DEFAULT_MCP_SESSION_IDLE_TTL_SECONDS = 60 * 60;
 export type McpMode = 'off' | 'read-only' | 'read-write';
 type McpToolAccess = 'read' | 'write';
 
@@ -81,6 +85,7 @@ export interface McpRequestContext {
 }
 
 interface McpSession {
+  sessionId: string;
   transport: StreamableHTTPServerTransport;
   server: McpServer;
   userId: string;
@@ -89,6 +94,8 @@ interface McpSession {
   credentialId: string;
   scopes: string[];
   mode: McpMode;
+  context: McpRequestContext;
+  lastActivityAt: number;
 }
 
 type DtoClass<T extends object = Record<string, any>> = new () => T;
@@ -111,9 +118,23 @@ type McpToolHandler<T extends object = Record<string, any>> = (
 ) => Promise<any>;
 
 @Injectable()
-export class McpService implements OnModuleDestroy {
+export class McpService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(McpService.name);
   private sessions = new Map<string, McpSession>();
+  private readonly maxSessions = getPositiveInteger(
+    process.env.MCP_MAX_SESSIONS,
+    DEFAULT_MAX_MCP_SESSIONS,
+  );
+  private readonly maxSessionsPerCredential = getPositiveInteger(
+    process.env.MCP_MAX_SESSIONS_PER_CREDENTIAL,
+    DEFAULT_MAX_MCP_SESSIONS_PER_CREDENTIAL,
+  );
+  private readonly sessionIdleTtlMs =
+    getPositiveInteger(
+      process.env.MCP_SESSION_IDLE_TTL_SECONDS,
+      DEFAULT_MCP_SESSION_IDLE_TTL_SECONDS,
+    ) * 1000;
+  private sessionCleanupTimer?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly pageService: PageService,
@@ -131,7 +152,23 @@ export class McpService implements OnModuleDestroy {
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
+  onModuleInit() {
+    const intervalMs = Math.min(
+      Math.max(Math.floor(this.sessionIdleTtlMs / 2), 60_000),
+      5 * 60_000,
+    );
+    this.sessionCleanupTimer = setInterval(() => {
+      this.pruneExpiredSessions().catch((err) => {
+        this.logger.warn(`Failed to clean up MCP sessions: ${err.message}`);
+      });
+    }, intervalMs);
+    this.sessionCleanupTimer.unref?.();
+  }
+
   onModuleDestroy() {
+    if (this.sessionCleanupTimer) {
+      clearInterval(this.sessionCleanupTimer);
+    }
     for (const [, session] of this.sessions) {
       session.transport.close().catch(() => {});
     }
@@ -147,6 +184,7 @@ export class McpService implements OnModuleDestroy {
     context: McpRequestContext,
   ): Promise<void> {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    await this.pruneExpiredSessions();
 
     if (sessionId && this.sessions.has(sessionId)) {
       const session = this.sessions.get(sessionId);
@@ -170,8 +208,11 @@ export class McpService implements OnModuleDestroy {
         session.mode !== context.mode ||
         !sameScopes(session.scopes, context.scopes)
       ) {
-        await session.transport.close();
-        this.sessions.delete(sessionId);
+        await this.closeSession(
+          sessionId,
+          AuditEvent.MCP_SESSION_CLOSED,
+          'permissions_changed',
+        );
         res.writeHead(403, { 'Content-Type': 'application/json' }).end(
           JSON.stringify({
             error: 'MCP session permissions changed. Reconnect required.',
@@ -179,6 +220,7 @@ export class McpService implements OnModuleDestroy {
         );
         return;
       }
+      session.lastActivityAt = Date.now();
       await session.transport.handleRequest(req, res, body);
       return;
     }
@@ -188,34 +230,48 @@ export class McpService implements OnModuleDestroy {
       return;
     }
 
+    if (!this.hasSessionCapacity(context)) {
+      res
+        .writeHead(429, { 'Content-Type': 'application/json' })
+        .end(JSON.stringify({ error: 'Too many active MCP sessions' }));
+      return;
+    }
+
     // New session (initialization). This in-memory session store is suitable for
     // single-instance deployments. Multi-instance deployments must use sticky
     // sessions or replace this with a shared store.
     const server = this.createMcpServer(user, workspace, context);
     let sid: string | undefined;
-    let transport: StreamableHTTPServerTransport;
-    transport = new StreamableHTTPServerTransport({
+    const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sessionId) => {
         sid = sessionId;
-        this.sessions.set(sessionId, {
+        if (!this.hasSessionCapacity(context)) {
+          transport.close().catch(() => {});
+          return;
+        }
+
+        const session: McpSession = {
+          sessionId,
           transport,
           server,
           userId: user.id,
           workspaceId: workspace.id,
           authType: context.authType,
           credentialId: context.credentialId,
-          scopes: context.scopes,
+          scopes: [...context.scopes],
           mode: context.mode,
-        });
+          context: { ...context, scopes: [...context.scopes] },
+          lastActivityAt: Date.now(),
+        };
+        this.sessions.set(sessionId, session);
+        this.auditMcpSessionEvent(session, AuditEvent.MCP_SESSION_STARTED);
       },
     });
 
     transport.onclose = () => {
       if (!sid) return;
-
-      this.sessions.delete(sid);
-      this.logger.debug(`MCP session ${sid} closed`);
+      this.finishSession(sid, AuditEvent.MCP_SESSION_CLOSED, 'client_closed');
     };
 
     await server.connect(transport);
@@ -244,12 +300,125 @@ export class McpService implements OnModuleDestroy {
         res.writeHead(403).end();
         return;
       }
-      await session.transport.close();
-      this.sessions.delete(sessionId);
+      await this.closeSession(
+        sessionId,
+        AuditEvent.MCP_SESSION_CLOSED,
+        'client_deleted',
+      );
       res.writeHead(200).end();
     } else {
       res.writeHead(404).end();
     }
+  }
+
+  private hasSessionCapacity(context: McpRequestContext) {
+    if (this.sessions.size >= this.maxSessions) {
+      return false;
+    }
+
+    let credentialSessions = 0;
+    for (const session of this.sessions.values()) {
+      if (
+        session.authType === context.authType &&
+        session.credentialId === context.credentialId
+      ) {
+        credentialSessions += 1;
+      }
+    }
+    return credentialSessions < this.maxSessionsPerCredential;
+  }
+
+  private async pruneExpiredSessions() {
+    const expiresBefore = Date.now() - this.sessionIdleTtlMs;
+    const expiredSessionIds = [...this.sessions.values()]
+      .filter((session) => session.lastActivityAt <= expiresBefore)
+      .map((session) => session.sessionId);
+
+    await Promise.all(
+      expiredSessionIds.map((sessionId) =>
+        this.closeSession(
+          sessionId,
+          AuditEvent.MCP_SESSION_EXPIRED,
+          'idle_timeout',
+        ),
+      ),
+    );
+  }
+
+  private async closeSession(
+    sessionId: string,
+    event:
+      | typeof AuditEvent.MCP_SESSION_CLOSED
+      | typeof AuditEvent.MCP_SESSION_EXPIRED,
+    reason: string,
+  ) {
+    const session = this.finishSession(sessionId, event, reason);
+    if (!session) {
+      return false;
+    }
+
+    await session.transport.close().catch(() => {});
+    return true;
+  }
+
+  private finishSession(
+    sessionId: string,
+    event:
+      | typeof AuditEvent.MCP_SESSION_CLOSED
+      | typeof AuditEvent.MCP_SESSION_EXPIRED,
+    reason: string,
+  ) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    this.sessions.delete(sessionId);
+    this.auditMcpSessionEvent(session, event, reason);
+    this.logger.debug(`MCP session ${sessionId} ${reason}`);
+    return session;
+  }
+
+  private auditMcpSessionEvent(
+    session: McpSession,
+    event:
+      | typeof AuditEvent.MCP_SESSION_STARTED
+      | typeof AuditEvent.MCP_SESSION_CLOSED
+      | typeof AuditEvent.MCP_SESSION_EXPIRED,
+    reason?: string,
+  ) {
+    const context = session.context ?? {
+      authType: session.authType,
+      credentialId: session.credentialId,
+      scopes: session.scopes,
+      mode: session.mode,
+    };
+    this.auditService.logWithContext(
+      {
+        event,
+        resourceType: AuditResource.MCP_SESSION,
+        resourceId: session.sessionId,
+        metadata: {
+          sessionId: session.sessionId,
+          reason,
+          authType: context.authType,
+          credentialId: context.credentialId,
+          apiKeyId: context.apiKeyId,
+          oauthAuthorizationId: context.oauthAuthorizationId,
+          oauthClientId: context.oauthClientId,
+          clientId: context.clientId,
+          mode: context.mode,
+          scopes: context.scopes,
+          userAgent: truncateString(context.userAgent, 1000),
+        },
+      },
+      {
+        workspaceId: session.workspaceId,
+        actorId: session.userId,
+        actorType: context.authType,
+        ipAddress: context.ipAddress,
+      },
+    );
   }
 
   private paginate(limit?: number): PaginationOptions {
@@ -328,6 +497,8 @@ export class McpService implements OnModuleDestroy {
         access,
         args,
         !isMcpToolError(result),
+        undefined,
+        result,
       );
       return result;
     } catch (err) {
@@ -379,8 +550,10 @@ export class McpService implements OnModuleDestroy {
     args: Record<string, any>,
     success: boolean,
     err?: unknown,
+    result?: unknown,
   ) {
-    const targetId = getMcpTargetId(args);
+    const resultMetadata = getMcpResultMetadata(result);
+    const targetId = getMcpAuditResourceId(toolName, args, resultMetadata);
     this.auditService.logWithContext(
       {
         event: AuditEvent.MCP_TOOL_CALLED,
@@ -397,6 +570,7 @@ export class McpService implements OnModuleDestroy {
           clientId: context.clientId,
           success,
           target: getMcpTargetMetadata(args),
+          result: resultMetadata,
           error: getAuditError(err),
           userAgent: truncateString(context.userAgent, 1000),
         },
@@ -561,10 +735,10 @@ export class McpService implements OnModuleDestroy {
           );
         }
 
-        const result = await this.searchService.searchPage(
-          input,
-          { userId, workspaceId },
-        );
+        const result = await this.searchService.searchPage(input, {
+          userId,
+          workspaceId,
+        });
         return {
           content: [{ type: 'text', text: JSON.stringify(result.items) }],
         };
@@ -762,10 +936,7 @@ export class McpService implements OnModuleDestroy {
           input.pageId,
           workspaceId,
         );
-        if (
-          !page ||
-          page.spaceId !== input.spaceId
-        ) {
+        if (!page || page.spaceId !== input.spaceId) {
           return {
             content: [{ type: 'text', text: 'Page not found' }],
             isError: true,
@@ -989,6 +1160,7 @@ export class McpService implements OnModuleDestroy {
         const result = await this.spaceMemberService.getUserSpaces(
           userId,
           this.paginate(100),
+          workspaceId,
         );
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       },
@@ -1104,7 +1276,11 @@ export class McpService implements OnModuleDestroy {
             isError: true,
           };
         }
-        await this.pageAccessService.validateCanComment(page, user, workspaceId);
+        await this.pageAccessService.validateCanComment(
+          page,
+          user,
+          workspaceId,
+        );
         const comment = await this.commentService.create(
           { page, workspaceId, user },
           input,
@@ -1142,7 +1318,11 @@ export class McpService implements OnModuleDestroy {
         if (!page) {
           throw new NotFoundException('Page not found');
         }
-        await this.pageAccessService.validateCanComment(page, user, workspaceId);
+        await this.pageAccessService.validateCanComment(
+          page,
+          user,
+          workspaceId,
+        );
         const updated = await this.commentService.update(
           existingComment,
           input,
@@ -1189,7 +1369,10 @@ export class McpService implements OnModuleDestroy {
       async ({ limit }) => {
         const ability = this.workspaceAbility.createForUser(user, workspace);
         if (
-          ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Member)
+          ability.cannot(
+            WorkspaceCaslAction.Manage,
+            WorkspaceCaslSubject.Member,
+          )
         ) {
           throw new ForbiddenException(
             'Forbidden: cannot list workspace members',
@@ -1240,6 +1423,28 @@ function getMcpTargetId(args: Record<string, any>) {
   );
 }
 
+const MCP_CREATED_RESOURCE_TOOLS = new Set([
+  'create_page',
+  'duplicate_page',
+  'copy_page_to_space',
+  'create_space',
+  'create_comment',
+]);
+
+function getMcpAuditResourceId(
+  toolName: string,
+  args: Record<string, any>,
+  result?: Record<string, string>,
+) {
+  const resultId = result?.id;
+  if (MCP_CREATED_RESOURCE_TOOLS.has(toolName) && isUuid(resultId)) {
+    return resultId;
+  }
+
+  const targetId = getMcpTargetId(args);
+  return isUuid(targetId) ? targetId : undefined;
+}
+
 function getMcpTargetMetadata(args: Record<string, any>) {
   const allowedKeys = [
     'pageId',
@@ -1248,13 +1453,48 @@ function getMcpTargetMetadata(args: Record<string, any>) {
     'parentPageId',
     'format',
     'operation',
+    'title',
   ];
 
   return Object.fromEntries(
     allowedKeys
       .filter((key) => typeof args[key] !== 'undefined')
-      .map((key) => [key, args[key]]),
+      .map((key) => [key, truncateString(args[key], 255) ?? args[key]]),
   );
+}
+
+function getMcpResultMetadata(result: unknown): Record<string, string> | undefined {
+  if (isMcpToolError(result) || !result || typeof result !== 'object') {
+    return undefined;
+  }
+
+  const text = (result as { content?: unknown[] }).content?.find(
+    (item): item is { type: string; text: string } =>
+      !!item &&
+      typeof item === 'object' &&
+      (item as { type?: unknown }).type === 'text' &&
+      typeof (item as { text?: unknown }).text === 'string',
+  )?.text;
+  if (!text) return undefined;
+
+  try {
+    const value = JSON.parse(text);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined;
+    }
+
+    const keys = ['id', 'title', 'name', 'slugId', 'spaceId', 'parentPageId'];
+    const metadata = Object.fromEntries(
+      keys.flatMap((key) => {
+        const item = (value as Record<string, unknown>)[key];
+        const normalized = truncateString(item, 255);
+        return normalized ? [[key, normalized]] : [];
+      }),
+    );
+    return Object.keys(metadata).length ? metadata : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isMcpToolError(result: unknown) {
@@ -1296,6 +1536,15 @@ function sameScopes(left: string[], right: string[]) {
 
   const leftSet = new Set(left);
   return right.every((scope) => leftSet.has(scope));
+}
+
+function getPositiveInteger(value: string | undefined, fallback: number) {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function toolOptions(

@@ -1,6 +1,6 @@
 FROM node:22-slim AS base
 
-RUN npm install -g pnpm@10.4.0
+RUN npm install -g pnpm@10.34.5
 
 FROM base AS builder
 

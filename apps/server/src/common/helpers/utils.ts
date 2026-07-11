@@ -1,5 +1,7 @@
 import * as path from 'path';
 import * as bcrypt from 'bcrypt';
+// sanitize-filename is CommonJS-only and has no compatible default export.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 import sanitize = require('sanitize-filename');
 import { FastifyRequest } from 'fastify';
 import { Readable, Transform } from 'stream';

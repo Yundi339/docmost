@@ -426,7 +426,7 @@ export class PageVerificationService {
 
     // Fetch verifiers for each item
     const verificationIds = items.map((i) => i.id);
-    let verifierMap: Record<string, any[]> = {};
+    const verifierMap: Record<string, any[]> = {};
     if (verificationIds.length > 0) {
       const verifiers = await this.db
         .selectFrom('pageVerifiers')

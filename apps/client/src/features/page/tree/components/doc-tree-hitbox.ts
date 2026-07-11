@@ -22,8 +22,12 @@ export function getTreeItemMode({
 }
 
 export function getBlockedTreeInstructions({
+  isLastSibling,
   isOpen,
   hasChildren,
-}: Pick<TreeHitboxState, 'isOpen' | 'hasChildren'>): Instruction['type'][] {
-  return isOpen && hasChildren ? ['reorder-below'] : [];
+}: TreeHitboxState): Instruction['type'][] {
+  // `last-in-group` reserves its bottom edge for placing a sibling after the
+  // final node. Blocking it leaves no way to move an item to the end of an
+  // expanded group.
+  return isOpen && hasChildren && !isLastSibling ? ['reorder-below'] : [];
 }

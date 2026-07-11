@@ -32,9 +32,10 @@ jest.mock(
   { virtual: true },
 );
 
-const { PageService } = require('./page.service') as typeof import(
-  './page.service'
-);
+// Load after Jest mocks above so their module factories are applied first.
+const { PageService } =
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('./page.service') as typeof import('./page.service');
 
 function page(overrides: Partial<Page>): Page {
   return {
@@ -62,6 +63,8 @@ function createService() {
   const trx = {};
   const pageRepo = {
     findById: jest.fn(),
+    insertPage: jest.fn(),
+    removePage: jest.fn().mockResolvedValue(undefined),
     updatePage: jest.fn(),
   };
   const generalQueue = {
@@ -71,6 +74,13 @@ function createService() {
     handleYjsEvent: jest.fn().mockResolvedValue(undefined),
   };
   const wsTreeService = {
+    capturePageAudience: jest.fn().mockResolvedValue({
+      spaceId: 'space-id',
+      userIds: [],
+    }),
+    notifyPageCreated: jest.fn().mockResolvedValue(undefined),
+    notifyPageDeleted: jest.fn().mockResolvedValue(undefined),
+    notifyPageRelocated: jest.fn().mockResolvedValue(undefined),
     notifyPageUpdated: jest.fn().mockResolvedValue(undefined),
   };
   const db = {
@@ -110,6 +120,28 @@ function createService() {
   };
 }
 
+describe('PageService.create', () => {
+  it('persists pages through the repository lifecycle event source', async () => {
+    const { pageRepo, service } = createService();
+    const createdPage = page({ title: 'Created through MCP' });
+    pageRepo.insertPage.mockResolvedValue(createdPage);
+    jest.spyOn(service, 'nextPagePosition').mockResolvedValue('a0');
+
+    await service.create('mcp-user', 'workspace-id', {
+      spaceId: createdPage.spaceId,
+      title: createdPage.title,
+    });
+
+    expect(pageRepo.insertPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spaceId: createdPage.spaceId,
+        title: createdPage.title,
+        workspaceId: 'workspace-id',
+      }),
+    );
+  });
+});
+
 describe('PageService.update', () => {
   it('broadcasts metadata updates from server-side callers', async () => {
     const { pageRepo, service, wsTreeService } = createService();
@@ -148,7 +180,45 @@ describe('PageService.update', () => {
   });
 });
 
+describe('PageService.removePage', () => {
+  it('uses the repository lifecycle event source for server-side callers', async () => {
+    const { pageRepo, service } = createService();
+    const pageId = 'page-id';
+
+    await service.removePage(pageId, 'mcp-user', 'workspace-id');
+
+    expect(pageRepo.removePage).toHaveBeenCalledWith(
+      pageId,
+      'mcp-user',
+      'workspace-id',
+    );
+  });
+});
+
 describe('PageService.movePage', () => {
+  it('synchronizes server-side reparenting to connected clients', async () => {
+    const { pageRepo, service, wsTreeService } = createService();
+    const movedPage = page({ id: 'moved-page', parentPageId: 'old-parent' });
+    const relocatedPage = page({
+      id: movedPage.id,
+      parentPageId: null,
+      position: 'b0',
+    });
+    pageRepo.findById
+      .mockResolvedValueOnce(movedPage)
+      .mockResolvedValueOnce(relocatedPage);
+    jest.spyOn(service as any, 'nextPagePositionIn').mockResolvedValue('b0');
+
+    await service.movePageToParent(movedPage, null);
+
+    expect(wsTreeService.notifyPageRelocated).toHaveBeenCalledWith(
+      movedPage,
+      relocatedPage,
+      false,
+      { spaceId: movedPage.spaceId, userIds: [] },
+    );
+  });
+
   it('updates only the moved page when changing parent', async () => {
     const { pageRepo, service, trx } = createService();
     const movedPage = page({ id: 'moved-page', parentPageId: null });
