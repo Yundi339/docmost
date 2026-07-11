@@ -1,8 +1,7 @@
 import {
-  Accordion,
   Alert,
-  Badge,
   Box,
+  Grid,
   Group,
   Loader,
   Stack,
@@ -86,49 +85,44 @@ export default function UpdateLog() {
       )}
 
       {data && data.releases.length > 0 && (
-        <Accordion
-          variant="separated"
-          radius="sm"
-          defaultValue={data.releases[0].version}
-        >
-          {data.releases.map((release, index) => (
-            <Accordion.Item key={release.version} value={release.version}>
-              <Accordion.Control>
-                <Group justify="space-between" wrap="nowrap" mr="sm">
-                  <Box style={{ minWidth: 0 }}>
-                    <Group gap="xs" mb={2}>
-                      <Text fw={600} style={{ overflowWrap: "anywhere" }}>
-                        {release.title}
-                      </Text>
-                      {index === 0 && (
-                        <Badge size="xs" variant="light">
-                          {t("Latest")}
-                        </Badge>
-                      )}
-                    </Group>
-                    <Text size="xs" c="dimmed">
-                      {release.date}
-                    </Text>
-                  </Box>
-                  <Badge variant="outline" color="gray" style={{ flexShrink: 0 }}>
-                    {release.version}
-                  </Badge>
-                </Group>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <Stack gap="sm">
-                  {release.changes.map((change, changeIndex) => (
-                    <ChangeItem
-                      key={`${change.type}-${changeIndex}`}
-                      type={change.type}
-                      text={change.text}
-                    />
-                  ))}
-                </Stack>
-              </Accordion.Panel>
-            </Accordion.Item>
+        <Stack gap={0}>
+          {data.releases.map((release) => (
+            <Box
+              key={release.version}
+              py="lg"
+              style={{
+                borderTop: "1px solid var(--mantine-color-default-border)",
+              }}
+            >
+              <Grid gutter={{ base: "xs", sm: "xl" }} align="flex-start">
+                <Grid.Col span={{ base: 12, sm: 2 }}>
+                  <Text size="sm" fw={600} c="dimmed">
+                    {release.date}
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 10 }}>
+                  <Title
+                    order={4}
+                    size="h5"
+                    mb="sm"
+                    style={{ overflowWrap: "anywhere" }}
+                  >
+                    {release.title}
+                  </Title>
+                  <Stack gap="sm">
+                    {release.changes.map((change, changeIndex) => (
+                      <ChangeItem
+                        key={`${change.type}-${changeIndex}`}
+                        type={change.type}
+                        text={change.text}
+                      />
+                    ))}
+                  </Stack>
+                </Grid.Col>
+              </Grid>
+            </Box>
           ))}
-        </Accordion>
+        </Stack>
       )}
     </Box>
   );
