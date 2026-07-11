@@ -8,10 +8,12 @@ export interface IAuthProvider {
   samlCertificate: string;
   oidcIssuer: string;
   oidcClientId: string;
-  oidcClientSecret: string;
+  oidcClientSecret?: string;
+  hasOidcClientSecret: boolean;
   ldapUrl: string;
   ldapBindDn: string;
-  ldapBindPassword: string;
+  ldapBindPassword?: string;
+  hasLdapBindPassword: boolean;
   ldapBaseDn: string;
   ldapUserSearchFilter: string;
   ldapUserAttributes: any;

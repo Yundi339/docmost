@@ -1,5 +1,7 @@
 {
   "${{amount}} /user/{{interval}}": "${{amount}} /사용자/{{interval}}",
+  "A secret is configured. Enter a new value only to replace it.": "시크릿이 설정되어 있습니다. 교체할 때만 새 값을 입력하세요.",
+  "Single sign-on (SSO)": "통합 로그인(SSO)",
   "${{amount}} {{currency}} / {{interval}}": "${{amount}} {{currency}} / {{interval}}",
   "1. Scan this QR code with your authenticator app": "1. 인증 앱으로 이 QR 코드를 스캔하세요",
   "15% OFF": "15% 할인",

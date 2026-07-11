@@ -1,5 +1,7 @@
 {
   "${{amount}} /user/{{interval}}": "${{amount}} /usuário/{{interval}}",
+  "A secret is configured. Enter a new value only to replace it.": "Um segredo está configurado. Insira um novo valor apenas para substituí-lo.",
+  "Single sign-on (SSO)": "Logon único (SSO)",
   "${{amount}} {{currency}} / {{interval}}": "${{amount}} {{currency}} / {{interval}}",
   "1. Scan this QR code with your authenticator app": "1. Escaneie este código QR com seu aplicativo autenticador",
   "15% OFF": "15% DE DESCONTO",

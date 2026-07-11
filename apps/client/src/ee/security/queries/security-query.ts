@@ -16,7 +16,10 @@ import { IAuthProvider } from "@/ee/security/types/security.types.ts";
 import { IPagination } from "@/lib/types.ts";
 import { useTranslation } from "react-i18next";
 
-export function useGetSsoProviders(): UseQueryResult<IPagination<IAuthProvider>, Error> {
+export function useGetSsoProviders(): UseQueryResult<
+  IPagination<IAuthProvider>,
+  Error
+> {
   return useQuery({
     queryKey: ["sso-providers"],
     queryFn: () => getSsoProviders(),
@@ -38,8 +41,12 @@ export function useSsoProvider(
 export function useCreateSsoProviderMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation<any, Error, Partial<IAuthProvider>>({
-    mutationFn: (data: Partial<IAuthProvider>) => createSsoProvider(data),
+  return useMutation<
+    IAuthProvider,
+    Error,
+    Pick<IAuthProvider, "name" | "type">
+  >({
+    mutationFn: (data) => createSsoProvider(data),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["sso-providers"],

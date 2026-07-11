@@ -18,7 +18,7 @@ import { Feature } from "@/ee/features";
 
 export default function Security() {
   const { t } = useTranslation();
-  const { isAdmin } = useUserRole();
+  const { isAdmin, isOwner } = useUserRole();
   const hasCustomSso = useHasFeature(Feature.SSO_CUSTOM);
   const hasRetention = useHasFeature(Feature.RETENTION);
   const hasSharingControls = useHasFeature(Feature.SHARING_CONTROLS);
@@ -44,28 +44,32 @@ export default function Security() {
       <TrashRetention />
       <Divider my="lg" />
 
-      <Title order={4} my="lg">
-        Single sign-on (SSO)
-      </Title>
-
-      <EnforceSso />
-      <Divider my="lg" />
-
-      {(isCloud() || hasCustomSso) && (
+      {isOwner && (
         <>
-          <AllowedDomains />
+          <Title order={4} my="lg">
+            {t("Single sign-on (SSO)")}
+          </Title>
+
+          <EnforceSso />
           <Divider my="lg" />
+
+          {(isCloud() || hasCustomSso) && (
+            <>
+              <AllowedDomains />
+              <Divider my="lg" />
+            </>
+          )}
+
+          {hasCustomSso && (
+            <>
+              <CreateSsoProvider />
+              <Divider size={0} my="lg" />
+            </>
+          )}
+
+          <SsoProviderList />
         </>
       )}
-
-      {hasCustomSso && (
-        <>
-          <CreateSsoProvider />
-          <Divider size={0} my="lg" />
-        </>
-      )}
-
-      <SsoProviderList />
     </>
   );
 }

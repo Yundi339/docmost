@@ -4,8 +4,8 @@ import { IPagination } from "@/lib/types.ts";
 
 export async function getSsoProviderById(data: {
   providerId: string;
-}): Promise<any> {
-  const req = await api.post<IAuthProvider>("/sso/info");
+}): Promise<IAuthProvider> {
+  const req = await api.post<IAuthProvider>("/sso/info", data);
   return req.data;
 }
 
@@ -14,7 +14,9 @@ export async function getSsoProviders(): Promise<IPagination<IAuthProvider>> {
   return req.data;
 }
 
-export async function createSsoProvider(data: any): Promise<IAuthProvider> {
+export async function createSsoProvider(
+  data: Pick<IAuthProvider, "name" | "type">,
+): Promise<IAuthProvider> {
   const req = await api.post<IAuthProvider>("/sso/create", data);
   return req.data;
 }

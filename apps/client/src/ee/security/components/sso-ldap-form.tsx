@@ -23,7 +23,7 @@ const ssoSchema = z.object({
   name: z.string().min(1, "Display name is required"),
   ldapUrl: z.string().url().startsWith("ldap", "Must be an LDAP URL"),
   ldapBindDn: z.string().min(1, "Bind DN is required"),
-  ldapBindPassword: z.string().min(1, "Bind password is required"),
+  ldapBindPassword: z.string().max(4096),
   ldapBaseDn: z.string().min(1, "Base DN is required"),
   ldapUserSearchFilter: z.string().optional(),
   ldapTlsEnabled: z.boolean(),
@@ -49,7 +49,7 @@ export function SsoLDAPForm({ provider, onClose }: SsoFormProps) {
       name: provider.name || "",
       ldapUrl: provider.ldapUrl || "",
       ldapBindDn: provider.ldapBindDn || "",
-      ldapBindPassword: provider.ldapBindPassword || "",
+      ldapBindPassword: "",
       ldapBaseDn: provider.ldapBaseDn || "",
       ldapUserSearchFilter:
         provider.ldapUserSearchFilter || "(mail={{username}})",
@@ -75,7 +75,7 @@ export function SsoLDAPForm({ provider, onClose }: SsoFormProps) {
     if (form.isDirty("ldapBindDn")) {
       ssoData.ldapBindDn = values.ldapBindDn;
     }
-    if (form.isDirty("ldapBindPassword")) {
+    if (form.isDirty("ldapBindPassword") && values.ldapBindPassword) {
       ssoData.ldapBindPassword = values.ldapBindPassword;
     }
     if (form.isDirty("ldapBaseDn")) {
@@ -101,6 +101,7 @@ export function SsoLDAPForm({ provider, onClose }: SsoFormProps) {
     }
 
     await updateSsoProviderMutation.mutateAsync(ssoData);
+    form.setFieldValue("ldapBindPassword", "");
     form.resetDirty();
     onClose();
   };
@@ -125,14 +126,22 @@ export function SsoLDAPForm({ provider, onClose }: SsoFormProps) {
 
           <TextInput
             label={t("Bind DN")}
-            description={t("Distinguished Name of the service account for searching")}
+            description={t(
+              "Distinguished Name of the service account for searching",
+            )}
             placeholder="cn=admin,dc=example,dc=com"
             {...form.getInputProps("ldapBindDn")}
           />
 
           <TextInput
             label={t("Bind Password")}
-            description={t("Password for the service account")}
+            description={
+              provider.hasLdapBindPassword
+                ? t(
+                    "A secret is configured. Enter a new value only to replace it.",
+                  )
+                : t("Password for the service account")
+            }
             type="password"
             placeholder="••••••••"
             {...form.getInputProps("ldapBindPassword")}
@@ -147,7 +156,9 @@ export function SsoLDAPForm({ provider, onClose }: SsoFormProps) {
 
           <TextInput
             label={t("User Search Filter")}
-            description={t("LDAP filter to find users. Use {{username}} as placeholder")}
+            description={t(
+              "LDAP filter to find users. Use {{username}} as placeholder",
+            )}
             placeholder="(mail={{username}})"
             {...form.getInputProps("ldapUserSearchFilter")}
           />
@@ -176,7 +187,9 @@ export function SsoLDAPForm({ provider, onClose }: SsoFormProps) {
                   {form.values.ldapTlsEnabled && (
                     <Textarea
                       label={t("CA Certificate")}
-                      description={t("PEM-encoded CA certificate for TLS verification (optional)")}
+                      description={t(
+                        "PEM-encoded CA certificate for TLS verification (optional)",
+                      )}
                       placeholder="-----BEGIN CERTIFICATE-----
 ...
 -----END CERTIFICATE-----"

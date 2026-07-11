@@ -2,7 +2,15 @@ import React from "react";
 import { z } from "zod/v4";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
-import { Box, Button, Group, Stack, Switch, TextInput } from "@mantine/core";
+import {
+  Box,
+  Button,
+  Group,
+  PasswordInput,
+  Stack,
+  Switch,
+  TextInput,
+} from "@mantine/core";
 import { buildCallbackUrl } from "@/ee/security/sso.utils.ts";
 import classes from "@/ee/security/components/sso.module.css";
 import { IAuthProvider } from "@/ee/security/types/security.types.ts";
@@ -14,7 +22,7 @@ const ssoSchema = z.object({
   name: z.string().min(1, "Display name is required"),
   oidcIssuer: z.string().url(),
   oidcClientId: z.string().min(1, "Client id is required"),
-  oidcClientSecret: z.string().min(1, "Client secret is required"),
+  oidcClientSecret: z.string().max(4096),
   isEnabled: z.boolean(),
   allowSignup: z.boolean(),
   groupSync: z.boolean(),
@@ -35,7 +43,7 @@ export function SsoOIDCForm({ provider, onClose }: SsoFormProps) {
       name: provider.name || "",
       oidcIssuer: provider.oidcIssuer || "",
       oidcClientId: provider.oidcClientId || "",
-      oidcClientSecret: provider.oidcClientSecret || "",
+      oidcClientSecret: "",
       isEnabled: provider.isEnabled,
       allowSignup: provider.allowSignup,
       groupSync: provider.groupSync || false,
@@ -61,7 +69,7 @@ export function SsoOIDCForm({ provider, onClose }: SsoFormProps) {
     if (form.isDirty("oidcClientId")) {
       ssoData.oidcClientId = values.oidcClientId;
     }
-    if (form.isDirty("oidcClientSecret")) {
+    if (form.isDirty("oidcClientSecret") && values.oidcClientSecret) {
       ssoData.oidcClientSecret = values.oidcClientSecret;
     }
     if (form.isDirty("isEnabled")) {
@@ -75,6 +83,7 @@ export function SsoOIDCForm({ provider, onClose }: SsoFormProps) {
     }
 
     await updateSsoProviderMutation.mutateAsync(ssoData);
+    form.setFieldValue("oidcClientSecret", "");
     form.resetDirty();
     onClose();
   };
@@ -109,10 +118,16 @@ export function SsoOIDCForm({ provider, onClose }: SsoFormProps) {
             placeholder="e.g 292085223830.apps.googleusercontent.com"
             {...form.getInputProps("oidcClientId")}
           />
-          <TextInput
+          <PasswordInput
             label={t("Client Secret")}
-            description={t("Enter your OIDC Client Secret")}
-            placeholder="e.g OCSPX-zVCkotEPGRnJA1XKUrbgjlf7PQQ-"
+            description={
+              provider.hasOidcClientSecret
+                ? t(
+                    "A secret is configured. Enter a new value only to replace it.",
+                  )
+                : t("Enter your OIDC Client Secret")
+            }
+            placeholder="••••••••"
             {...form.getInputProps("oidcClientSecret")}
           />
 

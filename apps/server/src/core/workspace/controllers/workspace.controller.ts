@@ -100,10 +100,7 @@ export class WorkspaceController {
 
     const ability = this.workspaceAbility.createForUser(user, workspace);
     if (
-      ability.cannot(
-        WorkspaceCaslAction.Manage,
-        WorkspaceCaslSubject.Settings,
-      )
+      ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Settings)
     ) {
       throw new ForbiddenException();
     }
@@ -376,6 +373,8 @@ export class WorkspaceController {
 }
 
 const OWNER_ONLY_WORKSPACE_SETTING_FIELDS = new Set([
+  'emailDomains',
+  'enforceSso',
   'restrictApiToAdmins',
   'allowMemberApiManagement',
   'allowMemberAiSettings',

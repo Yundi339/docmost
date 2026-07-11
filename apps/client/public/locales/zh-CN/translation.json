@@ -1,5 +1,7 @@
 {
   "${{amount}} /user/{{interval}}": "${{amount}} /用户/{{interval}}",
+  "A secret is configured. Enter a new value only to replace it.": "已配置密钥。仅在需要替换时输入新值。",
+  "Single sign-on (SSO)": "单点登录（SSO）",
   "${{amount}} {{currency}} / {{interval}}": "${{amount}} {{currency}} / {{interval}}",
   "1. Scan this QR code with your authenticator app": "1. 使用您的身份验证器应用扫描此二维码",
   "15% OFF": "优惠 15%",
