@@ -3,6 +3,7 @@ export const OAUTH_PROVIDER_CHATGPT = 'chatgpt' as const;
 export const OAuthScope = {
   MCP_READ: 'mcp:read',
   MCP_WRITE: 'mcp:write',
+  MCP_DESTRUCTIVE: 'mcp:destructive',
 } as const;
 
 export type OAuthScopeValue = (typeof OAuthScope)[keyof typeof OAuthScope];
@@ -10,6 +11,7 @@ export type OAuthScopeValue = (typeof OAuthScope)[keyof typeof OAuthScope];
 export const SUPPORTED_OAUTH_SCOPES: OAuthScopeValue[] = [
   OAuthScope.MCP_READ,
   OAuthScope.MCP_WRITE,
+  OAuthScope.MCP_DESTRUCTIVE,
 ];
 
 export const DEFAULT_OAUTH_SCOPES: OAuthScopeValue[] = [OAuthScope.MCP_READ];

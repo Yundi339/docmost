@@ -73,6 +73,8 @@ const mcpToolLabels: Record<string, string> = {
   search_attachments: "Search attachments",
   list_workspace_members: "List workspace members",
   get_current_user: "Get current user",
+  trash_page: "Move to trash",
+  restore_page: "Restore page",
 };
 
 const auditValueLabels: Record<string, string> = {
@@ -82,6 +84,7 @@ const auditValueLabels: Record<string, string> = {
   system: "System",
   read: "Read",
   write: "Write",
+  destructive: "Destructive MCP tools",
   "read-only": "Read only",
   "read-write": "Read and write",
   off: "Off",

@@ -1,4 +1,11 @@
 {
+  "Allow explicitly confirmed page trash operations through MCP.": "명시적으로 확인된 페이지 휴지통 이동 작업을 MCP를 통해 허용합니다.",
+  "Destructive MCP tools": "파괴적 MCP 도구",
+  "MCP maintenance": "MCP 유지 관리",
+  "Code block title": "코드 블록 제목",
+  "Do not wrap lines": "줄 바꿈 안 함",
+  "Download code": "코드 다운로드",
+  "Wrap lines": "줄 바꿈",
   "${{amount}} /user/{{interval}}": "${{amount}} /사용자/{{interval}}",
   "A secret is configured. Enter a new value only to replace it.": "시크릿이 설정되어 있습니다. 교체할 때만 새 값을 입력하세요.",
   "Single sign-on (SSO)": "통합 로그인(SSO)",

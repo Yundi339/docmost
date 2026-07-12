@@ -14,6 +14,18 @@ export interface CodeBlockLowlightOptions extends CodeBlockOptions {
   view: any;
 }
 
+export const MAX_CODE_BLOCK_TITLE_LENGTH = 120;
+
+export function normalizeCodeBlockTitle(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_CODE_BLOCK_TITLE_LENGTH);
+  return normalized || null;
+}
+
 /**
  * This extension allows you to highlight code blocks with lowlight.
  * @see https://tiptap.dev/api/nodes/code-block-lowlight
@@ -35,6 +47,27 @@ export const CustomCodeBlock = CodeBlock.extend<CodeBlockLowlightOptions>({
       defaultLanguage: null,
       HTMLAttributes: {},
       view: null,
+    };
+  },
+
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      title: {
+        default: null,
+        parseHTML: (element) =>
+          normalizeCodeBlockTitle(element.getAttribute('data-title')),
+        renderHTML: (attributes) => {
+          const title = normalizeCodeBlockTitle(attributes.title);
+          return title ? { 'data-title': title } : {};
+        },
+      },
+      wrap: {
+        default: false,
+        parseHTML: (element) => element.getAttribute('data-wrap') === 'true',
+        renderHTML: (attributes) =>
+          attributes.wrap === true ? { 'data-wrap': 'true' } : {},
+      },
     };
   },
 
@@ -70,10 +103,7 @@ export const CustomCodeBlock = CodeBlock.extend<CodeBlockLowlightOptions>({
           });
         }
 
-        if (
-          nodeAfter?.type.spec.isolating &&
-          !nodeAfter.type.spec.atom
-        ) {
+        if (nodeAfter?.type.spec.isolating && !nodeAfter.type.spec.atom) {
           return editor.commands.command(({ tr }) => {
             tr.setSelection(new GapCursor(tr.doc.resolve(after)));
             return true;
@@ -107,10 +137,7 @@ export const CustomCodeBlock = CodeBlock.extend<CodeBlockLowlightOptions>({
           });
         }
 
-        if (
-          nodeBefore?.type.spec.isolating &&
-          !nodeBefore.type.spec.atom
-        ) {
+        if (nodeBefore?.type.spec.isolating && !nodeBefore.type.spec.atom) {
           return editor.commands.command(({ tr }) => {
             tr.setSelection(new GapCursor(tr.doc.resolve(before)));
             return true;
@@ -133,13 +160,13 @@ export const CustomCodeBlock = CodeBlock.extend<CodeBlockLowlightOptions>({
           // position *before* the codeBlock, so walking up via $from.node()
           // would not find it.
           const selectedNode = (selection as any).node;
-          if (selectedNode && selectedNode.type.name === "codeBlock") {
+          if (selectedNode && selectedNode.type.name === 'codeBlock') {
             codeBlockNode = selectedNode;
             codeBlockPos = $from.pos;
           } else {
             for (let depth = $from.depth; depth > 0; depth--) {
               const node = $from.node(depth);
-              if (node.type.name === "codeBlock") {
+              if (node.type.name === 'codeBlock') {
                 codeBlockNode = node;
                 codeBlockPos = $from.start(depth) - 1;
                 break;
@@ -195,10 +222,7 @@ export const CustomCodeBlock = CodeBlock.extend<CodeBlockLowlightOptions>({
             }
             const { state } = view;
             const { selection } = state;
-            if (
-              !selection.empty ||
-              !(selection instanceof TextSelection)
-            ) {
+            if (!selection.empty || !(selection instanceof TextSelection)) {
               return false;
             }
             const { $from } = selection;
@@ -218,9 +242,7 @@ export const CustomCodeBlock = CodeBlock.extend<CodeBlockLowlightOptions>({
               if (!isMermaid(prev)) return false;
               const endPos = beforePos - 1;
               view.dispatch(
-                state.tr.setSelection(
-                  TextSelection.create(state.doc, endPos),
-                ),
+                state.tr.setSelection(TextSelection.create(state.doc, endPos)),
               );
               return true;
             }
@@ -230,9 +252,7 @@ export const CustomCodeBlock = CodeBlock.extend<CodeBlockLowlightOptions>({
             if (!isMermaid(next)) return false;
             const startPos = afterPos + 1;
             view.dispatch(
-              state.tr.setSelection(
-                TextSelection.create(state.doc, startPos),
-              ),
+              state.tr.setSelection(TextSelection.create(state.doc, startPos)),
             );
             return true;
           },

@@ -1322,7 +1322,11 @@ export class OAuthService {
     if (mode === 'off') {
       throw new ForbiddenException('MCP is not enabled for this workspace');
     }
-    if (mode === 'read-only' && scopes.includes(OAuthScope.MCP_WRITE)) {
+    if (
+      mode === 'read-only' &&
+      (scopes.includes(OAuthScope.MCP_WRITE) ||
+        scopes.includes(OAuthScope.MCP_DESTRUCTIVE))
+    ) {
       throw new ForbiddenException('MCP is enabled in read-only mode');
     }
   }
@@ -1343,6 +1347,14 @@ function normalizeScopes(input: string[] | undefined, defaults: string[]) {
     !unique.includes(OAuthScope.MCP_READ)
   ) {
     unique.unshift(OAuthScope.MCP_READ);
+  }
+  if (unique.includes(OAuthScope.MCP_DESTRUCTIVE)) {
+    if (!unique.includes(OAuthScope.MCP_WRITE)) {
+      unique.unshift(OAuthScope.MCP_WRITE);
+    }
+    if (!unique.includes(OAuthScope.MCP_READ)) {
+      unique.unshift(OAuthScope.MCP_READ);
+    }
   }
 
   return unique as OAuthScopeValue[];

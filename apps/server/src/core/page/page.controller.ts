@@ -60,6 +60,7 @@ import {
 } from '../../integrations/audit/audit.service';
 import { getPageTitle } from '../../common/helpers';
 import { UserRole } from '../../common/helpers/types/permission';
+import { PageLifecycleService } from './services/page-lifecycle.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('pages')
@@ -73,6 +74,7 @@ export class PageController {
     private readonly pageAccessService: PageAccessService,
     private readonly backlinkService: BacklinkService,
     private readonly labelService: LabelService,
+    private readonly pageLifecycleService: PageLifecycleService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -327,7 +329,7 @@ export class PageController {
   ) {
     const page = await this.pageRepo.findById(deletePageDto.pageId);
 
-    if (!page) {
+    if (!page || page.workspaceId !== workspace.id) {
       throw new NotFoundException('Page not found');
     }
 
@@ -357,29 +359,7 @@ export class PageController {
         },
       });
     } else {
-      // User with edit permission can delete
-      await this.pageAccessService.validateCanEdit(page, user);
-
-      await this.pageService.removePage(
-        deletePageDto.pageId,
-        user.id,
-        workspace.id,
-      );
-
-      this.auditService.log({
-        event: AuditEvent.PAGE_TRASHED,
-        resourceType: AuditResource.PAGE,
-        resourceId: page.id,
-        spaceId: page.spaceId,
-        changes: {
-          before: {
-            pageId: page.id,
-            slugId: page.slugId,
-            title: getPageTitle(page.title),
-            spaceId: page.spaceId,
-          },
-        },
-      });
+      await this.pageLifecycleService.trashPage(page.id, user, workspace);
     }
   }
 
@@ -390,39 +370,11 @@ export class PageController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    const page = await this.pageRepo.findById(pageIdDto.pageId);
-
-    if (!page) {
-      throw new NotFoundException('Page not found');
-    }
-
-    // only users with "can edit" space level permission can restore pages
-    const ability = await this.spaceAbility.createForUser(user, page.spaceId);
-    if (ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page)) {
-      throw new ForbiddenException();
-    }
-
-    // make sure they have page level access to the page
-    await this.pageAccessService.validateCanEdit(page, user);
-
-    await this.pageRepo.restorePage(pageIdDto.pageId, workspace.id);
-
-    this.auditService.log({
-      event: AuditEvent.PAGE_RESTORED,
-      resourceType: AuditResource.PAGE,
-      resourceId: page.id,
-      spaceId: page.spaceId,
-      changes: {
-        after: {
-          title: getPageTitle(page.title),
-          spaceId: page.spaceId,
-        },
-      },
-    });
-
-    return this.pageRepo.findById(pageIdDto.pageId, {
-      includeHasChildren: true,
-    });
+    return this.pageLifecycleService.restorePage(
+      pageIdDto.pageId,
+      user,
+      workspace,
+    );
   }
 
   @HttpCode(HttpStatus.OK)

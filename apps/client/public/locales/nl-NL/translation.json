@@ -1,4 +1,11 @@
 {
+  "Allow explicitly confirmed page trash operations through MCP.": "Sta expliciet bevestigde acties toe om pagina's via MCP naar de prullenbak te verplaatsen.",
+  "Destructive MCP tools": "Destructieve MCP-hulpmiddelen",
+  "MCP maintenance": "MCP-onderhoud",
+  "Code block title": "Titel van codeblok",
+  "Do not wrap lines": "Regels niet afbreken",
+  "Download code": "Code downloaden",
+  "Wrap lines": "Regels afbreken",
   "${{amount}} /user/{{interval}}": "${{amount}} /gebruiker/{{interval}}",
   "A secret is configured. Enter a new value only to replace it.": "Er is een geheim ingesteld. Voer alleen een nieuwe waarde in om het te vervangen.",
   "Single sign-on (SSO)": "Eenmalige aanmelding (SSO)",

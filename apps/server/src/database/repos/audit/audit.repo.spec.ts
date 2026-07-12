@@ -44,6 +44,31 @@ describe('AuditRepo resource enrichment', () => {
     expect(result).toEqual(resource);
   });
 
+  it('resolves reversible MCP page maintenance to the target page path', async () => {
+    const { repo, resolvePageResource } = createRepo();
+
+    const result = await (repo as any).resolveAuditResource(
+      {
+        resourceType: 'mcp_tool',
+        resourceId: createdPageId,
+        metadata: {
+          success: true,
+          toolName: 'trash_page',
+          target: { pageId: createdPageId },
+          result: { id: createdPageId, title: 'Created page' },
+        },
+      },
+      workspaceId,
+      new Map(),
+    );
+
+    expect(resolvePageResource).toHaveBeenCalledWith(
+      createdPageId,
+      workspaceId,
+    );
+    expect(result).toEqual(resource);
+  });
+
   it('does not resolve targets for failed MCP calls', async () => {
     const { repo, resolvePageResource } = createRepo();
 

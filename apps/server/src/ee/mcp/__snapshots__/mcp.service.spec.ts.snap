@@ -1,0 +1,396 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`McpService access control preserves the existing 20-tool registration contract and order 1`] = `
+{
+  "copy_page_to_space": {
+    "description": "Copy a page to a different space",
+    "destructiveHint": false,
+    "readOnlyHint": false,
+    "schema": {
+      "pageId": {
+        "optional": false,
+        "type": "string",
+      },
+      "spaceId": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:write",
+    ],
+  },
+  "create_comment": {
+    "description": "Create a comment on a page (page-level comment). Content must be a JSON string of ProseMirror document.",
+    "destructiveHint": false,
+    "readOnlyHint": false,
+    "schema": {
+      "content": {
+        "optional": false,
+        "type": "string",
+      },
+      "pageId": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:write",
+    ],
+  },
+  "create_page": {
+    "description": "Create a new page in a space. Content can be markdown, html, or json format",
+    "destructiveHint": false,
+    "readOnlyHint": false,
+    "schema": {
+      "content": {
+        "optional": true,
+        "type": "string",
+      },
+      "format": {
+        "optional": true,
+        "type": "enum",
+        "values": [
+          "json",
+          "markdown",
+          "html",
+        ],
+      },
+      "parentPageId": {
+        "optional": true,
+        "type": "string",
+      },
+      "spaceId": {
+        "optional": false,
+        "type": "string",
+      },
+      "title": {
+        "optional": true,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:write",
+    ],
+  },
+  "create_space": {
+    "description": "Create a new space",
+    "destructiveHint": false,
+    "readOnlyHint": false,
+    "schema": {
+      "description": {
+        "optional": true,
+        "type": "string",
+      },
+      "name": {
+        "optional": false,
+        "type": "string",
+      },
+      "slug": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:write",
+    ],
+  },
+  "duplicate_page": {
+    "description": "Duplicate a page within the same space",
+    "destructiveHint": false,
+    "readOnlyHint": false,
+    "schema": {
+      "pageId": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:write",
+    ],
+  },
+  "get_comments": {
+    "description": "Get comments on a page",
+    "destructiveHint": false,
+    "readOnlyHint": true,
+    "schema": {
+      "limit": {
+        "optional": true,
+        "type": "number",
+      },
+      "pageId": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:read",
+    ],
+  },
+  "get_current_user": {
+    "description": "Get information about the currently authenticated user",
+    "destructiveHint": false,
+    "readOnlyHint": true,
+    "schema": {},
+    "scopes": [
+      "mcp:read",
+    ],
+  },
+  "get_page": {
+    "description": "Get a page by ID. Returns content in the specified format (json, markdown, or html)",
+    "destructiveHint": false,
+    "readOnlyHint": true,
+    "schema": {
+      "format": {
+        "optional": true,
+        "type": "enum",
+        "values": [
+          "json",
+          "markdown",
+          "html",
+        ],
+      },
+      "pageId": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:read",
+    ],
+  },
+  "get_space": {
+    "description": "Get space information by ID",
+    "destructiveHint": false,
+    "readOnlyHint": true,
+    "schema": {
+      "spaceId": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:read",
+    ],
+  },
+  "list_child_pages": {
+    "description": "List child pages of a specific page",
+    "destructiveHint": false,
+    "readOnlyHint": true,
+    "schema": {
+      "limit": {
+        "optional": true,
+        "type": "number",
+      },
+      "pageId": {
+        "optional": false,
+        "type": "string",
+      },
+      "spaceId": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:read",
+    ],
+  },
+  "list_pages": {
+    "description": "List root-level pages in a space",
+    "destructiveHint": false,
+    "readOnlyHint": true,
+    "schema": {
+      "limit": {
+        "optional": true,
+        "type": "number",
+      },
+      "spaceId": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:read",
+    ],
+  },
+  "list_spaces": {
+    "description": "List all spaces the user has access to",
+    "destructiveHint": false,
+    "readOnlyHint": true,
+    "schema": {},
+    "scopes": [
+      "mcp:read",
+    ],
+  },
+  "list_workspace_members": {
+    "description": "List workspace members",
+    "destructiveHint": false,
+    "readOnlyHint": true,
+    "schema": {
+      "limit": {
+        "optional": true,
+        "type": "number",
+      },
+    },
+    "scopes": [
+      "mcp:read",
+    ],
+  },
+  "move_page": {
+    "description": "Move a page under a new parent within the same space",
+    "destructiveHint": false,
+    "readOnlyHint": false,
+    "schema": {
+      "pageId": {
+        "optional": false,
+        "type": "string",
+      },
+      "parentPageId": {
+        "optional": true,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:write",
+    ],
+  },
+  "move_page_to_space": {
+    "description": "Move a page to a different space",
+    "destructiveHint": false,
+    "readOnlyHint": false,
+    "schema": {
+      "pageId": {
+        "optional": false,
+        "type": "string",
+      },
+      "spaceId": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:write",
+    ],
+  },
+  "search_attachments": {
+    "description": "Search attachments (PDF, DOCX) by text content",
+    "destructiveHint": false,
+    "readOnlyHint": true,
+    "schema": {
+      "limit": {
+        "optional": true,
+        "type": "number",
+      },
+      "query": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:read",
+    ],
+  },
+  "search_pages": {
+    "description": "Search pages by query text",
+    "destructiveHint": false,
+    "readOnlyHint": true,
+    "schema": {
+      "limit": {
+        "optional": true,
+        "type": "number",
+      },
+      "query": {
+        "optional": false,
+        "type": "string",
+      },
+      "spaceId": {
+        "optional": true,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:read",
+    ],
+  },
+  "update_comment": {
+    "description": "Update an existing comment. Content must be a JSON string of ProseMirror document.",
+    "destructiveHint": false,
+    "readOnlyHint": false,
+    "schema": {
+      "commentId": {
+        "optional": false,
+        "type": "string",
+      },
+      "content": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:write",
+    ],
+  },
+  "update_page": {
+    "description": "Update an existing page. Supports append, prepend, or replace operations",
+    "destructiveHint": false,
+    "readOnlyHint": false,
+    "schema": {
+      "content": {
+        "optional": true,
+        "type": "string",
+      },
+      "format": {
+        "optional": true,
+        "type": "enum",
+        "values": [
+          "json",
+          "markdown",
+          "html",
+        ],
+      },
+      "operation": {
+        "optional": true,
+        "type": "enum",
+        "values": [
+          "append",
+          "prepend",
+          "replace",
+        ],
+      },
+      "pageId": {
+        "optional": false,
+        "type": "string",
+      },
+      "title": {
+        "optional": true,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:write",
+    ],
+  },
+  "update_space": {
+    "description": "Update a space",
+    "destructiveHint": false,
+    "readOnlyHint": false,
+    "schema": {
+      "description": {
+        "optional": true,
+        "type": "string",
+      },
+      "name": {
+        "optional": true,
+        "type": "string",
+      },
+      "spaceId": {
+        "optional": false,
+        "type": "string",
+      },
+    },
+    "scopes": [
+      "mcp:write",
+    ],
+  },
+}
+`;

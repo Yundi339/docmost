@@ -120,6 +120,7 @@ export function CreateApiKeyModal({
     { value: "rest:write", label: "rest:write" },
     { value: "mcp:read", label: "mcp:read" },
     { value: "mcp:write", label: "mcp:write" },
+    { value: "mcp:destructive", label: "mcp:destructive" },
   ];
 
   const getScopes = (): ApiKeyScope[] => {

@@ -327,7 +327,8 @@ login/callback/LDAP 认证 Controller。owner 是否决定使用 SSO 是业务�
 无需新 API、数据库迁移或独立审计。内容继续进入现有 Yjs 更新和页面历史。
 
 兼容要求：JSON、HTML、Yjs 必须无损；标准 Markdown 围栏不天然保存 title/wrap。
-默认建议 Markdown 只导出语言和代码，显示属性允许降级，不发明私有 Markdown 语法。
+已决定 Markdown 只导出语言和代码，显示属性允许降级，不发明私有 Markdown 语法。
+详细实现见 [`code-block-mcp-design.md`](./code-block-mcp-design.md)。
 
 ### 6.5 协作同步状态
 
@@ -438,7 +439,7 @@ API Key、OAuth 和 MCP 不得修改身份邮箱。强制 SSO 工作区继续禁
 申请、确认和撤销，但不记录 token、密码或完整邮件正文。用户身份没有改变，默认不
 撤销 API Key 和已授权 OAuth；这一行为需在安全说明中明确。
 
-### 6.8 MCP 模块化与破坏性工具
+### 6.8 MCP 模块化与可逆维护工具
 
 #### 用户价值
 
@@ -474,16 +475,16 @@ API Key、OAuth 和 MCP 不得修改身份邮箱。强制 SSO 工作区继续禁
 
 #### 新工具
 
-`trash_page` 是首选：可恢复、用户价值明确、复用 PageService，并触发侧边栏
-WebSocket/Query invalidation。
+本轮只增加真正可逆的 `trash_page` 和 `restore_page`。两者复用网页端同一页面生命周期
+服务，并保留侧边栏 WebSocket、搜索/AI 事件和业务审计。`trash_page` 需要
+`mcp:destructive` 与 `confirm: true`；`restore_page` 需要 `mcp:write`。
 
-`delete_comment` 风险更高：当前删除编排位于 Controller 且为硬删除。必须先抽取
-可复用 `CommentDeletionService` 或核心 command，统一“本人评论/空间管理员 + 页面
-权限 + WebSocket + 审计”，再提供 MCP handler。
+当前 `delete_comment` 为硬删除，不符合“可逆”目标，本轮明确不实现。后续必须先设计
+评论软删除/恢复和保留期，再决定是否向 MCP 开放。
 
-建议新增 `mcp:destructive` scope，并默认不授予旧 API Key 和 OAuth grant；是否再
-增加 owner 工作区开关由决策项确认。`confirm: true` 只能改善误操作体验，不能替代
-权限和 scope。
+新增 `mcp:destructive` scope，默认不授予旧 API Key、OAuth client 或 grant；不再增加
+第二个 owner 总开关，因为现有 workspace MCP mode 与凭据 scope 已形成两层控制。
+`confirm: true` 只能改善误操作体验，不能替代权限和 scope。
 
 审计记录工具、认证类型、凭据 ID、空间、页面路径/标题快照、目标 ID、结果和耗时，
 不记录文档全文、评论全文、API Key 或 OAuth token。MCP 活动 UI 对本人显示可理解的
@@ -576,9 +577,9 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 - [ ] `DEC-FM-001` 决定新工作区目录默认策略；建议 `shared-spaces`，旧工作区保持 `workspace`。
 - [ ] `DEC-FM-002` 决定开放空间是否构成成员可发现关系；建议否，按实际成员/页面访问计算。
-- [ ] `DEC-FM-003` 确认代码块 title/wrap 在标准 Markdown 导出时允许降级；建议允许，不引入私有语法。
+- [x] `DEC-FM-003` 代码块 title/wrap 在标准 Markdown 导出时允许降级，不引入私有语法。
 - [ ] `DEC-FM-004` 决定图片 Markdown title 是否映射 caption；建议不自动等同，避免改变既有 title 语义。
-- [ ] `DEC-FM-005` 确认新增 `mcp:destructive` scope，并决定是否增加 owner 总开关；建议 scope 必须，总开关默认关闭。
+- [x] `DEC-FM-005` 新增 `mcp:destructive`；旧凭据默认不具备，不增加重复的 owner 总开关。
 - [ ] `DEC-FM-006` 决定空间关系图是否进入 beta；只有确认后才评估/引入显式图引擎依赖。
 - [ ] `DEC-FM-007` 确认 OIDC 首期只支持标准 authorization code + PKCE，不同时承诺 SAML/LDAP/Google。
 - [ ] `DEC-FM-008` 确认 OIDC verified email 自动绑定策略；建议默认关闭，owner 显式开启后才允许。
@@ -633,12 +634,14 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 ### 10.5 代码块
 
-- [ ] `FM-CODE-001` 为 custom code block 增加兼容的 `title`、`wrap` attrs。
-- [ ] `FM-CODE-002` 使用现有 NodeView 实现标题编辑、换行开关、下载图标和 tooltip。
-- [ ] `FM-CODE-003` 实现下载文件名清理、语言扩展名映射和安全默认名。
-- [ ] `FM-CODE-004` 保持 Mermaid preview/source、复制和只读模式行为。
-- [ ] `FM-CODE-005` 增加 JSON、HTML、Markdown、Yjs、协作和历史文档兼容测试。
-- [ ] `FM-CODE-006` 完成移动端、长标题、超长代码和全部 locale 验收。
+- [x] `FM-CODE-001` 为 custom code block 增加兼容的 `title`、`wrap` attrs。
+- [x] `FM-CODE-002` 使用现有 NodeView 实现标题编辑、换行开关、下载图标和 tooltip。
+- [x] `FM-CODE-003` 实现下载文件名清理、语言扩展名映射和安全默认名。
+- [x] `FM-CODE-004` 保持 Mermaid preview/source、复制和只读模式行为。
+- [x] `FM-CODE-005` 增加 JSON、HTML、Markdown、Yjs、协作和历史文档兼容测试。
+- [x] `FM-CODE-006` 完成长标题、超长代码、响应式布局、只读模式和全部 locale 验收。
+- [x] `BUG-FM-010` 修复无标题只读代码块空工具栏和下载文件名残留连续点号。
+- [x] `BUG-FM-012` 修复标题回车重复提交和 Escape 取消仍写回的问题。
 
 ### 10.6 同步状态
 
@@ -681,18 +684,22 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 ### 10.9 MCP
 
-- [ ] `FM-MCP-001` 为当前所有工具生成行为、schema、scope、权限和审计契约清单。
-- [ ] `FM-MCP-002` 引入强类型 `McpToolDescriptor` 和注册表，不改变外部工具协议。
-- [ ] `FM-MCP-003` 抽取唯一 `McpToolExecutor`，集中 mode/scope/DTO/ACL/audit/error redaction。
-- [ ] `FM-MCP-004` 按 page/comment/space/search/member 拆分工具 provider。
-- [ ] `FM-MCP-005` 增加拆分前后契约测试，确认工具名、输入 schema 和返回内容不变。
-- [ ] `FM-MCP-006` 在 API Key/OAuth 管理与 consent 中增加 `mcp:destructive`，旧 grant 默认不具备。
-- [ ] `FM-MCP-007` 实现 `trash_page`，复用 PageService 并触发侧边栏实时更新。
-- [ ] `FM-MCP-008` 抽取核心 CommentDeletionService，网页与 MCP 共用权限/审计/广播。
-- [ ] `FM-MCP-009` 实现 `delete_comment`，限制本人或空间管理员并校验页面权限。
-- [ ] `FM-MCP-010` 为破坏性工具增加 MCP annotations、确认交互和越权测试。
-- [ ] `FM-MCP-011` MCP 活动展示空间、页面路径、标题、目标和凭据名称，不只显示 UUID。
-- [ ] `FM-MCP-012` 增加 session/API Key/OAuth、只读模式、scope 和审计脱敏矩阵测试。
+- [x] `FM-MCP-001` 为当前所有工具生成行为、schema、scope、权限和审计契约清单。
+- [x] `FM-MCP-002` 引入强类型 `McpToolDescriptor` 和注册表，不改变外部工具协议。
+- [x] `FM-MCP-003` 抽取唯一 `McpToolExecutor`，集中 mode/scope/DTO/ACL/audit/error redaction。
+- [x] `FM-MCP-004` 按 page/comment/space/search/member 拆分工具 provider。
+- [x] `FM-MCP-005` 增加拆分前后契约测试，确认工具名、输入 schema 和返回内容不变。
+- [x] `FM-MCP-006` 在 API Key/OAuth 管理与 consent 中增加 `mcp:destructive`，旧 grant 默认不具备。
+- [x] `FM-MCP-007` 实现 `trash_page`，复用页面生命周期服务并触发侧边栏实时更新。
+- [ ] `FM-MCP-008` 设计评论软删除/恢复后再抽取核心 CommentDeletionService，本轮不实现。
+- [ ] `FM-MCP-009` `delete_comment` 延后，禁止把现有硬删除包装成“可逆”工具。
+- [x] `FM-MCP-010` 为破坏性工具增加 MCP annotations、确认交互和越权测试。
+- [x] `FM-MCP-011` MCP 活动展示空间、页面路径、标题、目标和凭据名称，不只显示 UUID。
+- [x] `FM-MCP-012` 增加 session/API Key/OAuth、只读模式、scope 和审计脱敏矩阵测试。
+- [x] `FM-MCP-013` 实现 `restore_page`，复用核心恢复流程并触发侧边栏实时更新。
+- [x] `FM-MCP-014` 提交前扫描并阻止个人信息、私有服务器信息和凭据进入 tracked tree。
+- [x] `BUG-FM-009` 将既有 Passkey 测试/文档中的私有部署示例替换为保留测试域名。
+- [x] `BUG-FM-011` 页面删除/恢复在服务层和递归 SQL 中显式绑定 workspace，阻止跨工作区递归旁路。
 
 ### 10.10 空间关系图
 
@@ -809,6 +816,37 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
   Todo、修复并回归。
 - 遗留风险和下一步：`FM-REL-004` 的两个真实浏览器部署升级验证不属于本次两项功能，
   仍保持未勾选；上线后可再做一次反向代理下的 Cookie/SEO 人工验收。
+
+### 2026-07-12：代码块增强、MCP 模块化与可逆页面维护
+
+- 完成 Todo：`FM-CODE-001` 至 `FM-CODE-006`、`FM-MCP-001` 至
+  `FM-MCP-007`、`FM-MCP-010` 至 `FM-MCP-014`，以及实施中发现的
+  `BUG-FM-010`、`BUG-FM-011`、`BUG-FM-012`。
+- 用户可见变化：代码块可设置标题、切换视觉换行并下载 UTF-8 源文件；owner 可为
+  API Key 或 ChatGPT OAuth 显式授权破坏性 MCP 工具；新增可恢复的页面移入回收站和
+  恢复工具。MCP 活动使用现有资源解析展示空间、页面路径和标题。
+- 前端实现与兼容：沿用 React、Mantine、Tiptap、Tabler、TanStack Query 和 i18next；
+  没有新增依赖。无标题只读代码块保持原有高度，标题单行截断，移动端工具栏换行。
+  JSON、HTML 和 Yjs 无损保留 title/wrap，标准 Markdown 按决策只保留代码围栏和源码。
+- 后端鉴权与资源边界：`McpService` 只负责协议和 session，20 个原工具按五类 provider
+  拆分并统一经过 executor 的 mode、scope、DTO、ACL 和审计模板。页面网页接口和 MCP
+  共用 `PageLifecycleService`；服务层及递归 SQL 都显式限制 workspace。
+- 审计与敏感数据：页面业务事件和 `mcp.tool_called` 双层审计保留；内容、评论正文、
+  token 和凭据不进入 MCP metadata。回收/恢复继续触发搜索、AI 队列和侧边栏 WebSocket。
+  最终 tracked tree 和新增行已执行私人部署标记、服务器路径、私钥和常见 token 形态扫描。
+- 数据库迁移与回滚：无 schema migration。旧代码块使用默认属性；旧 API Key、OAuth
+  client、grant、code、refresh token 都不会隐式获得 `mcp:destructive`。移除新工具时，
+  已回收页面仍可从现有网页回收站恢复。
+- 测试和人工验证：server 69 个 suite、372 项，client 13 个文件、106 项和 MCP 20 工具
+  契约 snapshot 通过；双端 typecheck、ESLint 和 production build 通过。生产启动探测已
+  进入数据库 bootstrap，未出现 Nest 依赖解析错误；本机未运行依赖服务，因此未继续监听。
+- 性能/部署验证：无新增数据库查询路径；回收/恢复复用现有递归 CTE、事件队列和 WebSocket。
+  前端下载只使用本地 Blob URL 并立即释放。无需迁移、外部服务或新增容器。
+- 新发现 BUG Todo：`BUG-FM-010`（只读空工具栏/文件名连续点号）、`BUG-FM-011`
+  （页面生命周期 workspace 防御纵深）和 `BUG-FM-012`（标题键盘重复/错误提交）均已
+  增加 Todo、修复并回归。
+- 遗留风险和下一步：`FM-MCP-008/009` 保持未勾选；评论当前是硬删除，在设计并实现
+  comment soft-delete/restore 前不得增加 MCP 删除评论工具。
 
 ### 复盘模板
 

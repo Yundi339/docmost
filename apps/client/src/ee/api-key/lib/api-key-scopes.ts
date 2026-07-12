@@ -31,6 +31,11 @@ export const API_KEY_SCOPE_PRESETS: Array<{
     scopes: ["mcp:read", "mcp:write"],
   },
   {
+    value: "mcp-maintenance",
+    label: "MCP maintenance",
+    scopes: ["mcp:read", "mcp:write", "mcp:destructive"],
+  },
+  {
     value: "custom",
     label: "Custom",
     scopes: ["rest:read", "rest:write"],

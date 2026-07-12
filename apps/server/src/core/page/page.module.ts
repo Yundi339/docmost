@@ -9,6 +9,7 @@ import { StorageModule } from '../../integrations/storage/storage.module';
 import { CollaborationModule } from '../../collaboration/collaboration.module';
 import { WatcherModule } from '../watcher/watcher.module';
 import { LabelModule } from '../label/label.module';
+import { PageLifecycleService } from './services/page-lifecycle.service';
 
 @Module({
   controllers: [PageController],
@@ -18,8 +19,14 @@ import { LabelModule } from '../label/label.module';
     PageVisitorService,
     TrashCleanupService,
     BacklinkService,
+    PageLifecycleService,
   ],
-  exports: [PageService, PageHistoryService, PageVisitorService],
+  exports: [
+    PageService,
+    PageHistoryService,
+    PageVisitorService,
+    PageLifecycleService,
+  ],
   imports: [StorageModule, CollaborationModule, WatcherModule, LabelModule],
 })
 export class PageModule {}

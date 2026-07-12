@@ -1,6 +1,11 @@
 import { IUser } from "@/features/user/types/user.types.ts";
 
-export type ApiKeyScope = "rest:read" | "rest:write" | "mcp:read" | "mcp:write";
+export type ApiKeyScope =
+  | "rest:read"
+  | "rest:write"
+  | "mcp:read"
+  | "mcp:write"
+  | "mcp:destructive";
 
 export interface IApiKey {
   id: string;

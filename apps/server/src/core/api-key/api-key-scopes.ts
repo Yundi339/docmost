@@ -3,6 +3,7 @@ export const ApiKeyScope = {
   REST_WRITE: 'rest:write',
   MCP_READ: 'mcp:read',
   MCP_WRITE: 'mcp:write',
+  MCP_DESTRUCTIVE: 'mcp:destructive',
 } as const;
 
 export type ApiKeyScope = (typeof ApiKeyScope)[keyof typeof ApiKeyScope];
@@ -36,6 +37,10 @@ export function normalizeApiKeyScopes(
     normalized.add(ApiKeyScope.REST_READ);
   }
   if (normalized.has(ApiKeyScope.MCP_WRITE)) {
+    normalized.add(ApiKeyScope.MCP_READ);
+  }
+  if (normalized.has(ApiKeyScope.MCP_DESTRUCTIVE)) {
+    normalized.add(ApiKeyScope.MCP_WRITE);
     normalized.add(ApiKeyScope.MCP_READ);
   }
 

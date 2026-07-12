@@ -1,4 +1,11 @@
 {
+  "Allow explicitly confirmed page trash operations through MCP.": "Allow explicitly confirmed page trash operations through MCP.",
+  "Destructive MCP tools": "Destructive MCP tools",
+  "MCP maintenance": "MCP maintenance",
+  "Code block title": "Code block title",
+  "Do not wrap lines": "Do not wrap lines",
+  "Download code": "Download code",
+  "Wrap lines": "Wrap lines",
   "${{amount}} /user/{{interval}}": "${{amount}} /user/{{interval}}",
   "A secret is configured. Enter a new value only to replace it.": "A secret is configured. Enter a new value only to replace it.",
   "Single sign-on (SSO)": "Single sign-on (SSO)",

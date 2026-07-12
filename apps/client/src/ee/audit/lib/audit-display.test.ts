@@ -28,6 +28,8 @@ describe("audit display formatting", () => {
 
   it("labels MCP tools and common values", () => {
     expect(getMcpToolLabel("search_pages")).toBe("Search pages");
+    expect(getMcpToolLabel("trash_page")).toBe("Move to trash");
+    expect(getMcpToolLabel("restore_page")).toBe("Restore page");
     expect(formatAuditPrimitive("search_pages", "toolName", t as any)).toBe(
       "搜索页面",
     );

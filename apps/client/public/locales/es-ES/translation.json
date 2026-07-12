@@ -1,4 +1,11 @@
 {
+  "Allow explicitly confirmed page trash operations through MCP.": "Permitir operaciones de envío de páginas a la papelera confirmadas explícitamente mediante MCP.",
+  "Destructive MCP tools": "Herramientas MCP destructivas",
+  "MCP maintenance": "Mantenimiento de MCP",
+  "Code block title": "Título del bloque de código",
+  "Do not wrap lines": "No ajustar líneas",
+  "Download code": "Descargar código",
+  "Wrap lines": "Ajustar líneas",
   "${{amount}} /user/{{interval}}": "${{amount}} /usuario/{{interval}}",
   "A secret is configured. Enter a new value only to replace it.": "Hay un secreto configurado. Introduzca un valor nuevo solo para reemplazarlo.",
   "Single sign-on (SSO)": "Inicio de sesión único (SSO)",

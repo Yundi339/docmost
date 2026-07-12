@@ -1,4 +1,4 @@
-export type OAuthScope = "mcp:read" | "mcp:write";
+export type OAuthScope = "mcp:read" | "mcp:write" | "mcp:destructive";
 
 export interface IOAuthClient {
   id: string;

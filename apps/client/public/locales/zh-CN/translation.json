@@ -1,4 +1,11 @@
 {
+  "Allow explicitly confirmed page trash operations through MCP.": "允许通过 MCP 执行经过明确确认的页面移入回收站操作。",
+  "Destructive MCP tools": "破坏性 MCP 工具",
+  "MCP maintenance": "MCP 维护",
+  "Code block title": "代码块标题",
+  "Do not wrap lines": "不自动换行",
+  "Download code": "下载代码",
+  "Wrap lines": "自动换行",
   "${{amount}} /user/{{interval}}": "${{amount}} /用户/{{interval}}",
   "A secret is configured. Enter a new value only to replace it.": "已配置密钥。仅在需要替换时输入新值。",
   "Single sign-on (SSO)": "单点登录（SSO）",

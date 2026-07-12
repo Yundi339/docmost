@@ -1,83 +1,191 @@
 .selectInput {
-    height: 25px;
-    min-height: 25px;
+  height: 25px;
+  min-height: 25px;
 }
 
 .wrapper {
-    position: relative;
+  position: relative;
+}
+
+.menuGroup,
+.readOnlyHeader {
+  min-height: 32px;
+  padding: 4px 6px;
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-5));
+}
+
+.readOnlyHeaderOverlay {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  right: 4px;
+  min-height: 0;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.readOnlyHeaderOverlay .readOnlyControls {
+  padding: 2px;
+  border-radius: var(--mantine-radius-xs);
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-7)
+  );
+  box-shadow: var(--mantine-shadow-xs);
+}
+
+.titleInput {
+  min-width: 80px;
+  flex: 1 1 180px;
+}
+
+.titleInputControl {
+  height: 25px;
+  min-height: 25px;
+  padding-inline: 6px;
+  border-color: transparent;
+  background: transparent;
+  font-size: var(--mantine-font-size-xs);
+  text-overflow: ellipsis;
+}
+
+.titleInputControl:focus {
+  border-color: var(--mantine-primary-color-filled);
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-7)
+  );
+}
+
+.controls {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.languageSelect {
+  width: 130px;
+  min-width: 80px;
 }
 
 .error {
-    color: light-dark(var(--mantine-color-red-8), var(--mantine-color-red-7));
-    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-gray-8));
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  color: light-dark(var(--mantine-color-red-8), var(--mantine-color-red-7));
+  background-color: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-gray-8)
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .mermaid {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .menuGroup {
-    @media print {
-        display: none;
-    }
+  @media print {
+    display: none;
+  }
 }
 
-.readOnlyCopyButton {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 1;
-    opacity: 0;
-    background-color: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
-    box-shadow: var(--mantine-shadow-xs);
-    transition: opacity 120ms ease;
-
-    @media (hover: none) {
-        opacity: 1;
-    }
-
-    @media print {
-        display: none;
-    }
+.readOnlyHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-xs);
 }
 
-.wrapper:hover .readOnlyCopyButton,
-.readOnlyCopyButton:focus-visible {
+.readOnlyTitle {
+  min-width: 0;
+  flex: 1;
+}
+
+.readOnlyControls {
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity 120ms ease;
+
+  @media (hover: none) {
     opacity: 1;
+  }
+
+  @media print {
+    display: none;
+  }
+}
+
+.wrapper:hover .readOnlyControls,
+.readOnlyControls:focus-within {
+  opacity: 1;
 }
 
 pre {
-    overflow-x: auto;
-    white-space: pre;
-    word-wrap: normal;
+  overflow-x: auto;
+  white-space: pre;
+  word-wrap: normal;
 }
 
 pre code {
-    white-space: pre;
-    display: block;
+  white-space: pre;
+  display: block;
+}
+
+.wrapped pre,
+.wrapped pre code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 48em) {
+  .menuGroup {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .titleInput {
+    flex-basis: 100%;
+  }
+
+  .controls {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .languageSelect {
+    margin-right: auto;
+    flex: 1 1 100px;
+    max-width: 160px;
+  }
 }
 
 /* Horizontal scrollbar for long code lines */
 pre::-webkit-scrollbar {
-    height: 6px;
+  height: 6px;
 }
 
 pre::-webkit-scrollbar-track {
-    background: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-6));
-    border-radius: 3px;
+  background: light-dark(
+    var(--mantine-color-gray-2),
+    var(--mantine-color-dark-6)
+  );
+  border-radius: 3px;
 }
 
 pre::-webkit-scrollbar-thumb {
-    background: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-4));
-    border-radius: 3px;
+  background: light-dark(
+    var(--mantine-color-gray-5),
+    var(--mantine-color-dark-4)
+  );
+  border-radius: 3px;
 }
 
 pre::-webkit-scrollbar-thumb:hover {
-    background: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-3));
-    cursor: default;
+  background: light-dark(
+    var(--mantine-color-gray-6),
+    var(--mantine-color-dark-3)
+  );
+  cursor: default;
 }

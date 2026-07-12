@@ -11,6 +11,14 @@ import { OAuthModule } from '../oauth/oauth.module';
 import { McpAuthGuard } from './mcp-auth.guard';
 import { PageAccessModule } from '../../core/page/page-access/page-access.module';
 import { TokenModule } from '../../core/auth/token.module';
+import { McpToolRegistryService } from './mcp-tool-registry.service';
+import { McpToolExecutorService } from './mcp-tool-executor.service';
+import { McpToolAccessService } from './mcp-tool-access.service';
+import { McpPageToolProvider } from './tools/page.tools';
+import { McpCommentToolProvider } from './tools/comment.tools';
+import { McpSpaceToolProvider } from './tools/space.tools';
+import { McpSearchToolProvider } from './tools/search.tools';
+import { McpMemberToolProvider } from './tools/member.tools';
 
 @Module({
   imports: [
@@ -25,6 +33,17 @@ import { TokenModule } from '../../core/auth/token.module';
     PageAccessModule,
   ],
   controllers: [McpController],
-  providers: [McpService, McpAuthGuard],
+  providers: [
+    McpService,
+    McpAuthGuard,
+    McpToolRegistryService,
+    McpToolExecutorService,
+    McpToolAccessService,
+    McpPageToolProvider,
+    McpCommentToolProvider,
+    McpSpaceToolProvider,
+    McpSearchToolProvider,
+    McpMemberToolProvider,
+  ],
 })
 export class McpModule {}

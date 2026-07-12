@@ -4,6 +4,18 @@ import { McpService, McpRequestContext } from './mcp.service';
 import { resolveMcpMode } from './mcp.controller';
 import { ApiKeyScope } from '../../core/api-key/api-key-scopes';
 import { PageInfoDto } from '../../core/page/dto/page.dto';
+import { McpToolExecutorService } from './mcp-tool-executor.service';
+import { McpToolAccessService } from './mcp-tool-access.service';
+import {
+  MCP_LEGACY_TOOL_ORDER,
+  MCP_TOOL_ORDER,
+  McpToolRegistryService,
+} from './mcp-tool-registry.service';
+import { McpPageToolProvider } from './tools/page.tools';
+import { McpCommentToolProvider } from './tools/comment.tools';
+import { McpSpaceToolProvider } from './tools/space.tools';
+import { McpSearchToolProvider } from './tools/search.tools';
+import { McpMemberToolProvider } from './tools/member.tools';
 import {
   SpaceCaslAction,
   SpaceCaslSubject,
@@ -55,24 +67,15 @@ describe('McpService access control', () => {
   const spaceId = '018f3f73-2f69-7c8d-9d79-8f3f4d7d9712';
   const targetSpaceId = '018f3f73-2f69-7c8d-9d79-8f3f4d7d9713';
   let service: McpService;
+  let executor: McpToolExecutorService;
   let auditService: { logWithContext: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
     auditService = { logWithContext: jest.fn() };
+    executor = new McpToolExecutorService(auditService as any);
     service = new McpService(
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
+      { registerTools: jest.fn() } as any,
       auditService as any,
     );
   });
@@ -92,9 +95,11 @@ describe('McpService access control', () => {
 
   function registerMcpTools(overrides: Record<string, any> = {}) {
     const handlers: Record<string, (args: any) => Promise<any>> = {};
+    const registrations: Record<string, any> = {};
     const server = {
-      registerTool: jest.fn((name: string, _options: any, handler: any) => {
+      registerTool: jest.fn((name: string, options: any, handler: any) => {
         handlers[name] = handler;
+        registrations[name] = options;
       }),
     };
     const pageService = overrides.pageService ?? {
@@ -111,6 +116,7 @@ describe('McpService access control', () => {
     const pageAccessService = overrides.pageAccessService ?? {
       validateCanEdit: jest.fn().mockResolvedValue({ hasRestriction: false }),
       validateCanView: jest.fn().mockResolvedValue(undefined),
+      validateCanComment: jest.fn().mockResolvedValue(undefined),
     };
     const spaceMemberService = overrides.spaceMemberService ?? {
       getUserSpaces: jest.fn().mockResolvedValue({ items: [] }),
@@ -121,37 +127,86 @@ describe('McpService access control', () => {
         cannot: jest.fn().mockReturnValue(false),
       })),
     };
-    const mcp = new McpService(
-      pageService as any,
+    const workspaceAbility = overrides.workspaceAbility ?? {
+      createForUser: jest.fn(() => ({
+        cannot: jest.fn().mockReturnValue(false),
+      })),
+    };
+    const access = new McpToolAccessService(
       pageRepo as any,
-      {} as any,
-      spaceMemberService as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
       spaceAbility as any,
-      {} as any,
       pageAccessService as any,
-      overrides.auditService ?? auditService,
     );
-
-    (mcp as any).registerTools(
-      server,
-      { id: 'user-id' },
-      { id: 'workspace-id' },
-      context('read-write', [ApiKeyScope.MCP_WRITE]),
+    const registry = new McpToolRegistryService(
+      new McpToolExecutorService(overrides.auditService ?? auditService),
+      new McpPageToolProvider(
+        pageService as any,
+        overrides.pageLifecycleService ?? ({} as any),
+        access,
+      ),
+      new McpCommentToolProvider(
+        overrides.commentService ?? ({} as any),
+        access,
+      ),
+      new McpSpaceToolProvider(
+        overrides.spaceService ?? ({} as any),
+        spaceMemberService as any,
+        workspaceAbility as any,
+        access,
+      ),
+      new McpSearchToolProvider(
+        overrides.searchService ?? ({} as any),
+        overrides.searchAttachmentsService ?? ({} as any),
+        access,
+      ),
+      new McpMemberToolProvider(
+        overrides.workspaceService ?? ({} as any),
+        overrides.userRepo ?? ({} as any),
+        workspaceAbility as any,
+        access,
+      ),
+    );
+    registry.registerTools(
+      server as any,
+      { id: 'user-id' } as any,
+      { id: 'workspace-id' } as any,
+      overrides.context ?? context('read-write', [ApiKeyScope.MCP_WRITE]),
     );
 
     return {
       handlers,
+      registrations,
+      registry,
+      access,
       pageAccessService,
       pageService,
       pageRepo,
       spaceAbility,
       spaceMemberService,
     };
+  }
+
+  function runTool(
+    requestContext: McpRequestContext,
+    user: any,
+    workspace: any,
+    name: string,
+    access: 'read' | 'write',
+    args: Record<string, any>,
+    handler: () => Promise<any>,
+  ) {
+    return executor.execute(
+      { context: requestContext, user, workspace },
+      {
+        name,
+        description: name,
+        inputSchema: {},
+        access,
+        input: { noDto: true },
+        handler,
+      },
+      args,
+    );
   }
 
   it('resolves legacy and mode-based MCP settings', () => {
@@ -166,7 +221,7 @@ describe('McpService access control', () => {
 
   it('requires an MCP scope for read tools', () => {
     expect(() =>
-      (service as any).assertMcpToolAccess(
+      executor.assertToolAccess(
         context('read-write', [ApiKeyScope.REST_READ]),
         'read',
       ),
@@ -175,7 +230,7 @@ describe('McpService access control', () => {
 
   it('allows mcp:read keys to call read tools', () => {
     expect(() =>
-      (service as any).assertMcpToolAccess(
+      executor.assertToolAccess(
         context('read-only', [ApiKeyScope.MCP_READ]),
         'read',
       ),
@@ -184,7 +239,7 @@ describe('McpService access control', () => {
 
   it('blocks write tools in workspace read-only mode', () => {
     expect(() =>
-      (service as any).assertMcpToolAccess(
+      executor.assertToolAccess(
         context('read-only', [ApiKeyScope.MCP_WRITE]),
         'write',
       ),
@@ -193,7 +248,7 @@ describe('McpService access control', () => {
 
   it('requires mcp:write for write tools', () => {
     expect(() =>
-      (service as any).assertMcpToolAccess(
+      executor.assertToolAccess(
         context('read-write', [ApiKeyScope.MCP_READ]),
         'write',
       ),
@@ -202,15 +257,31 @@ describe('McpService access control', () => {
 
   it('allows write tools when mode and scope permit it', () => {
     expect(() =>
-      (service as any).assertMcpToolAccess(
+      executor.assertToolAccess(
         context('read-write', [ApiKeyScope.MCP_WRITE]),
         'write',
       ),
     ).not.toThrow();
   });
 
+  it('requires the independent destructive scope for destructive tools', () => {
+    expect(() =>
+      executor.assertToolAccess(
+        context('read-write', [ApiKeyScope.MCP_WRITE]),
+        'destructive',
+      ),
+    ).toThrow('Missing API key scope: mcp:destructive');
+
+    expect(() =>
+      executor.assertToolAccess(
+        context('read-write', [ApiKeyScope.MCP_DESTRUCTIVE]),
+        'destructive',
+      ),
+    ).not.toThrow();
+  });
+
   it('audits MCP tool calls without sensitive content', async () => {
-    const result = await (service as any).runTool(
+    const result = await runTool(
       context('read-write', [ApiKeyScope.MCP_WRITE]),
       { id: 'user-id' },
       { id: 'workspace-id' },
@@ -250,7 +321,7 @@ describe('McpService access control', () => {
   });
 
   it('audits MCP read tool calls', async () => {
-    await (service as any).runTool(
+    await runTool(
       context('read-only', [ApiKeyScope.MCP_READ]),
       { id: 'user-id' },
       { id: 'workspace-id' },
@@ -285,7 +356,7 @@ describe('McpService access control', () => {
   });
 
   it('audits created resources without storing page content', async () => {
-    await (service as any).runTool(
+    await runTool(
       context('read-write', [ApiKeyScope.MCP_WRITE]),
       { id: 'user-id' },
       { id: 'workspace-id' },
@@ -333,15 +404,99 @@ describe('McpService access control', () => {
     );
   });
 
+  it('preserves the existing 20-tool registration contract and order', () => {
+    const { registrations } = registerMcpTools();
+    const legacyRegistrations = Object.fromEntries(
+      Object.entries(registrations).filter(([name]) =>
+        MCP_LEGACY_TOOL_ORDER.includes(name as any),
+      ),
+    );
+
+    expect(Object.keys(registrations)).toEqual(MCP_TOOL_ORDER);
+    expect(Object.keys(legacyRegistrations)).toEqual(MCP_LEGACY_TOOL_ORDER);
+    expect(
+      Object.fromEntries(
+        Object.entries(legacyRegistrations).map(
+          ([name, options]: [string, any]) => [
+            name,
+            {
+              description: options.description,
+              readOnlyHint: options.annotations.readOnlyHint,
+              destructiveHint: options.annotations.destructiveHint,
+              scopes: options.securitySchemes[0].scopes,
+              schema: Object.fromEntries(
+                Object.entries(options.inputSchema).map(([key, schema]) => [
+                  key,
+                  getSchemaContract(schema),
+                ]),
+              ),
+            },
+          ],
+        ),
+      ),
+    ).toMatchSnapshot();
+  });
+
+  it('registers reversible page maintenance with explicit destructive metadata', () => {
+    const { registrations } = registerMcpTools();
+
+    expect(registrations.trash_page).toMatchObject({
+      annotations: { readOnlyHint: false, destructiveHint: true },
+      securitySchemes: [{ type: 'oauth2', scopes: ['mcp:destructive'] }],
+    });
+    expect(registrations.restore_page).toMatchObject({
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      securitySchemes: [{ type: 'oauth2', scopes: ['mcp:write'] }],
+    });
+  });
+
+  it('requires confirmation and delegates trash and restore to page lifecycle', async () => {
+    const pageLifecycleService = {
+      trashPage: jest.fn().mockResolvedValue({
+        id: pageId,
+        title: 'Page',
+        spaceId,
+      }),
+      restorePage: jest.fn().mockResolvedValue({
+        id: pageId,
+        title: 'Page',
+        spaceId,
+      }),
+    };
+    const { handlers } = registerMcpTools({
+      pageLifecycleService,
+      context: context('read-write', [ApiKeyScope.MCP_DESTRUCTIVE]),
+    });
+
+    await expect(
+      handlers.trash_page({ pageId, confirm: false }),
+    ).rejects.toThrow('confirm must be true');
+    expect(pageLifecycleService.trashPage).not.toHaveBeenCalled();
+
+    await handlers.trash_page({ pageId, confirm: true });
+    await handlers.restore_page({ pageId });
+
+    expect(pageLifecycleService.trashPage).toHaveBeenCalledWith(
+      pageId,
+      expect.objectContaining({ id: 'user-id' }),
+      expect.objectContaining({ id: 'workspace-id' }),
+    );
+    expect(pageLifecycleService.restorePage).toHaveBeenCalledWith(
+      pageId,
+      expect.objectContaining({ id: 'user-id' }),
+      expect.objectContaining({ id: 'workspace-id' }),
+    );
+  });
+
   it('requires MCP tool registrations to declare DTO handling', async () => {
     await expect(
-      (service as any).prepareMcpToolInput('unsafe_tool', {}, undefined),
+      executor.prepareInput('unsafe_tool', {}, undefined),
     ).rejects.toThrow('MCP tool unsafe_tool must declare a DTO or noDto');
   });
 
   it('validates MCP tool input through the registration template', async () => {
     await expect(
-      (service as any).prepareMcpToolInput(
+      executor.prepareInput(
         'get_page',
         {
           pageId: '018f3f73-2f69-7c8d-9d79-8f3f4d7d9711',
@@ -352,11 +507,7 @@ describe('McpService access control', () => {
     ).rejects.toThrow('format must be one of the following values');
 
     await expect(
-      (service as any).prepareMcpToolInput(
-        'current_user',
-        { ignored: true },
-        { noDto: true },
-      ),
+      executor.prepareInput('current_user', { ignored: true }, { noDto: true }),
     ).resolves.toEqual({ ignored: true });
   });
 
@@ -368,24 +519,14 @@ describe('McpService access control', () => {
         deletedAt: new Date(),
       }),
     };
-    const mcp = new McpService(
-      {} as any,
+    const access = new McpToolAccessService(
       pageRepo as any,
       {} as any,
       {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      auditService as any,
     );
 
     await expect(
-      (mcp as any).findActiveWorkspacePage('page-id', 'workspace-id'),
+      access.findActiveWorkspacePage('page-id', 'workspace-id'),
     ).resolves.toBeNull();
   });
 
@@ -618,3 +759,21 @@ describe('McpService access control', () => {
     );
   });
 });
+
+function getSchemaContract(schema: any) {
+  const optional = schema.isOptional?.() === true;
+  let current = schema;
+  while (current?._def?.type === 'optional') {
+    current = current._def.innerType;
+  }
+  const definition = current?._def ?? {};
+  const values = definition.entries
+    ? Object.values(definition.entries)
+    : definition.values;
+
+  return {
+    type: definition.type ?? current?.constructor?.name ?? 'unknown',
+    optional,
+    ...(values ? { values } : {}),
+  };
+}

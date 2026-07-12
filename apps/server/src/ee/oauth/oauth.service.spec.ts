@@ -1,4 +1,5 @@
 import { OAuthService } from './oauth.service';
+import { DEFAULT_OAUTH_SCOPES, OAuthScope } from './oauth.constants';
 
 describe('OAuthService public origin', () => {
   const workspace = {
@@ -23,6 +24,11 @@ describe('OAuthService public origin', () => {
       overrides.auditService ?? { logWithContext: jest.fn() },
     );
   }
+
+  it('does not grant destructive MCP access by default', () => {
+    expect(DEFAULT_OAUTH_SCOPES).toEqual([OAuthScope.MCP_READ]);
+    expect(DEFAULT_OAUTH_SCOPES).not.toContain(OAuthScope.MCP_DESTRUCTIVE);
+  });
 
   it('uses workspace already attached to the raw request', async () => {
     const workspaceRepo = {
@@ -226,6 +232,43 @@ describe('OAuthService public origin', () => {
     );
   });
 
+  it('rejects destructive client registration in read-only MCP mode', async () => {
+    const oauthClient = {
+      id: 'oauth-client-id',
+      workspaceId: workspace.id,
+      creatorId: null,
+      provider: 'chatgpt',
+      name: 'ChatGPT',
+      clientId: null,
+      trustedClientIdHost: 'chatgpt.com',
+      allowClientIdMetadataDocuments: true,
+      allowedScopes: [
+        OAuthScope.MCP_READ,
+        OAuthScope.MCP_WRITE,
+        OAuthScope.MCP_DESTRUCTIVE,
+      ],
+      isEnabled: true,
+      settings: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    };
+    const db = {
+      selectFrom: jest.fn().mockReturnValue(createSelectQuery(oauthClient)),
+    };
+    const service = createService({ db });
+
+    await expect(
+      service.registerClient(
+        {
+          redirect_uris: ['https://chatgpt.com/connector/oauth/callback-id'],
+          scope: OAuthScope.MCP_DESTRUCTIVE,
+        },
+        workspace,
+      ),
+    ).rejects.toThrow('MCP is enabled in read-only mode');
+  });
+
   it('limits the number of dynamic-registration redirect URIs', async () => {
     const oauthClient = {
       id: 'oauth-client-id',
@@ -310,9 +353,9 @@ describe('OAuthService public origin', () => {
         actorType: 'user',
       }),
     );
-    expect(JSON.stringify(auditService.logWithContext.mock.calls)).not.toContain(
-      'challenge',
-    );
+    expect(
+      JSON.stringify(auditService.logWithContext.mock.calls),
+    ).not.toContain('challenge');
   });
 
   it('audits an owner revoking another user OAuth authorization', async () => {
@@ -331,7 +374,9 @@ describe('OAuthService public origin', () => {
         selectFrom: jest.fn().mockReturnValue(createSelectQuery(authorization)),
         transaction: jest.fn().mockReturnValue({
           execute: async (callback: (trx: any) => Promise<void>) =>
-            callback({ updateTable: jest.fn().mockReturnValue(createUpdateQuery()) }),
+            callback({
+              updateTable: jest.fn().mockReturnValue(createUpdateQuery()),
+            }),
         }),
       },
       auditService,

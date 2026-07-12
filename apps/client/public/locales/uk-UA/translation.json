@@ -1,4 +1,11 @@
 {
+  "Allow explicitly confirmed page trash operations through MCP.": "Дозволити явно підтверджене переміщення сторінок у кошик через MCP.",
+  "Destructive MCP tools": "Деструктивні інструменти MCP",
+  "MCP maintenance": "Обслуговування MCP",
+  "Code block title": "Заголовок блоку коду",
+  "Do not wrap lines": "Не переносити рядки",
+  "Download code": "Завантажити код",
+  "Wrap lines": "Переносити рядки",
   "${{amount}} /user/{{interval}}": "${{amount}} /користувач/{{interval}}",
   "A secret is configured. Enter a new value only to replace it.": "Секрет уже налаштовано. Введіть нове значення лише для його заміни.",
   "Single sign-on (SSO)": "Єдиний вхід (SSO)",

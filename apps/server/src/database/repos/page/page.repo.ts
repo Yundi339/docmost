@@ -202,12 +202,14 @@ export class PageRepo {
           .selectFrom('pages')
           .select(['id'])
           .where('id', '=', pageId)
+          .where('workspaceId', '=', workspaceId)
           .where('deletedAt', 'is', null)
           .unionAll((exp) =>
             exp
               .selectFrom('pages as p')
               .select(['p.id'])
               .innerJoin('page_descendants as pd', 'pd.id', 'p.parentPageId')
+              .where('p.workspaceId', '=', workspaceId)
               .where('p.deletedAt', 'is', null),
           ),
       )
@@ -228,12 +230,14 @@ export class PageRepo {
               deletedAt: currentDate,
             })
             .where('id', 'in', pageIds)
+            .where('workspaceId', '=', workspaceId)
             .where('deletedAt', 'is', null)
             .execute();
 
           await activeTrx
             .deleteFrom('shares')
             .where('pageId', 'in', pageIds)
+            .where('workspaceId', '=', workspaceId)
             .execute();
         },
         trx,
@@ -252,6 +256,7 @@ export class PageRepo {
       .selectFrom('pages')
       .select(['id', 'parentPageId'])
       .where('id', '=', pageId)
+      .where('workspaceId', '=', workspaceId)
       .executeTakeFirst();
 
     if (!pageToRestore) {
@@ -265,6 +270,7 @@ export class PageRepo {
         .selectFrom('pages')
         .select(['id', 'deletedAt'])
         .where('id', '=', pageToRestore.parentPageId)
+        .where('workspaceId', '=', workspaceId)
         .executeTakeFirst();
 
       // If parent is deleted, we should detach this page from it
@@ -278,11 +284,13 @@ export class PageRepo {
           .selectFrom('pages')
           .select(['id'])
           .where('id', '=', pageId)
+          .where('workspaceId', '=', workspaceId)
           .unionAll((exp) =>
             exp
               .selectFrom('pages as p')
               .select(['p.id'])
-              .innerJoin('page_descendants as pd', 'pd.id', 'p.parentPageId'),
+              .innerJoin('page_descendants as pd', 'pd.id', 'p.parentPageId')
+              .where('p.workspaceId', '=', workspaceId),
           ),
       )
       .selectFrom('page_descendants')
@@ -296,6 +304,7 @@ export class PageRepo {
       .updateTable('pages')
       .set({ deletedById: null, deletedAt: null })
       .where('id', 'in', pageIds)
+      .where('workspaceId', '=', workspaceId)
       .execute();
 
     // If we need to detach the restored page from its deleted parent
@@ -304,6 +313,7 @@ export class PageRepo {
         .updateTable('pages')
         .set({ parentPageId: null })
         .where('id', '=', pageId)
+        .where('workspaceId', '=', workspaceId)
         .execute();
     }
     this.eventEmitter.emit(EventName.PAGE_RESTORED, {

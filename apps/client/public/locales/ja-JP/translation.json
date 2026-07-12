@@ -1,4 +1,11 @@
 {
+  "Allow explicitly confirmed page trash operations through MCP.": "明示的に確認されたページのゴミ箱への移動を MCP 経由で許可します。",
+  "Destructive MCP tools": "破壊的な MCP ツール",
+  "MCP maintenance": "MCP メンテナンス",
+  "Code block title": "コードブロックのタイトル",
+  "Do not wrap lines": "行を折り返さない",
+  "Download code": "コードをダウンロード",
+  "Wrap lines": "行を折り返す",
   "${{amount}} /user/{{interval}}": "${{amount}} /ユーザー/{{interval}}",
   "A secret is configured. Enter a new value only to replace it.": "シークレットは設定済みです。置き換える場合のみ新しい値を入力してください。",
   "Single sign-on (SSO)": "シングルサインオン（SSO）",

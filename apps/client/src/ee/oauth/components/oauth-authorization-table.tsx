@@ -124,11 +124,13 @@ export function OAuthAuthorizationTable({
 }
 
 function scopeLabel(scope: OAuthScope) {
+  if (scope === "mcp:destructive") return "Destructive MCP tools";
   if (scope === "mcp:write") return "MCP write";
   return "MCP read";
 }
 
 function scopeColor(scope: OAuthScope) {
+  if (scope === "mcp:destructive") return "red";
   if (scope === "mcp:write") return "orange";
   return "blue";
 }

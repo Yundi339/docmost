@@ -1,4 +1,11 @@
 {
+  "Allow explicitly confirmed page trash operations through MCP.": "Explizit bestätigte Papierkorb-Aktionen für Seiten über MCP zulassen.",
+  "Destructive MCP tools": "Destruktive MCP-Werkzeuge",
+  "MCP maintenance": "MCP-Wartung",
+  "Code block title": "Codeblock-Titel",
+  "Do not wrap lines": "Zeilen nicht umbrechen",
+  "Download code": "Code herunterladen",
+  "Wrap lines": "Zeilen umbrechen",
   "${{amount}} /user/{{interval}}": "${{amount}} /Benutzer/{{interval}}",
   "A secret is configured. Enter a new value only to replace it.": "Ein Geheimnis ist konfiguriert. Geben Sie nur zum Ersetzen einen neuen Wert ein.",
   "Single sign-on (SSO)": "Einmalige Anmeldung (SSO)",

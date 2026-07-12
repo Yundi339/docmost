@@ -62,14 +62,33 @@ export default function WorkspaceOAuthManagement() {
   const scopeMode = chatgptClient?.allowedScopes.includes("mcp:write")
     ? "read-write"
     : "read-only";
+  const destructiveEnabled = Boolean(
+    chatgptClient?.allowedScopes.includes("mcp:destructive"),
+  );
 
   const updateScopes = (value: string) => {
     if (!chatgptClient) return;
     const allowedScopes: OAuthScope[] =
-      value === "read-write" ? ["mcp:read", "mcp:write"] : ["mcp:read"];
+      value === "read-write"
+        ? [
+            "mcp:read",
+            "mcp:write",
+            ...(destructiveEnabled ? (["mcp:destructive"] as const) : []),
+          ]
+        : ["mcp:read"];
     updateClientMutation.mutate({
       clientId: chatgptClient.id,
       allowedScopes,
+    });
+  };
+
+  const updateDestructiveScope = (enabled: boolean) => {
+    if (!chatgptClient || scopeMode !== "read-write") return;
+    updateClientMutation.mutate({
+      clientId: chatgptClient.id,
+      allowedScopes: enabled
+        ? ["mcp:read", "mcp:write", "mcp:destructive"]
+        : ["mcp:read", "mcp:write"],
     });
   };
 
@@ -165,6 +184,20 @@ export default function WorkspaceOAuthManagement() {
                 ]}
               />
             </div>
+
+            <Switch
+              checked={destructiveEnabled}
+              disabled={
+                scopeMode !== "read-write" || updateClientMutation.isPending
+              }
+              label={t("Destructive MCP tools")}
+              description={t(
+                "Allow explicitly confirmed page trash operations through MCP.",
+              )}
+              onChange={(event) =>
+                updateDestructiveScope(event.currentTarget.checked)
+              }
+            />
 
             <Divider />
 

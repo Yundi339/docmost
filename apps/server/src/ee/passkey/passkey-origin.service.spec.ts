@@ -9,10 +9,10 @@ describe('PasskeyOriginService', () => {
 
   it('uses the configured public URL and excludes proxy/internal ports', () => {
     expect(
-      serviceFor('https://mydoc.procriva.com:23000').getConfig(workspace),
+      serviceFor('https://docs.example.test:23000').getConfig(workspace),
     ).toEqual({
-      expectedOrigin: 'https://mydoc.procriva.com:23000',
-      rpId: 'mydoc.procriva.com',
+      expectedOrigin: 'https://docs.example.test:23000',
+      rpId: 'docs.example.test',
     });
   });
 

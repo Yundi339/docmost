@@ -191,8 +191,8 @@
 
 自托管实例以 `APP_URL` 为唯一可信公开地址。当前生产环境应计算为：
 
-- expected origin：`https://mydoc.procriva.com:23000`
-- RP ID：`mydoc.procriva.com`
+- expected origin：`https://docs.example.test:23000`
+- RP ID：`docs.example.test`
 
 内部 `127.0.0.1:3006`、容器端口 3000 和代理转发头不参与 RP 信任判断。非 localhost 环境必须为 HTTPS。
 
@@ -541,7 +541,7 @@ Passkey 上线前必须修复直接影响新登录链的现有问题：
 - 运行验证：未知凭据 challenge 首次消费后归零，重放仍返回统一 401，且不增加业务审计；Passkey Session 删除凭据前 200、删除后 401。
 - HTTPS 浏览器验证：Chromium CDP 虚拟认证器经前端完成 discoverable credential 注册；清除全部 Cookie 后使用通行密钥登录至 `/home`，`/api/users/me` 返回 200；审计与 Session metadata 均正确记录 `source/primaryAuth=passkey`。
 - 前端视觉验证：1440x1000 桌面与 390x844 移动端截图内容完整；移动端 document/body scrollWidth 均为 390，凭据表仅在自身容器横向滚动，无整页溢出或控件重叠。
-- 反向代理配置测试：`https://mydoc.procriva.com:23000` 解析为同 origin，RP ID 为 `mydoc.procriva.com`，不读取内部 3000/3006 端口。
+- 反向代理配置测试：`https://docs.example.test:23000` 解析为同 origin，RP ID 为 `docs.example.test`，不读取内部应用端口。
 - 服务端全量 Jest：58/58 suites、324/324 tests 通过；原有 12 个 Nest DI 空壳测试和 1 个 editor mock 解析问题已修复。
 - lint：0 errors、13 个仓库既有 warnings，本次新增文件无 warning；server/client production build 与版本同步检查通过。
 - 依赖安全：production audit 从 55 个（19 high、28 moderate、8 low）降为 0；Nest 尾斜杠路径运行验证未绕过 Passkey 管理鉴权，最终依赖版本下的 HTTPS 注册/登录再次通过。
