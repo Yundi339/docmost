@@ -390,10 +390,10 @@ Passkey 上线前必须修复直接影响新登录链的现有问题：
 - [x] 完成 service/controller/repository 单元测试。
 - [x] 完成权限、重放、并发、计数器和跨工作区安全测试。
 - [x] 完成公开分享、MCP、OAuth、密码、SSO、MFA 回归测试。
-- [x] 运行 lint、typecheck、server/client tests 和 production build。（专项与客户端全绿；服务端全量测试的 13 个仓库基线失败单独记录）
+- [x] 运行 lint、typecheck、server/client tests 和 production build。（服务端 58/58 suites、客户端 8/8 files 全绿）
 - [x] 使用 HTTPS 测试实例完成真实浏览器注册和登录。
 - [x] 验证反向代理下 expected origin/RP ID。
-- [x] 复盘所有 Todo 和缺陷清单后再允许发布。（19 个实施缺陷均已修复；仓库既有全量 Jest 基线失败已单独披露）
+- [x] 复盘所有 Todo 和缺陷清单后再允许发布。（20 个实施缺陷均已修复）
 
 ## 21. 缺陷复盘
 
@@ -522,6 +522,12 @@ Passkey 上线前必须修复直接影响新登录链的现有问题：
   - 根因：lockfile 固定在漏洞披露前版本，根级 override 也阻止了部分传递依赖自动获得补丁。
   - 修复证据：升级 Nest、Kysely、React Router、Undici、Nodemailer、ws；传递依赖使用精确 override，覆盖 MCP、Azure、编辑器、遥测和构建链已披露漏洞。
   - 回归测试：`pnpm audit --prod --audit-level low` 返回 `No known vulnerabilities found`；普通与尾斜杠 Passkey 管理路径匿名请求均返回 401；专项测试、客户端测试、两端 build 和 HTTPS browser ceremony 通过。
+- [x] BUG-PASSKEY-020：服务端全量 Jest 有 13 个 suite 失败，掩盖真实回归并使发布验证无法全绿。
+  - 发现阶段：G. 最终全量测试复盘。
+  - 影响范围：12 个 Controller/Service 构造测试和 PageService 的 8 个页面同步行为测试。
+  - 根因：旧 Nest 测试模板递归构造完整生产依赖图却没有 mock；PageService 将真实 `src/*` 模块错误标记为 virtual mock，导致实际加载 collaboration extensions 时 `UniqueID` 为空。
+  - 修复证据：12 个单元测试使用 Nest `useMocker` 隔离非被测依赖；PageService mock 交由现有 `src/*` module mapper 解析真实模块路径。
+  - 回归测试：原失败集合 13/13 suites、20/20 tests 通过；服务端全量 58/58 suites、324/324 tests 通过。
 
 ## 22. 验证记录
 
@@ -536,6 +542,6 @@ Passkey 上线前必须修复直接影响新登录链的现有问题：
 - HTTPS 浏览器验证：Chromium CDP 虚拟认证器经前端完成 discoverable credential 注册；清除全部 Cookie 后使用通行密钥登录至 `/home`，`/api/users/me` 返回 200；审计与 Session metadata 均正确记录 `source/primaryAuth=passkey`。
 - 前端视觉验证：1440x1000 桌面与 390x844 移动端截图内容完整；移动端 document/body scrollWidth 均为 390，凭据表仅在自身容器横向滚动，无整页溢出或控件重叠。
 - 反向代理配置测试：`https://mydoc.procriva.com:23000` 解析为同 origin，RP ID 为 `mydoc.procriva.com`，不读取内部 3000/3006 端口。
-- 服务端全量 Jest 当前为 45/58 suites、304/316 tests 通过；剩余 13 个为仓库原有的 12 个空壳 Nest DI 测试和 1 个 editor 扩展测试环境问题，不涉及本次 Passkey/MFA 文件，不能把服务端全量结果称为全绿。
+- 服务端全量 Jest：58/58 suites、324/324 tests 通过；原有 12 个 Nest DI 空壳测试和 1 个 editor mock 解析问题已修复。
 - lint：0 errors、13 个仓库既有 warnings，本次新增文件无 warning；server/client production build 与版本同步检查通过。
 - 依赖安全：production audit 从 55 个（19 high、28 moderate、8 low）降为 0；Nest 尾斜杠路径运行验证未绕过 Passkey 管理鉴权，最终依赖版本下的 HTTPS 注册/登录再次通过。

@@ -9,7 +9,9 @@ describe('SpaceController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SpaceController],
       providers: [SpaceService],
-    }).compile();
+    })
+      .useMocker(() => ({}))
+      .compile();
 
     controller = module.get<SpaceController>(SpaceController);
   });

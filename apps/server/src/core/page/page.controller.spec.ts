@@ -9,7 +9,9 @@ describe('PageController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PageController],
       providers: [PageService],
-    }).compile();
+    })
+      .useMocker(() => ({}))
+      .compile();
 
     controller = module.get<PageController>(PageController);
   });

@@ -9,7 +9,9 @@ describe('GroupController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [GroupController],
       providers: [GroupService],
-    }).compile();
+    })
+      .useMocker(() => ({}))
+      .compile();
 
     controller = module.get<GroupController>(GroupController);
   });

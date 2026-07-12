@@ -22,15 +22,11 @@ jest.mock('../../../integrations/export/utils', () => ({
   extractPageSlugId: jest.fn((slug: string) => slug),
 }));
 
-jest.mock(
-  'src/collaboration/collaboration.util',
-  () => ({
-    htmlToJson: jest.fn(),
-    jsonToNode: jest.fn(),
-    jsonToText: jest.fn(),
-  }),
-  { virtual: true },
-);
+jest.mock('src/collaboration/collaboration.util', () => ({
+  htmlToJson: jest.fn(),
+  jsonToNode: jest.fn(),
+  jsonToText: jest.fn(),
+}));
 
 // Load after Jest mocks above so their module factories are applied first.
 const { PageService } =
