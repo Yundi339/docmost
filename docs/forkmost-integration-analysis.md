@@ -1,6 +1,7 @@
 # Forkmost 功能引入评估与实施状态
 
-> 原始调研完成于 2026-07-11，实施状态更新于 2026-07-12。持续设计、决策、Todo 和实施复盘以
+> 原始调研完成于 2026-07-11，实施状态更新于 2026-07-12。本文同步候选功能的高层结论和
+> 当前状态；持续设计、决策、Todo 和实施复盘以
 > [`forkmost-integration.md`](./forkmost-integration.md) 为准。
 
 ## 1. 评估信息
@@ -26,9 +27,9 @@ Forkmost 使用 AGPL-3.0。直接复制代码必须处理许可证和来源问�
 | P0     | SSO 登录能力与锁死保护    | 已完成模块化能力注册、有效强制判断和 owner 恢复      |
 | P1     | 公开分享密码              | 已按统一 Guard、短期凭证、限流和审计重新实现         |
 | P1     | 成员目录隐私策略          | 应建立统一策略模块，覆盖网页、提及、权限选择器和 MCP |
-| P1     | 代码块标题、换行和下载    | 低风险、高实用性，适合编辑器属性扩展                 |
+| P1     | 代码块标题、换行和下载    | 已完成，使用编辑器属性扩展，无新增 API 或数据库迁移  |
 | P1     | 用户修改邮箱              | 后端已有基础逻辑，应补成验证式流程                   |
-| P2     | MCP 移入回收站和删除评论  | 可以增加，但应先模块化 MCP 工具并强化审计            |
+| P2     | MCP 可逆维护              | 工具模块化、页面回收/恢复和审计已完成；评论删除延期  |
 | P2     | 空间关系图                | 有价值，需要重新设计权限查询和大空间性能策略         |
 | P2     | H4-H6、图片说明           | 已实现，并覆盖 HTML、JSON、Markdown 和 Yjs 兼容测试  |
 
@@ -198,22 +199,27 @@ Forkmost 将密码放入 `sessionStorage` 并在内容请求中反复传递，�
 
 ## 7. 代码块增强
 
-建议增加：
+已完成以下能力：
 
 - 代码块标题
 - 自动换行开关
 - 下载按钮
 
-实现放在 `packages/editor-ext/src/lib/custom-code-block` 和客户端 Code Block NodeView。使用 ProseMirror 属性保存，不需要数据库迁移和新 API。
+实现位于 `packages/editor-ext/src/lib/custom-code-block` 和客户端 Code Block NodeView。
+`title`、`wrap` 使用 ProseMirror 属性保存，不需要数据库迁移和新 API。
 
-要求：
+已落实的安全和兼容约束：
 
-- 下载文件名过滤路径字符和控制字符。
-- 补充 HTML、JSON、Markdown、Yjs 和历史版本测试。
-- 明确 Markdown 围栏无法保存全部显示属性时的降级规则。
-- 不为每个代码块注册全局 paste 或 selection listener。
+- 下载文件名会过滤路径分隔符、控制字符、路径穿越片段和保留名称，并限制总长度。
+- HTML、JSON、Yjs、协同编辑和历史文档会保留或兼容新增属性。
+- 标准 Markdown 只导出语言和源码，`title`、`wrap` 按设计降级，不引入私有语法。
+- 自动换行只改变显示，不修改源码；复制和下载始终使用原始 UTF-8 文本。
+- Mermaid 源码/预览、复制和双击行为保持不变，未增加重复的全局监听器。
+- 编辑、只读、长标题、超长代码和移动端工具栏均有对应测试。
 
 编辑器变更由页面历史和协作更新覆盖，不需要独立业务审计。
+完整设计、实现位置和验证记录见
+[`code-block-mcp-design.md`](./code-block-mcp-design.md)。
 
 ## 8. 用户修改邮箱
 
@@ -236,24 +242,44 @@ Forkmost 将密码放入 `sessionStorage` 并在内容请求中反复传递，�
 
 ## 9. MCP 可逆删除和模块化
 
-当前 MCP 已有统一的 mode、scope、DTO、页面权限和审计包装器，但工具集中在 `mcp.service.ts`。建议先做无行为变化的拆分：
+MCP 工具模块化和可逆页面维护已经完成。`McpService` 只保留协议与会话生命周期；
+工具注册、执行和访问逻辑已拆分为：
 
 - `tools/page.tools.ts`
 - `tools/comment.tools.ts`
 - `tools/space.tools.ts`
 - `tools/search.tools.ts`
+- `tools/member.tools.ts`
 - `mcp-tool-registry.service.ts`
+- `mcp-tool-executor.service.ts`
+- `mcp-tool-access.service.ts`
 
-所有工具继续统一执行 DTO、workspace 绑定、MCP 模式、scope、CASL、页面权限、成功/失败审计和敏感参数清理。
+原有 20 个工具由强类型 `McpToolDescriptor` 描述，并通过契约快照锁定工具名称、顺序、
+schema、scope、annotations 和 DTO 策略。所有工具继续统一执行 DTO、workspace 绑定、
+MCP 模式、scope、CASL、页面权限、成功/失败审计和敏感参数清理。工具 provider 不能
+绕过统一 executor，也不能直接写数据库表。
 
-建议新增：
+已新增：
 
-- `trash_page`：只移入回收站，需要 `mcp:write`、read-write 模式、页面编辑权限和 `confirm: true`。
-- `delete_comment`：本人评论或空间管理员，并要求对应页面权限。
+- `trash_page`：只移入回收站，需要显式 `mcp:destructive`、read-write 模式、页面编辑
+  权限和字面值 `confirm: true`。
+- `restore_page`：恢复回收站页面，需要 `mcp:write`、read-write 模式以及空间和页面
+  编辑权限。
 
-必须调用现有 PageService 和 CommentService，不能直接写数据库；同时触发侧边栏和评论 WebSocket 更新。
+API Key 和 OAuth 均支持 `mcp:destructive`，但默认预设、现有凭据、现有授权和旧 grant
+不会自动获得该作用域。OAuth 客户端必须重新请求作用域并由用户重新授权。只读工作区
+模式始终拒绝破坏性操作。
+
+网页接口与 MCP 共用 `PageLifecycleService`，统一处理 workspace 绑定、页面与空间权限、
+后代页面回收/恢复、分享撤销、搜索/AI 事件、业务审计和侧边栏 WebSocket 更新。
 
 审计保存工具名、认证类型、凭据 ID、空间、页面路径、标题快照、目标 ID 和结果，不保存文档全文、OAuth token 或 API key。
+
+`delete_comment` 未实现。当前评论操作是硬删除，在完成评论软删除、恢复和保留期设计前，
+不能把它包装成“可逆” MCP 工具。该延期是明确的安全边界，不是遗漏。
+
+完整设计、授权流程和验证记录见
+[`code-block-mcp-design.md`](./code-block-mcp-design.md)。
 
 ## 10. 空间关系图
 
@@ -325,10 +351,11 @@ H4-H6、图片说明和链接快捷打开已完成：
 1. `[已完成]` SSO Provider owner-only、DTO、密钥保护、能力注册、锁死恢复和审计。
 2. `[已完成]` 公开分享密码和统一分享访问判断。
 3. `[已完成]` H4-H6、图片说明和 Ctrl/Meta 点击链接。
-4. `[待实施]` `DirectoryVisibilityPolicy`。
-5. `[待实施]` 代码块增强和验证式邮箱修改。
-6. `[待实施]` 无行为变化地拆分 MCP 工具，再增加可逆删除工具。
+4. `[已完成]` 代码块标题、换行、下载及兼容性测试。
+5. `[已完成]` 无行为变化拆分 MCP 工具，并增加受控的页面回收与恢复工具。
+6. `[待实施]` `DirectoryVisibilityPolicy` 和验证式邮箱修改。
 7. `[待实施]` 权限过滤、限量加载的空间关系图。
+8. `[延期]` 评论软删除、恢复和保留期设计完成后，再评估 MCP 评论删除工具。
 
 每个阶段都应包含角色矩阵、服务端越权、API key scope、MCP scope、审计内容、数据库迁移/回滚和前端可见性测试。前端菜单可见性只能改善体验，不能代替服务端权限校验。
 
@@ -340,13 +367,18 @@ H4-H6、图片说明和链接快捷打开已完成：
   重新实现。中间曾错误撤回能力保护，原因是把“owner 自主决定是否启用”与“服务器
   是否存在登录处理器”混为一谈，当前文档和代码均已纠正。
 - 分享密码、H4-H6、图片 caption 和链接快捷打开由 `dba1f23e` 完成。
-- 服务端全量测试为 68 个 suite、358 项；客户端为 11 个文件、96 项。editor-ext、
-  server 和 client production build 通过，新增 SSO 文案覆盖全部 12 个现有 locale。
+- 代码块增强、MCP 模块化、`trash_page`、`restore_page` 和页面生命周期复用由
+  `efba9a38` 完成。
+- 最新全量验证为：服务端 69 个 suite、372 项；客户端 13 个文件、106 项。editor-ext、
+  server 和 client 的 TypeScript 与 production build 通过，ESLint 无错误，新增文案
+  覆盖全部 12 个现有 locale。
 - SSO 能力重构不增加数据库字段，复用既有 `idx_auth_providers_workspace_id`；分享密码
   使用独立 migration 增加 hash、version 和 updatedAt。
+- 代码块和 MCP 本轮不增加数据库 migration。代码块属性存于 ProseMirror JSON；
+  `mcp:destructive` 存于现有 scope 数组，旧凭据和授权不会隐式扩权。
 - 当前仍然没有可工作的 OIDC、SAML、Google 或 LDAP 登录处理器，所以这些 Provider
   在 UI 中显示“登录不可用”，也不能启用。这是符合代码事实的保护，不是协议实现。
 - 下一项 SSO 工作应从标准 OIDC authorization code + PKCE 开始，并完成 state、nonce、
   redirect、账号绑定、verified email、SSRF/超时和失败审计后，再由 OIDC 模块注册能力。
-- 成员目录隐私、代码块增强、验证式邮箱修改、MCP 可逆删除和空间关系图仍未实施，不能
-  因 Forkmost 存在对应代码就视为当前项目已有能力。
+- 成员目录隐私、验证式邮箱修改和空间关系图仍未实施。评论软删除/恢复也尚未设计，
+  因此 MCP 不提供评论删除。不能因 Forkmost 存在对应代码就视为当前项目已有能力。
