@@ -20,6 +20,7 @@ import { TemplateModule } from './template/template.module';
 import { ApiKeyModule } from './api-key/api-key.module';
 import { SystemStatusModule } from './system-status/system-status.module';
 import { DatabaseFeatureModule } from './database/database.module';
+import { SpaceGraphModule } from './space-graph/space-graph.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { DatabaseFeatureModule } from './database/database.module';
     ApiKeyModule,
     SystemStatusModule,
     DatabaseFeatureModule,
+    SpaceGraphModule,
   ],
 })
 export class CoreModule {}

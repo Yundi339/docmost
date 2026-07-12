@@ -332,6 +332,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      cytoscape:
+        specifier: 3.33.1
+        version: 3.33.1
       file-saver:
         specifier: ^2.0.5
         version: 2.0.5

@@ -310,6 +310,21 @@ API Key 和 OAuth 均支持 `mcp:destructive`，但默认预设、现有凭据�
 
 Forkmost 的实现一次返回整个空间，未过滤删除页面和页面级权限，不适合直接使用。
 
+截至 2026-07-12，受限 beta 已实现。后端提供关系图查询和 JSON 导出接口，复用现有
+`JwtAuthGuard`、API Key `REST_READ`、空间 CASL 与页面访问规则。递归 SQL 在数据库层
+完成 workspace/space、回收站、页面限制和受限祖先过滤，返回边的两个端点必须都在
+最终可见节点集合中；中心页在展开前单独鉴权，避免通过不可见中心页推断关联关系。
+
+前端在空间首页增加“关系图”页签，保留搜索、连接状态筛选、中心页 1 至 3 层展开、
+500 节点上限、列表降级、导出和页面导航。`SpaceGraphView` 与 Cytoscape Canvas 分层
+动态加载，Cytoscape 3.33.1 为显式 MIT 依赖。production build 实测关系图视图约
+7.45 KB、Canvas 约 2.09 KB；Cytoscape 约 434 KB（gzip 137.49 KB），登录页、入口
+HTML 和普通入口 chunk 均无关系图依赖。
+
+普通查看不写审计；导出记录空间、中心页、节点/边数量和裁剪状态，不记录查询词和
+文档内容。当前没有新增数据库 migration 或猜测性索引。真实 PostgreSQL 的
+`EXPLAIN ANALYZE`、大空间数据和移动端端到端验证仍待完成。
+
 ## 11. 编辑器小功能
 
 H4-H6、图片说明和链接快捷打开已完成：
@@ -365,7 +380,7 @@ H4-H6、图片说明和链接快捷打开已完成：
 4. `[已完成]` 代码块标题、换行、下载及兼容性测试。
 5. `[已完成]` 无行为变化拆分 MCP 工具，并增加受控的页面回收与恢复工具。
 6. `[已完成]` 验证式邮箱修改及 Session-only、SSO、审计和并发保护。
-7. `[待实施]` 权限过滤、限量加载的空间关系图。
+7. `[受限 beta]` 权限过滤、限量加载且前端懒加载的空间关系图；待真实数据性能基线。
 8. `[延期]` 评论软删除、恢复和保留期设计完成后，再评估 MCP 评论删除工具。
 9. `[待实施]` `DirectoryVisibilityPolicy`。
 
@@ -381,9 +396,9 @@ H4-H6、图片说明和链接快捷打开已完成：
 - 分享密码、H4-H6、图片 caption 和链接快捷打开由 `dba1f23e` 完成。
 - 代码块增强、MCP 模块化、`trash_page`、`restore_page` 和页面生命周期复用由
   `efba9a38` 完成。
-- 最新全量验证为：服务端 71 个 suite、380 项；客户端 15 个文件、113 项。editor-ext、
-  server 和 client 的 TypeScript 与 production build 通过，ESLint 无错误，新增文案
-  覆盖全部 12 个现有 locale。
+- 最新全量验证为：服务端 73 个 suite、391 项；客户端 16 个文件、116 项。server 和
+  client 的 TypeScript 与 production build 通过，新增范围 ESLint 无错误，新增文案
+  覆盖全部 12 个现有 locale。关系图 production bundle 的懒加载边界也已检查。
 - SSO 能力重构不增加数据库字段，复用既有 `idx_auth_providers_workspace_id`；分享密码
   使用独立 migration 增加 hash、version 和 updatedAt。
 - 代码块和 MCP 本轮不增加数据库 migration。代码块属性存于 ProseMirror JSON；
@@ -395,5 +410,6 @@ H4-H6、图片说明和链接快捷打开已完成：
   在 UI 中显示“登录不可用”，也不能启用。这是符合代码事实的保护，不是协议实现。
 - 下一项 SSO 工作应从标准 OIDC authorization code + PKCE 开始，并完成 state、nonce、
   redirect、账号绑定、verified email、SSRF/超时和失败审计后，再由 OIDC 模块注册能力。
-- 成员目录隐私和空间关系图仍未实施。评论软删除/恢复也尚未设计，
-  因此 MCP 不提供评论删除。不能因 Forkmost 存在对应代码就视为当前项目已有能力。
+- 空间关系图受限 beta 已实现，但真实 PostgreSQL 查询计划、大空间和移动端端到端
+  验证尚未完成；成员目录隐私仍未实施。评论软删除/恢复也尚未设计，因此 MCP
+  不提供评论删除。不能因 Forkmost 存在对应代码就视为当前项目已有能力。

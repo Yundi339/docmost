@@ -6,6 +6,8 @@ import {
   IRemoveSpaceMember,
   ISpace,
   ISpaceMember,
+  SpaceGraphParams,
+  SpaceGraphResponse,
 } from "@/features/space/types/space.types";
 import { IPagination, QueryParams } from "@/lib/types.ts";
 import { saveAs } from "file-saver";
@@ -77,4 +79,28 @@ export async function exportSpace(data: IExportSpaceParams): Promise<void> {
   }
 
   saveAs(req.data, decodedFileName);
+}
+
+export async function getSpaceGraph(
+  params: SpaceGraphParams,
+): Promise<SpaceGraphResponse> {
+  const req = await api.post<SpaceGraphResponse>("/spaces/graph", params);
+  return req.data;
+}
+
+export async function exportSpaceGraph(
+  params: SpaceGraphParams,
+  spaceSlug: string,
+): Promise<void> {
+  const req = await api.post<SpaceGraphResponse>(
+    "/spaces/graph/export",
+    params,
+  );
+  const filename = `${spaceSlug.replace(/[^a-zA-Z0-9_-]/g, "-") || "space"}-graph.json`;
+  saveAs(
+    new Blob([JSON.stringify(req.data, null, 2)], {
+      type: "application/json;charset=utf-8",
+    }),
+    filename,
+  );
 }

@@ -11,6 +11,7 @@ import {
   IChangeSpaceMemberRole,
   IRemoveSpaceMember,
   ISpace,
+  SpaceGraphParams,
 } from "@/features/space/types/space.types";
 import {
   addSpaceMember,
@@ -22,6 +23,7 @@ import {
   createSpace,
   updateSpace,
   deleteSpace,
+  getSpaceGraph,
 } from "@/features/space/services/space-service.ts";
 import { notifications } from "@mantine/notifications";
 import { IPagination, QueryParams } from "@/lib/types.ts";
@@ -104,6 +106,22 @@ export function useGetSpaceBySlugQuery(
     queryFn: () => getSpaceById(spaceId),
     enabled: !!spaceId,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useSpaceGraphQuery(params: SpaceGraphParams) {
+  return useQuery({
+    queryKey: [
+      "space-graph",
+      params.spaceId,
+      params.centerPageId ?? null,
+      params.depth ?? null,
+      params.query ?? "",
+      params.limit ?? null,
+    ],
+    queryFn: () => getSpaceGraph(params),
+    enabled: Boolean(params.spaceId),
+    placeholderData: keepPreviousData,
   });
 }
 

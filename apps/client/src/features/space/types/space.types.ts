@@ -92,3 +92,39 @@ export interface IExportSpaceParams {
   format: ExportFormat;
   includeAttachments?: boolean;
 }
+
+export type SpaceGraphNode = {
+  id: string;
+  slugId: string;
+  title: string | null;
+  icon: string | null;
+  parentPageId: string | null;
+  updatedAt: string;
+  distance: number | null;
+};
+
+export type SpaceGraphEdge = {
+  id: string;
+  sourcePageId: string;
+  targetPageId: string;
+};
+
+export type SpaceGraphParams = {
+  spaceId: string;
+  centerPageId?: string;
+  depth?: number;
+  query?: string;
+  limit?: number;
+};
+
+export type SpaceGraphResponse = {
+  nodes: SpaceGraphNode[];
+  edges: SpaceGraphEdge[];
+  meta: {
+    limit: number;
+    truncated: boolean;
+    centerPageId: string | null;
+    depth: number | null;
+    queryApplied: boolean;
+  };
+};

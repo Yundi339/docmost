@@ -582,7 +582,7 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 - [x] `DEC-FM-003` 代码块 title/wrap 在标准 Markdown 导出时允许降级，不引入私有语法。
 - [ ] `DEC-FM-004` 决定图片 Markdown title 是否映射 caption；建议不自动等同，避免改变既有 title 语义。
 - [x] `DEC-FM-005` 新增 `mcp:destructive`；旧凭据默认不具备，不增加重复的 owner 总开关。
-- [ ] `DEC-FM-006` 决定空间关系图是否进入 beta；只有确认后才评估/引入显式图引擎依赖。
+- [x] `DEC-FM-006` 空间关系图进入受限 beta；显式使用 Cytoscape 3.33.1（MIT），仅在用户打开空间关系图时动态加载。
 - [ ] `DEC-FM-007` 确认 OIDC 首期只支持标准 authorization code + PKCE，不同时承诺 SAML/LDAP/Google。
 - [ ] `DEC-FM-008` 确认 OIDC verified email 自动绑定策略；建议默认关闭，owner 显式开启后才允许。
 - [x] `DEC-FM-009` 邮箱 request/confirm 均为 Session-only；确认必须显式点击，不增加 public confirm/cancel。
@@ -710,15 +710,23 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 ### 10.10 空间关系图
 
-- [ ] `FM-GRAPH-001` 通过 beta 决策并定义导航、孤立页发现和影响分析三个用户任务。
-- [ ] `FM-GRAPH-002` 实现 `SpaceGraphModule`、DTO 和 `POST /spaces/graph`。
-- [ ] `FM-GRAPH-003` SQL 层过滤 space/page/ancestor/deleted 权限，边只连接可见节点。
-- [ ] `FM-GRAPH-004` 实现 500 节点上限、中心页/深度过滤和稳定分页或裁剪规则。
+- [x] `FM-GRAPH-001` 通过 beta 决策并定义导航、孤立页发现和影响分析三个用户任务。
+- [x] `FM-GRAPH-002` 实现 `SpaceGraphModule`、DTO、`POST /spaces/graph` 和导出接口。
+- [x] `FM-GRAPH-003` SQL 层过滤 space/page/ancestor/deleted 权限，边只连接可见节点。
+- [x] `FM-GRAPH-004` 实现 500 节点上限、中心页/深度过滤和稳定裁剪规则。
 - [ ] `FM-GRAPH-005` 用真实数据执行 `EXPLAIN ANALYZE`，按证据决定索引。
-- [ ] `FM-GRAPH-006` 前端空间视图懒加载，提供搜索、筛选、列表降级和键盘操作。
-- [ ] `FM-GRAPH-007` 若获批准，显式引入并动态加载图引擎，检查许可证和 bundle。
-- [ ] `FM-GRAPH-008` 导出图数据时审计，普通查看不逐次写审计。
+- [x] `FM-GRAPH-006` 前端空间视图懒加载，提供搜索、筛选、列表降级和键盘操作。
+- [x] `FM-GRAPH-007` 显式引入并双层动态加载 Cytoscape，完成 MIT 许可证和 production bundle 检查。
+- [x] `FM-GRAPH-008` 导出图数据时审计，普通查看不逐次写审计。
 - [ ] `FM-GRAPH-009` 增加受限页面推断、超大空间、移动端和性能回归测试。
+- [x] `BUG-FM-012` 隐藏父页面已删除但自身状态异常的不可达子树，避免其被关系图误判为根页面。
+
+复盘：服务端先校验空间读取权限；中心页按 workspace、space、删除状态和页面级权限
+独立校验。递归 SQL 沿页面树传播受限祖先权限，搜索使用转义后的参数，边查询只接收
+最终可见节点 ID。导出审计仅保存空间 ID、节点/边数量、中心页 ID 和裁剪状态，不保存
+搜索词或页面内容。前端关系图和 Canvas 分两层 `lazy import`；production build 中登录页、
+入口 HTML 和普通入口 chunk 均不引用关系图或 Cytoscape。真实 PostgreSQL 查询计划、
+大空间和移动端端到端验证仍归 `FM-GRAPH-005/009`，在取得数据前不凭猜测增加索引。
 
 ### 10.11 编辑器补充
 

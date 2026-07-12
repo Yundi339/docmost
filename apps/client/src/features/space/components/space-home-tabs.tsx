@@ -1,5 +1,11 @@
-import { Text, Tabs, Space } from "@mantine/core";
-import { IconClockHour3, IconStar, IconUser } from "@tabler/icons-react";
+import { Skeleton, Space, Tabs, Text } from "@mantine/core";
+import {
+  IconClockHour3,
+  IconStar,
+  IconTopologyStar,
+  IconUser,
+} from "@tabler/icons-react";
+import { lazy, Suspense } from "react";
 import RecentChanges from "@/components/common/recent-changes";
 import FavoritesPages from "@/features/home/components/favorites-pages";
 import CreatedByMe from "@/features/home/components/created-by-me";
@@ -7,13 +13,17 @@ import { useParams } from "react-router-dom";
 import { useGetSpaceBySlugQuery } from "@/features/space/queries/space-query";
 import { useTranslation } from "react-i18next";
 import { useAtom } from "jotai";
-import { homeTabAtom } from "@/features/home/atoms/home-tab-atom";
+import { spaceHomeTabAtom } from "@/features/space/atoms/space-home-tab-atom";
+
+const SpaceGraphView = lazy(
+  () => import("@/features/space/graph/space-graph-view"),
+);
 
 export default function SpaceHomeTabs() {
   const { t } = useTranslation();
   const { spaceSlug } = useParams();
   const { data: space } = useGetSpaceBySlugQuery(spaceSlug);
-  const [activeTab, setActiveTab] = useAtom(homeTabAtom);
+  const [activeTab, setActiveTab] = useAtom(spaceHomeTabAtom);
 
   return (
     <Tabs
@@ -39,6 +49,11 @@ export default function SpaceHomeTabs() {
             {t("Created by me")}
           </Text>
         </Tabs.Tab>
+        <Tabs.Tab value="graph" leftSection={<IconTopologyStar size={18} />}>
+          <Text size="sm" fw={500}>
+            {t("Graph")}
+          </Text>
+        </Tabs.Tab>
       </Tabs.List>
 
       <Space my="md" />
@@ -51,6 +66,13 @@ export default function SpaceHomeTabs() {
       </Tabs.Panel>
       <Tabs.Panel value="created">
         {space?.id && <CreatedByMe spaceId={space.id} />}
+      </Tabs.Panel>
+      <Tabs.Panel value="graph">
+        {activeTab === "graph" && space?.id && (
+          <Suspense fallback={<Skeleton h={420} />}>
+            <SpaceGraphView space={space} />
+          </Suspense>
+        )}
       </Tabs.Panel>
     </Tabs>
   );

@@ -26,6 +26,12 @@ describe("audit display formatting", () => {
     expect(getEventLabel("user.email_changed")).toBe("Changed email");
   });
 
+  it("labels space relationship graph exports", () => {
+    expect(getEventLabel("space.graph_exported")).toBe(
+      "Exported space relationship graph",
+    );
+  });
+
   it("labels known and future fields without exposing camelCase", () => {
     expect(getAuditFieldLabel("oauthAuthorizationId")).toBe(
       "OAuth authorization ID",
