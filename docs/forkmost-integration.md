@@ -92,10 +92,10 @@
 | SSO 启用策略                 | 已修复           | owner 自主配置；只有实际登录模块注册后才能启用   |
 | 公开分享密码                 | 已完成           | 统一 Guard、限流、附件撤销和审计已落地           |
 | 成员目录隐私                 | 未开发           | 普通成员搜索当前会返回全工作区用户及邮箱         |
-| 代码块标题/换行/下载         | 未开发           | 低风险、高频技术文档能力                         |
-| 修改邮箱                     | 部分             | 后端立即修改存在，前端入口关闭，缺少新邮箱验证   |
-| MCP 读写/审计/OAuth          | 已完成           | 统一校验已存在，但工具集中在单一大 Service       |
-| MCP 回收页面/删除评论        | 未开发           | 需先拆模块和定义破坏性 scope                     |
+| 代码块标题/换行/下载         | 已完成           | 编辑器属性扩展、下载安全和兼容测试已落地         |
+| 修改邮箱                     | 已完成           | Session-only 申请/确认、一次性令牌和双向通知     |
+| MCP 读写/审计/OAuth          | 已完成           | 工具注册、执行、访问和审计已模块化               |
+| MCP 回收页面/删除评论        | 页面已完成       | 页面回收/恢复可逆；评论硬删除工具明确延期        |
 | 空间关系图                   | 未开发           | 中等价值，必须解决页面级权限和大空间性能         |
 | H4-H6                        | 已完成           | 工具栏、slash、目录和协作兼容测试已落地          |
 | 图片 alt/对齐                | 已完成           | 无需重复引入                                     |
@@ -126,15 +126,15 @@
 
 ### 阶段 2：外部协作和账号安全
 
-1. 公开分享密码和统一 `ShareAccessGuard`。
-2. 验证式邮箱修改。
+1. `[已完成]` 公开分享密码和统一 `ShareAccessGuard`。
+2. `[已完成]` 验证式邮箱修改。
 3. 分享与身份流程的通知、限流和审计补全。
 
 ### 阶段 3：MCP 可维护性与受控破坏性操作
 
-1. 无行为变化拆分 MCP 工具注册与执行模块。
-2. 引入明确的破坏性授权边界。
-3. 增加移入回收站；删除评论在复用核心删除服务后再开放。
+1. `[已完成]` 无行为变化拆分 MCP 工具注册与执行模块。
+2. `[已完成]` 引入明确的破坏性授权边界。
+3. `[部分完成]` 页面移入回收站和恢复已完成；删除评论在软删除服务完成后再开放。
 
 ### 阶段 4：验证型功能
 
@@ -420,24 +420,26 @@ SEO 和嵌入。遗漏任何一个都视为验收失败。
 
 #### 流程
 
-1. Session 用户通过近期主认证，提交当前密码和新邮箱。
+1. Session 用户提交当前密码和新邮箱，以密码完成本次敏感操作的 step-up。
 2. 服务端检查 SSO 策略、唯一性和限流，向新邮箱发送短期确认链接。
 3. 数据库只保存 token 的 SHA-256 hash、目标邮箱、过期时间和使用时间。
-4. 确认时在事务内再次检查唯一性并更新邮箱。
-5. 通知旧邮箱，撤销全部网页登录 session，要求重新登录。
+4. 用户登录后从链接回到个人资料页，显式确认；服务端在事务内再次检查 SSO、
+   申请归属、有效期、单次使用和邮箱唯一性。
+5. 更新邮箱并标记为已验证，再向旧邮箱发送安全通知。
 
-建议增加 `pending_email_changes` 表，而不是复用存放明文 token 的旧模型。唯一活动
-申请按 workspace/user 约束，重复申请使旧 token 失效。
+使用独立 `user_email_change_requests` 表，不复用存放明文 token 的旧模型。
+`workspace/user` 唯一约束和 upsert 保证每个用户最多一条申请；重复申请原子轮换
+token，使旧链接失效，表规模最多与用户数相同。
 
-| API                                    | 鉴权                             | 说明     |
-| -------------------------------------- | -------------------------------- | -------- |
-| `POST /api/users/email-change/request` | JWT + Session + step-up          | 创建申请 |
-| `POST /api/users/email-change/confirm` | Public one-time token + throttle | 完成修改 |
-| `POST /api/users/email-change/cancel`  | JWT + Session                    | 撤销申请 |
+| API                                    | 鉴权                     | 说明                     |
+| -------------------------------------- | ------------------------ | ------------------------ |
+| `POST /api/users/email-change/request` | JWT + Session + password | 创建或轮换一次性申请     |
+| `POST /api/users/email-change/confirm` | JWT + Session + token    | 显式确认并完成事务内修改 |
 
 API Key、OAuth 和 MCP 不得修改身份邮箱。强制 SSO 工作区继续禁止本地修改。审计
-申请、确认和撤销，但不记录 token、密码或完整邮件正文。用户身份没有改变，默认不
-撤销 API Key 和已授权 OAuth；这一行为需在安全说明中明确。
+申请和确认，但不记录 token、密码或完整邮件正文。确认链接不会自动调用 API，避免
+邮件安全扫描器触发修改。本次不增加公开确认或取消接口；重复申请即撤销旧链接。
+用户 ID 没有改变，现有 Session、API Key 和已授权 OAuth 不会因邮箱字段变化而撤销。
 
 ### 6.8 MCP 模块化与可逆维护工具
 
@@ -583,6 +585,7 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 - [ ] `DEC-FM-006` 决定空间关系图是否进入 beta；只有确认后才评估/引入显式图引擎依赖。
 - [ ] `DEC-FM-007` 确认 OIDC 首期只支持标准 authorization code + PKCE，不同时承诺 SAML/LDAP/Google。
 - [ ] `DEC-FM-008` 确认 OIDC verified email 自动绑定策略；建议默认关闭，owner 显式开启后才允许。
+- [x] `DEC-FM-009` 邮箱 request/confirm 均为 Session-only；确认必须显式点击，不增加 public confirm/cancel。
 
 ## 10. 实施 Todo
 
@@ -672,15 +675,19 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 ### 10.8 邮箱修改
 
-- [ ] `FM-EMAIL-001` 完成 Session-only、step-up、SSO 和账号恢复威胁模型。
-- [ ] `FM-EMAIL-002` 增加 `pending_email_changes` migration、唯一约束、清理和回滚。
-- [ ] `FM-EMAIL-003` 实现 request/confirm/cancel DTO、Service 和 Controller。
-- [ ] `FM-EMAIL-004` token 只保存 SHA-256 hash，并实现过期、单次使用和旧申请失效。
-- [ ] `FM-EMAIL-005` 确认时事务内检查唯一性、更新邮箱并撤销网页登录 session。
-- [ ] `FM-EMAIL-006` 向新邮箱发送确认，向旧邮箱发送安全通知。
-- [ ] `FM-EMAIL-007` 恢复账户设置入口，完成 pending/success/error 状态和全部翻译。
-- [ ] `FM-EMAIL-008` 增加申请/确认/撤销审计并确认不记录 token 和密码。
-- [ ] `FM-EMAIL-009` 增加 API Key/OAuth/MCP 拒绝、SSO 禁止、竞争确认和重放测试。
+- [x] `FM-EMAIL-001` 完成 Session-only、密码 step-up、SSO 和账号恢复威胁模型。
+- [x] `FM-EMAIL-002` 增加 `user_email_change_requests` migration、每用户唯一约束、容量边界和回滚。
+- [x] `FM-EMAIL-003` 实现 Session-only request/confirm DTO、Service 和 Controller。
+- [x] `FM-EMAIL-004` token 只保存 SHA-256 hash，并实现过期、单次使用和旧申请失效。
+- [x] `FM-EMAIL-005` 确认时锁定 workspace、申请和用户，重新检查 SSO/唯一性并更新已验证邮箱。
+- [x] `FM-EMAIL-006` 向新邮箱发送确认，向旧邮箱发送安全通知。
+- [x] `FM-EMAIL-007` 恢复账户设置入口，完成 request/confirm/success/error 状态和全部翻译。
+- [x] `FM-EMAIL-008` 增加申请/确认审计并确认不记录 token 和密码。
+- [x] `FM-EMAIL-009` 增加 API Key/OAuth/MCP 拒绝、SSO 禁止、竞争确认和重放测试。
+- [x] `BUG-FM-013` 使用 workspace/user 唯一约束和 upsert，阻止并发申请留下多个有效链接。
+- [x] `BUG-FM-014` 使用 URL fragment 和单次 session handoff，阻止确认 token 进入代理日志和登录回跳 URL。
+- [x] `BUG-FM-015` 复用已在线使用的标准 `ThrottlerGuard`，避免启用缺少构造依赖验证的未使用 Guard。
+- [x] `BUG-FM-016` 将邮箱校验与服务端错误接入 i18next，阻止非英文界面回退为英文错误。
 
 ### 10.9 MCP
 
@@ -849,6 +856,45 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
   comment soft-delete/restore 前不得增加 MCP 删除评论工具。
 - 详细设计、模块落点、授权方式、工具输入和最终验收记录见
   [`code-block-mcp-design.md`](./code-block-mcp-design.md)。
+
+### 2026-07-12：验证式邮箱修改（本次提交）
+
+- 完成 Todo：`DEC-FM-009`、`FM-EMAIL-001` 至 `FM-EMAIL-009`，以及实施中发现的
+  `BUG-FM-013` 至 `BUG-FM-016`。
+- 用户可见变化：个人资料页重新开放“修改电子邮箱”；输入当前密码后，新邮箱收到
+  30 分钟有效的确认链接。用户登录并显式确认后才会更新，旧邮箱会收到安全通知。
+  强制 SSO 工作区显示禁用状态。
+- 前端实现与兼容：沿用 React、Mantine、Jotai、React Router、Zod 和 i18next；确认
+  链接复用现有个人资料路由，登录重定向会保留回跳参数。链接不会在页面加载时自动
+  提交，避免邮件扫描器触发。原始 token 放在 URL fragment 中，不发送给 Web/代理；
+  应用启动时把它转存到当前标签页的 sessionStorage 并立即清除地址栏，确认组件读取后
+  立即删除。登录回跳只携带不敏感的确认标记。新增文案覆盖全部 12 个 locale，没有
+  新增前端依赖。
+- 后端鉴权与资源边界：request/confirm 都由 `JwtAuthGuard`、`SessionAuthGuard` 和
+  限流保护；API Key 与 MCP OAuth 被服务端拒绝。通用 `UpdateUserDto` 已移除 email 和
+  confirmPassword，不能从旧接口旁路。确认事务锁定 workspace、申请和用户，并重新
+  检查有效 SSO、用户/工作区绑定、过期、重放和大小写无关的邮箱唯一性。
+- 审计与敏感数据：申请记录 `user.email_change_requested`，完成记录
+  `user.email_changed`；审计只记录邮箱 before/after，不记录密码、原始 token、token hash
+  或邮件正文。数据库和普通日志也不保存原始 token。
+- 数据库迁移与回滚：新增 `user_email_change_requests`。token 仅保存 SHA-256 hash；
+  workspace/user 唯一约束配合 upsert 原子轮换旧申请，表规模最多与用户数相同。回滚
+  删除申请表，不回退已经确认的用户邮箱。
+- 测试和人工验证：server 71 个 suite、380 项，client 15 个文件、113 项全量通过；
+  双端 TypeScript 通过。覆盖 Session Guard、API Key/MCP OAuth 拒绝、SSO、token hash、
+  并发确认、重放、通用更新旁路、fragment token handoff、显式确认和 SSO 前端状态。
+  双端 production build 通过；服务端启动探测通过 Nest 依赖装配并进入数据库/Redis
+  初始化，本机未运行依赖服务，因此未执行端到端邮件确认。
+- 性能/部署验证：申请和确认均使用有界索引查询；确认邮件复用现有 BullMQ 邮件队列，
+  AIO 和外置部署不增加新服务。新增 migration 随现有启动迁移流程执行。
+- 新发现 BUG Todo：`BUG-FM-013`。最初的“删除旧申请再插入”在并发请求下可能留下
+  两个有效链接，已改为数据库唯一约束和原子 upsert，并在邮件入队失败清理时同时匹配
+  token hash，避免误删更新后的申请。`BUG-FM-014` 修复了查询参数会把原始 token 暴露
+  给反向代理访问日志和登录 redirect URL 的问题。`BUG-FM-015` 避免启用未经生产验证
+  的自定义限流 Guard，`BUG-FM-016` 补齐了服务端校验错误的全部 locale 翻译。
+- 遗留风险和下一步：邮件队列不可用时 request 会失败并清理对应申请；旧邮箱安全通知
+  入队失败不会回滚已经完成的身份字段修改，只记录不含邮箱地址的服务端错误。公开
+  confirm/cancel 不在本次范围，重复申请用于撤销旧链接。
 
 ### 复盘模板
 

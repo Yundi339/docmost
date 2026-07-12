@@ -736,6 +736,17 @@ export interface UserSessions {
   createdAt: Generated<Timestamp>;
 }
 
+export interface UserEmailChangeRequests {
+  id: Generated<string>;
+  userId: string;
+  workspaceId: string;
+  newEmail: string;
+  tokenHash: string;
+  expiresAt: Timestamp;
+  usedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+}
+
 export interface DB {
   aiChats: AiChats;
   aiChatMessages: AiChatMessages;
@@ -776,6 +787,7 @@ export interface DB {
   spaces: Spaces;
   templates: Templates;
   userMfa: UserMfa;
+  userEmailChangeRequests: UserEmailChangeRequests;
   userPasskeys: UserPasskeys;
   users: Users;
   userSessions: UserSessions;

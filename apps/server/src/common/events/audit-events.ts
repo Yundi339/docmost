@@ -14,6 +14,8 @@ export const AuditEvent = {
   USER_ROLE_CHANGED: 'user.role_changed',
   USER_PASSWORD_CHANGED: 'user.password_changed',
   USER_PASSWORD_RESET: 'user.password_reset',
+  USER_EMAIL_CHANGE_REQUESTED: 'user.email_change_requested',
+  USER_EMAIL_CHANGED: 'user.email_changed',
   USER_UPDATED: 'user.updated',
   USER_DEACTIVATED: 'user.deactivated',
   USER_ACTIVATED: 'user.activated',

@@ -28,7 +28,7 @@ Forkmost 使用 AGPL-3.0。直接复制代码必须处理许可证和来源问�
 | P1     | 公开分享密码              | 已按统一 Guard、短期凭证、限流和审计重新实现         |
 | P1     | 成员目录隐私策略          | 应建立统一策略模块，覆盖网页、提及、权限选择器和 MCP |
 | P1     | 代码块标题、换行和下载    | 已完成，使用编辑器属性扩展，无新增 API 或数据库迁移  |
-| P1     | 用户修改邮箱              | 后端已有基础逻辑，应补成验证式流程                   |
+| P1     | 用户修改邮箱              | 已完成 Session-only 申请/确认、一次性令牌和双向通知  |
 | P2     | MCP 可逆维护              | 工具模块化、页面回收/恢复和审计已完成；评论删除延期  |
 | P2     | 空间关系图                | 有价值，需要重新设计权限查询和大空间性能策略         |
 | P2     | H4-H6、图片说明           | 已实现，并覆盖 HTML、JSON、Markdown 和 Yjs 兼容测试  |
@@ -223,22 +223,33 @@ Forkmost 将密码放入 `sessionStorage` 并在内容请求中反复传递，�
 
 ## 8. 用户修改邮箱
 
-当前后端已有密码校验、SSO 限制、邮箱唯一性检查和审计，但前端入口和提交逻辑未启用。
+验证式邮箱修改已经完成。原 `/api/users/update` 不再接受邮箱和确认密码字段，避免 API
+Key 或其他通用更新调用绕过专用流程。个人资料页已恢复修改入口；强制 SSO 时入口禁用，
+服务端仍会独立拒绝。
 
-建议采用验证式流程：
+当前流程：
 
 1. 用户输入当前密码和新邮箱。
-2. 服务端向新邮箱发送短期确认链接。
-3. 数据库只保存 token 哈希和过期时间。
-4. 用户确认后在事务中检查唯一性并更新邮箱。
-5. 给旧邮箱发送安全通知。
+2. 服务端检查 Session、密码、有效 SSO 状态、邮箱唯一性和限流。
+3. 新邮箱收到 30 分钟有效的确认链接；原始 token 位于 URL fragment，不进入代理请求
+   日志，数据库只保存 token 的 SHA-256 hash。
+4. 用户登录后回到个人资料页，并显式点击确认，避免邮件扫描器自动触发变更。
+5. 服务端锁定 workspace、申请和用户，在事务中重新检查 SSO、归属、过期、重放和
+   唯一性，再更新并验证邮箱。
+6. 旧邮箱收到安全通知；申请和最终修改分别进入审计。
 
-建议接口：
+接口：
 
 - `POST /api/users/email-change/request`
 - `POST /api/users/email-change/confirm`
 
-只允许 Session 登录，不允许 API key 或 MCP 修改身份邮箱。SSO 强制工作区继续禁止本地修改。审计申请和最终修改，不记录 token。
+两个接口都要求 JWT + Session，API Key 和 MCP OAuth 会被 `SessionAuthGuard` 拒绝。
+不提供 public confirm 或 cancel；重复申请通过 workspace/user 唯一行原子轮换 token，
+等价于撤销旧链接。登录回跳只携带不敏感标记，原始 token 通过当前标签页一次性传递并
+在确认组件读取后删除。审计不记录 token、密码或邮件正文。
+
+数据库新增 `user_email_change_requests`，每个 workspace/user 最多一行，并对 token hash
+建立唯一约束。回滚只删除申请表，不影响已经完成的用户邮箱修改。
 
 ## 9. MCP 可逆删除和模块化
 
@@ -353,9 +364,10 @@ H4-H6、图片说明和链接快捷打开已完成：
 3. `[已完成]` H4-H6、图片说明和 Ctrl/Meta 点击链接。
 4. `[已完成]` 代码块标题、换行、下载及兼容性测试。
 5. `[已完成]` 无行为变化拆分 MCP 工具，并增加受控的页面回收与恢复工具。
-6. `[待实施]` `DirectoryVisibilityPolicy` 和验证式邮箱修改。
+6. `[已完成]` 验证式邮箱修改及 Session-only、SSO、审计和并发保护。
 7. `[待实施]` 权限过滤、限量加载的空间关系图。
 8. `[延期]` 评论软删除、恢复和保留期设计完成后，再评估 MCP 评论删除工具。
+9. `[待实施]` `DirectoryVisibilityPolicy`。
 
 每个阶段都应包含角色矩阵、服务端越权、API key scope、MCP scope、审计内容、数据库迁移/回滚和前端可见性测试。前端菜单可见性只能改善体验，不能代替服务端权限校验。
 
@@ -369,16 +381,19 @@ H4-H6、图片说明和链接快捷打开已完成：
 - 分享密码、H4-H6、图片 caption 和链接快捷打开由 `dba1f23e` 完成。
 - 代码块增强、MCP 模块化、`trash_page`、`restore_page` 和页面生命周期复用由
   `efba9a38` 完成。
-- 最新全量验证为：服务端 69 个 suite、372 项；客户端 13 个文件、106 项。editor-ext、
+- 最新全量验证为：服务端 71 个 suite、380 项；客户端 15 个文件、113 项。editor-ext、
   server 和 client 的 TypeScript 与 production build 通过，ESLint 无错误，新增文案
   覆盖全部 12 个现有 locale。
 - SSO 能力重构不增加数据库字段，复用既有 `idx_auth_providers_workspace_id`；分享密码
   使用独立 migration 增加 hash、version 和 updatedAt。
 - 代码块和 MCP 本轮不增加数据库 migration。代码块属性存于 ProseMirror JSON；
   `mcp:destructive` 存于现有 scope 数组，旧凭据和授权不会隐式扩权。
+- 验证式邮箱修改新增独立申请表，不复用存放明文 token 的历史模型；通用用户更新 DTO
+  已移除邮箱字段，两个新接口都要求 Session。新旧邮箱通知、申请/确认审计和 12 个
+  locale 已接入。
 - 当前仍然没有可工作的 OIDC、SAML、Google 或 LDAP 登录处理器，所以这些 Provider
   在 UI 中显示“登录不可用”，也不能启用。这是符合代码事实的保护，不是协议实现。
 - 下一项 SSO 工作应从标准 OIDC authorization code + PKCE 开始，并完成 state、nonce、
   redirect、账号绑定、verified email、SSRF/超时和失败审计后，再由 OIDC 模块注册能力。
-- 成员目录隐私、验证式邮箱修改和空间关系图仍未实施。评论软删除/恢复也尚未设计，
+- 成员目录隐私和空间关系图仍未实施。评论软删除/恢复也尚未设计，
   因此 MCP 不提供评论删除。不能因 Forkmost 存在对应代码就视为当前项目已有能力。

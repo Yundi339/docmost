@@ -5,6 +5,7 @@ import {
   getMcpToolLabel,
   getVisibleAuditMetadataEntries,
 } from "./audit-display";
+import { getEventLabel } from "./audit-event-labels";
 
 const t = (key: string) =>
   (
@@ -18,6 +19,13 @@ const t = (key: string) =>
   )[key] ?? key;
 
 describe("audit display formatting", () => {
+  it("labels email change request and completion events", () => {
+    expect(getEventLabel("user.email_change_requested")).toBe(
+      "Requested email change",
+    );
+    expect(getEventLabel("user.email_changed")).toBe("Changed email");
+  });
+
   it("labels known and future fields without exposing camelCase", () => {
     expect(getAuditFieldLabel("oauthAuthorizationId")).toBe(
       "OAuth authorization ID",

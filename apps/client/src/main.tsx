@@ -26,7 +26,10 @@ import { Notifications } from "@mantine/notifications";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HelmetProvider } from "react-helmet-async";
 import { AppUpdateNotifier } from "@/features/version/components/app-update-notifier";
+import { captureEmailChangeTokenFromLocation } from "@/features/user/email-change-token";
 import "./i18n";
+
+captureEmailChangeTokenFromLocation();
 
 export const queryClient = new QueryClient({
   defaultOptions: {

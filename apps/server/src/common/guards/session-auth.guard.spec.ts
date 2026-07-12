@@ -23,4 +23,10 @@ describe('SessionAuthGuard', () => {
       ForbiddenException,
     );
   });
+
+  it('blocks MCP OAuth tokens', () => {
+    expect(() => guard.canActivate(context(JwtType.MCP_OAUTH))).toThrow(
+      ForbiddenException,
+    );
+  });
 });

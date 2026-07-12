@@ -153,6 +153,7 @@ async function bootstrap() {
   const sensitivePagePrefixes = [
     '/login',
     '/settings/account',
+    '/api/users/email-change/',
     '/oauth/authorize',
     '/api/auth/passkeys/',
     '/api/passkeys/',

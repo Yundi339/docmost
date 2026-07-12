@@ -1,19 +1,9 @@
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { NotificationSettingKey } from '../notification/notification.constants';
-import {
-  comparePasswordHash,
-  diffAuditTrackedFields,
-} from 'src/common/helpers/utils';
+import { diffAuditTrackedFields } from 'src/common/helpers/utils';
 import { Workspace } from '@docmost/db/types/entity.types';
-import { SsoEnforcementService } from '../auth/services/sso-enforcement.service';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import {
   AUDIT_SERVICE,
@@ -25,7 +15,6 @@ export class UserService {
   constructor(
     private userRepo: UserRepo,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
-    private readonly ssoEnforcement: SsoEnforcementService,
   ) {}
 
   async findById(userId: string, workspaceId: string) {
@@ -37,12 +26,7 @@ export class UserService {
     userId: string,
     workspace: Workspace,
   ) {
-    const includePassword =
-      updateUserDto.email != null && updateUserDto.confirmPassword != null;
-
-    const user = await this.userRepo.findById(userId, workspace.id, {
-      includePassword,
-    });
+    const user = await this.userRepo.findById(userId, workspace.id);
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -101,7 +85,6 @@ export class UserService {
 
     const userBefore = {
       name: user.name,
-      email: user.email,
       locale: user.locale,
     };
 
@@ -109,43 +92,14 @@ export class UserService {
       user.name = updateUserDto.name;
     }
 
-    if (updateUserDto.email && user.email != updateUserDto.email) {
-      await this.ssoEnforcement.assertLocalAuthAllowed(workspace);
-
-      if (!updateUserDto.confirmPassword) {
-        throw new BadRequestException(
-          'You must provide a password to change your email',
-        );
-      }
-
-      const isPasswordMatch = await comparePasswordHash(
-        updateUserDto.confirmPassword,
-        user.password,
-      );
-
-      if (!isPasswordMatch) {
-        throw new BadRequestException(
-          'You must provide the correct password to change your email',
-        );
-      }
-
-      if (await this.userRepo.findByEmail(updateUserDto.email, workspace.id)) {
-        throw new BadRequestException('A user with this email already exists');
-      }
-
-      user.email = updateUserDto.email;
-    }
-
     if (updateUserDto.locale) {
       user.locale = updateUserDto.locale;
     }
 
-    delete updateUserDto.confirmPassword;
-
     await this.userRepo.updateUser(updateUserDto, userId, workspace.id);
 
     const changes = diffAuditTrackedFields(
-      ['name', 'email'],
+      ['name'],
       updateUserDto,
       userBefore,
       user,
