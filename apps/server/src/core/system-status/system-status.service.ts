@@ -91,7 +91,7 @@ export class SystemStatusService {
           .catch(() => null),
         sql<{
           version: string;
-        }>`SHOW server_version`
+        }>`SELECT current_setting('server_version') AS version`
           .execute(this.db)
           .then((r) => r.rows[0])
           .catch(() => null),
