@@ -34,7 +34,11 @@ import { exportSpaceGraph } from "@/features/space/services/space-service";
 import { ISpace } from "@/features/space/types/space.types";
 import { buildPageUrl } from "@/features/page/page.utils";
 import { formattedDate } from "@/lib/time";
-import { filterGraph, GraphConnectionFilter } from "./space-graph-utils";
+import {
+  filterGraph,
+  getDefaultGraphLimit,
+  GraphConnectionFilter,
+} from "./space-graph-utils";
 import type { SpaceGraphCanvasApi } from "./space-graph-canvas";
 import classes from "./space-graph.module.css";
 
@@ -50,7 +54,7 @@ export default function SpaceGraphView({ space }: Props) {
   const [filter, setFilter] = useState<GraphConnectionFilter>("all");
   const [search, setSearch] = useState("");
   const [query] = useDebouncedValue(search, 300);
-  const [limit, setLimit] = useState("500");
+  const [limit, setLimit] = useState(() => String(getDefaultGraphLimit()));
   const [centerPageId, setCenterPageId] = useState<string>();
   const [depth, setDepth] = useState("1");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -132,6 +136,7 @@ export default function SpaceGraphView({ space }: Props) {
         />
         <Tooltip label={t("Export")}>
           <ActionIcon
+            className={classes.touchTarget}
             variant="default"
             size="lg"
             onClick={handleExport}
@@ -163,6 +168,7 @@ export default function SpaceGraphView({ space }: Props) {
           />
           <Tooltip label={t("Clear focus")}>
             <ActionIcon
+              className={classes.touchTarget}
               variant="subtle"
               color="gray"
               size="lg"
@@ -226,6 +232,7 @@ export default function SpaceGraphView({ space }: Props) {
             <Group gap={4} className={classes.canvasControls}>
               <Tooltip label={t("Zoom in")}>
                 <ActionIcon
+                  className={classes.touchTarget}
                   variant="subtle"
                   color="gray"
                   size="lg"
@@ -237,6 +244,7 @@ export default function SpaceGraphView({ space }: Props) {
               </Tooltip>
               <Tooltip label={t("Zoom out")}>
                 <ActionIcon
+                  className={classes.touchTarget}
                   variant="subtle"
                   color="gray"
                   size="lg"
@@ -248,6 +256,7 @@ export default function SpaceGraphView({ space }: Props) {
               </Tooltip>
               <Tooltip label={t("Fit view")}>
                 <ActionIcon
+                  className={classes.touchTarget}
                   variant="subtle"
                   color="gray"
                   size="lg"
@@ -274,6 +283,7 @@ export default function SpaceGraphView({ space }: Props) {
                 <Group gap="xs">
                   <Tooltip label={t("Focus page")}>
                     <ActionIcon
+                      className={classes.touchTarget}
                       variant="default"
                       size="lg"
                       onClick={() => setCenterPageId(selected.id)}
@@ -284,6 +294,7 @@ export default function SpaceGraphView({ space }: Props) {
                   </Tooltip>
                   <Tooltip label={t("Open page")}>
                     <ActionIcon
+                      className={classes.touchTarget}
                       component={Link}
                       to={buildPageUrl(
                         space.slug,

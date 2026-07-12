@@ -10,6 +10,18 @@ export type GraphNodeStats = {
   outgoing: number;
 };
 
+export function hasCoarsePointer(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(any-pointer: coarse)").matches
+  );
+}
+
+export function getDefaultGraphLimit(coarsePointer = hasCoarsePointer()) {
+  return coarsePointer ? 100 : 500;
+}
+
 export function buildGraphNodeStats(
   nodes: SpaceGraphNode[],
   edges: SpaceGraphEdge[],

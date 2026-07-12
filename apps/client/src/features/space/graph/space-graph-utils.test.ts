@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { buildGraphNodeStats, filterGraph } from "./space-graph-utils";
+import {
+  buildGraphNodeStats,
+  filterGraph,
+  getDefaultGraphLimit,
+} from "./space-graph-utils";
 
 const nodes = ["a", "b", "c"].map((id) => ({ id })) as any;
 const edges = [{ id: "ab", sourcePageId: "a", targetPageId: "b" }] as any;
 
 describe("space graph utilities", () => {
+  it("uses a smaller default graph on coarse-pointer devices", () => {
+    expect(getDefaultGraphLimit(true)).toBe(100);
+    expect(getDefaultGraphLimit(false)).toBe(500);
+  });
+
   it("counts incoming and outgoing links independently", () => {
     const stats = buildGraphNodeStats(nodes, edges);
     expect(stats.get("a")).toEqual({ incoming: 0, outgoing: 1 });

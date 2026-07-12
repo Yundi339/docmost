@@ -4,6 +4,7 @@ import {
   SpaceGraphEdge,
   SpaceGraphNode,
 } from "@/features/space/types/space.types";
+import { hasCoarsePointer } from "./space-graph-utils";
 import classes from "./space-graph.module.css";
 
 export type SpaceGraphCanvasApi = {
@@ -47,9 +48,7 @@ const SpaceGraphCanvas = forwardRef<SpaceGraphCanvasApi, Props>(
     useEffect(() => {
       if (!containerRef.current) return;
 
-      const touchOptimized =
-        typeof window.matchMedia === "function" &&
-        window.matchMedia("(any-pointer: coarse)").matches;
+      const touchOptimized = hasCoarsePointer();
       const graph = cytoscape({
         container: containerRef.current,
         elements: [
