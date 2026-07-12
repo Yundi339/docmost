@@ -1,11 +1,12 @@
-# Forkmost 功能引入评估
+# Forkmost 功能引入评估与实施状态
 
-> 本文是 2026-07-11 的调研快照。持续设计、决策、Todo 和实施复盘以
+> 原始调研完成于 2026-07-11，实施状态更新于 2026-07-12。持续设计、决策、Todo 和实施复盘以
 > [`forkmost-integration.md`](./forkmost-integration.md) 为准。
 
 ## 1. 评估信息
 
 - 评估日期：2026-07-11
+- 状态更新：2026-07-12
 - 当前分支：`feat/native-database-fusion`
 - Forkmost 分支：`personal`
 - Forkmost 评估提交：`a408d8208b2ddfc6104b1656615f721ac9f55f2c`
@@ -21,14 +22,15 @@ Forkmost 使用 AGPL-3.0。直接复制代码必须处理许可证和来源问�
 
 | 优先级 | 功能                      | 结论                                                 |
 | ------ | ------------------------- | ---------------------------------------------------- |
-| P0     | SSO Provider 管理安全补全 | 当前存在服务端越权和密钥返回问题，立即修复           |
-| P1     | 公开分享密码              | 有价值，但必须重新设计访问凭证、限流和统一 Guard     |
+| P0     | SSO Provider 管理安全补全 | 已完成 owner-only、DTO、密钥保护和审计               |
+| P0     | SSO 登录能力与锁死保护    | 已完成模块化能力注册、有效强制判断和 owner 恢复      |
+| P1     | 公开分享密码              | 已按统一 Guard、短期凭证、限流和审计重新实现         |
 | P1     | 成员目录隐私策略          | 应建立统一策略模块，覆盖网页、提及、权限选择器和 MCP |
 | P1     | 代码块标题、换行和下载    | 低风险、高实用性，适合编辑器属性扩展                 |
 | P1     | 用户修改邮箱              | 后端已有基础逻辑，应补成验证式流程                   |
 | P2     | MCP 移入回收站和删除评论  | 可以增加，但应先模块化 MCP 工具并强化审计            |
 | P2     | 空间关系图                | 有价值，需要重新设计权限查询和大空间性能策略         |
-| P2     | H4-H6、图片说明           | 可以增加，需保证编辑器和导入导出兼容                 |
+| P2     | H4-H6、图片说明           | 已实现，并覆盖 HTML、JSON、Markdown 和 Yjs 兼容测试  |
 
 ## 3. P0：SSO Provider 管理安全问题
 
@@ -83,6 +85,42 @@ Forkmost 使用 AGPL-3.0。直接复制代码必须处理许可证和来源问�
 
 旧明文值可以继续读取，并在 owner 访问 SSO 设置时进行惰性升级。未来真正实现 OIDC/LDAP 登录模块时，必须通过 `SsoSecretService.decryptStored()` 读取，不能直接使用数据库字段。
 
+### 3.5 SSO 登录能力与工作区锁死
+
+进一步核查发现，当前仓库只有 Provider 管理能力，没有以下实际认证处理器：
+
+- SAML login/callback
+- OIDC login/callback
+- Google login/callback
+- LDAP 登录认证
+
+前端原先仍会为启用的 Provider 生成登录 URL，工作区也只依据数据库中的
+`isEnabled=true` 判断能否开启 `enforceSso`。这不是 owner 是否有权自主配置的问题，
+而是服务端声明了并不存在的登录能力。错误开启后，本地密码、Passkey 和邀请流程会被
+原始 `enforceSso` 阻断，而 SSO 请求落到不存在的路由，可能永久锁死工作区。
+
+已实施修复：
+
+- 新增全局 `SsoLoginCapabilityService`。具体登录模块只有在 Controller 实际装载时才
+  注册 Provider 类型和处理器名称，管理模块不维护脱离路由的静态可用名单。
+- 当前没有任何登录模块注册能力，因此 SAML、OIDC、Google 和 LDAP 都允许创建和保存
+  配置，但不能从关闭切换为启用。
+- Provider 管理响应增加 `loginAvailable`；公开工作区只返回已启用且处理器可用的
+  Provider，登录页不会再展示无效入口。
+- 新增 `SsoEnforcementService`，统一计算“配置强制且存在可用 Provider”。密码登录、
+  重置密码、邀请、邮箱修改、Passkey、统一登录流和公开工作区不再直接信任原始布尔值。
+- 历史 `enforceSso=true` 但没有登录处理器的配置按未强制处理，恢复本地登录；owner
+  登录后仍能关闭旧配置。
+- 开启强制 SSO、停用和删除 Provider 复用同一工作区行锁，防止并发移除最后一个可用
+  Provider。
+- 开启前确认存在未停用且保留本地密码的 owner。有效强制 SSO 下提供显式 owner 恢复
+  登录，必须验证密码并继续 MFA；成员提交相同字段仍会被拒绝。
+- owner 恢复状态进入签名 MFA token，只有服务端确认实际使用恢复路径后，登录审计才
+  记录 `ownerRecovery=true`。
+
+该实现不等于已经支持 SSO 协议。未来 OIDC/SAML/LDAP 模块必须注册能力后才会自动进入
+现有启用、公开展示和强制登录判断，无需在多个 Controller 重写分支。
+
 ## 4. 公开分享禁用语义
 
 当前“禁用公开分享”会删除现有分享记录。经产品语义确认，这是有意的凭据撤销行为：
@@ -94,11 +132,11 @@ Forkmost 使用 AGPL-3.0。直接复制代码必须处理许可证和来源问�
 
 因此该行为不属于 P0，也不建议改为“重新启用后恢复旧链接”。现有删除逻辑保持不变。
 
-可以补充的非阻塞改进：
+已完成和可继续补充的改进：
 
 - 前端明确提示“所有现有分享链接将永久失效”。
-- 审计区分“用户删除单个分享”和“工作区/空间策略批量撤销分享”。
-- 审计记录批量撤销数量，但不记录分享 token。
+- 工作区/空间策略修改沿用设置审计，并在事务中批量撤销分享。
+- 后续可以增加批量撤销数量，但不能记录分享 token。
 
 ## 5. 公开分享密码
 
@@ -106,9 +144,9 @@ Forkmost 使用 AGPL-3.0。直接复制代码必须处理许可证和来源问�
 
 允许用户为公开链接设置第二层访问凭据，适合向客户、供应商或临时协作者分享文档。
 
-### 5.2 模块位置
+### 5.2 已实施模块
 
-在 `apps/server/src/core/share` 增加：
+已在 `apps/server/src/core/share` 增加：
 
 - `share-access.service.ts`
 - `share-access.guard.ts`
@@ -117,17 +155,30 @@ Forkmost 使用 AGPL-3.0。直接复制代码必须处理许可证和来源问�
 
 分享访问控制是核心读取边界，不能只在前端处理。
 
-### 5.3 安全和数据库设计
+### 5.3 安全和数据库实现
 
 - `shares` 增加 `password_hash`、`password_version`、`password_updated_at`。
 - `POST /api/shares/unlock` 校验密码并签发短期 HttpOnly Cookie。
 - 凭证绑定 `shareId` 和 `passwordVersion`，修改密码后旧凭证自动失效。
 - 密码不能进入 URL、React Query key、localStorage 或 sessionStorage。
 - API 只返回 `passwordProtected: boolean`，不能返回密码哈希。
-- 页面、树、附件、搜索、导出和 SEO 统一经过 `ShareAccessGuard`。
-- 单机 AIO 使用本地限流，多实例使用 Redis 共享限流。
+- 页面信息、子页面、树、附件、分享搜索、嵌入和 SEO 使用统一分享访问判断。导出仍是
+  登录态能力，继续校验 JWT/API Key 和页面权限，不作为公开分享接口绕过 Guard。
+- 解锁使用独立命名的 Redis 限流器。AIO 复用内置 Redis，外置部署复用配置的 Redis，
+  多实例共享计数。
 
-设置和移除密码要求页面编辑权限和 REST 写 scope。审计设置、移除和版本变化；失败解锁只做聚合或采样，避免审计写放大。
+设置、修改和移除密码要求页面编辑权限和 REST 写 scope。审计记录设置、修改、移除和
+采样的失败解锁；密码明文、hash 和 capability 不进入响应或审计。修改密码、取消密码、
+修改 `includeSubPages` 都会轮换版本，使旧 Cookie 和旧附件 token 失效。
+
+实现过程中还补齐了以下绕过：
+
+- 在密码挑战前检查工作区/空间分享策略、页面删除状态、受限祖先和 workspace 绑定，
+  防止通过错误码探测受保护资源。
+- 拒绝同时提交 `shareId` 和 `pageId`，避免双 locator 目标错配。
+- 旧附件 token 必须绑定 share 和 password version；未绑定的遗留公开 token 直接拒绝。
+- 密码只存在于表单状态和 HTTPS 请求体，不进入 URL、React Query mutation cache 或
+  浏览器存储。
 
 Forkmost 将密码放入 `sessionStorage` 并在内容请求中反复传递，还把 `passwordHash` 暴露给前端类型，因此不能直接复制。
 
@@ -224,12 +275,16 @@ Forkmost 的实现一次返回整个空间，未过滤删除页面和页面级�
 
 ## 11. 编辑器小功能
 
-H4-H6 和图片说明可作为 P2：
+H4-H6、图片说明和链接快捷打开已完成：
 
-- H4-H6 同步调整 Heading extension、工具栏、目录、样式和导入导出。
-- 图片说明包含 caption 和 alt，并保证移动端及导出可访问性。
-- 优先增加属性，不随意增加新节点类型，降低旧客户端内容损失风险。
-- 依赖现有前端版本检测，旧标签页刷新后再编辑包含新 schema 的页面。
+- H4-H6 已接入 slash menu、固定工具栏、bubble menu 和目录，并覆盖 HTML、JSON、
+  Markdown、Yjs 同步和协作撤销。
+- 图片 caption 使用既有 image 节点的独立属性，不新增节点类型。HTML 使用
+  `figure/figcaption`，JSON 和 Yjs 无损；旧 `img` 保持兼容。
+- 标准 Markdown 继续只输出图片和 alt，明确丢弃 caption，不引入 Docmost 私有语法。
+- 编辑状态下 Ctrl/Meta 点击安全 URL 会以 `noopener,noreferrer` 打开新标签；普通点击
+  仍显示链接预览，只读模式保持原行为，并拒绝 `javascript:`、`data:` 等危险协议。
+- 依赖现有前端版本检测，旧标签页收到服务器更新提示后由用户刷新再继续编辑。
 
 浮动图片暂不建议。CSS float 在移动端、表格、列布局和导出中的复杂度高，收益低于明确的左、中、右对齐属性。
 
@@ -267,12 +322,31 @@ H4-H6 和图片说明可作为 P2：
 
 ## 14. 推荐实施顺序
 
-1. SSO Provider owner-only、DTO、密钥加密、响应脱敏和审计。
-2. 公开分享密码和统一 `ShareAccessGuard`。
-3. `DirectoryVisibilityPolicy`。
-4. 代码块增强和验证式邮箱修改。
-5. 无行为变化地拆分 MCP 工具，再增加可逆删除工具。
-6. 权限过滤、限量加载的空间关系图。
-7. H4-H6 和图片说明。
+1. `[已完成]` SSO Provider owner-only、DTO、密钥保护、能力注册、锁死恢复和审计。
+2. `[已完成]` 公开分享密码和统一分享访问判断。
+3. `[已完成]` H4-H6、图片说明和 Ctrl/Meta 点击链接。
+4. `[待实施]` `DirectoryVisibilityPolicy`。
+5. `[待实施]` 代码块增强和验证式邮箱修改。
+6. `[待实施]` 无行为变化地拆分 MCP 工具，再增加可逆删除工具。
+7. `[待实施]` 权限过滤、限量加载的空间关系图。
 
 每个阶段都应包含角色矩阵、服务端越权、API key scope、MCP scope、审计内容、数据库迁移/回滚和前端可见性测试。前端菜单可见性只能改善体验，不能代替服务端权限校验。
+
+## 15. 当前验证与剩余边界
+
+截至 2026-07-12：
+
+- SSO Provider 管理安全由 `179f9c0a` 完成；SSO 能力校验和锁死恢复由 `5e5b4bf6`
+  重新实现。中间曾错误撤回能力保护，原因是把“owner 自主决定是否启用”与“服务器
+  是否存在登录处理器”混为一谈，当前文档和代码均已纠正。
+- 分享密码、H4-H6、图片 caption 和链接快捷打开由 `dba1f23e` 完成。
+- 服务端全量测试为 68 个 suite、358 项；客户端为 11 个文件、96 项。editor-ext、
+  server 和 client production build 通过，新增 SSO 文案覆盖全部 12 个现有 locale。
+- SSO 能力重构不增加数据库字段，复用既有 `idx_auth_providers_workspace_id`；分享密码
+  使用独立 migration 增加 hash、version 和 updatedAt。
+- 当前仍然没有可工作的 OIDC、SAML、Google 或 LDAP 登录处理器，所以这些 Provider
+  在 UI 中显示“登录不可用”，也不能启用。这是符合代码事实的保护，不是协议实现。
+- 下一项 SSO 工作应从标准 OIDC authorization code + PKCE 开始，并完成 state、nonce、
+  redirect、账号绑定、verified email、SSRF/超时和失败审计后，再由 OIDC 模块注册能力。
+- 成员目录隐私、代码块增强、验证式邮箱修改、MCP 可逆删除和空间关系图仍未实施，不能
+  因 Forkmost 存在对应代码就视为当前项目已有能力。
