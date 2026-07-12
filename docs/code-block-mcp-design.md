@@ -1,302 +1,274 @@
-# Code Block and MCP Maintenance Design
+# 代码块增强与 MCP 维护工具设计
 
-> Status: implemented and verified in `efba9a38` on
-> `feat/native-database-fusion`.
-> The stable Todo and implementation reviews remain in
-> [`forkmost-integration.md`](./forkmost-integration.md).
+> 状态：已在 `feat/native-database-fusion` 分支的 `efba9a38` 提交中实现并验证。
+> 稳定的待办清单和实现复盘保留在
+> [`forkmost-integration.md`](./forkmost-integration.md) 中。
 
-## 1. Goals
+## 1. 目标
 
-This delivery has three ordered goals:
+本次交付按以下顺序完成三个目标：
 
-1. Add code block title, visual wrapping, and source download without changing
-   existing code or Mermaid behavior.
-2. Split MCP tool declaration and execution out of the session service without
-   changing the external contract of the existing 20 tools.
-3. Add reversible page maintenance through `trash_page` and `restore_page`.
+1. 在不改变现有代码块和 Mermaid 行为的前提下，增加代码块标题、自动换行显示和源码下载功能。
+2. 从会话服务中拆分 MCP 工具声明与执行逻辑，同时保持原有 20 个工具的外部契约不变。
+3. 通过 `trash_page` 和 `restore_page` 增加可逆的页面维护能力。
 
-Non-goals:
+不在本次范围内：
 
-- No private Markdown syntax for code block display preferences.
-- No permanent page deletion through MCP.
-- No comment deletion in this delivery. The current comment operation is a hard
-  delete and needs a separate retention and recovery design.
-- No new frontend, backend, validation, state, or icon libraries.
+- 不为代码块显示偏好引入私有 Markdown 语法。
+- 不通过 MCP 永久删除页面。
+- 本次不支持删除评论。当前评论删除操作是硬删除，需要单独设计保留与恢复机制。
+- 不新增前端、后端、校验、状态管理或图标库。
 
-## 2. Repository Privacy
+## 2. 仓库隐私要求
 
-Repository content must not contain personal identity data or private deployment
-details. Tests and documentation use `example.test`, RFC 5737 addresses, and
-generic paths only.
+仓库内容不得包含个人身份信息或私有部署信息。测试和文档只能使用 `example.test`、
+RFC 5737 地址和通用路径。
 
-Never commit:
+禁止提交：
 
-- private domains, IP addresses, ports, SSH targets, or server directory layouts;
-- certificate/key paths or contents;
-- API keys, OAuth tokens, registry credentials, or environment values;
-- deployment logs containing the above data.
+- 私有域名、IP 地址、端口、SSH 目标或服务器目录结构；
+- 证书、密钥的路径或内容；
+- API 密钥、OAuth 令牌、镜像仓库凭据或环境变量值；
+- 包含上述数据的部署日志。
 
-Before each commit, scan tracked changes and the resulting tree for private
-deployment markers and common secret formats. Deployment-specific instructions
-belong in local ignored skills or server-side configuration, not project docs.
+每次提交前，应扫描已跟踪的变更和最终代码树，检查私有部署标记及常见密钥格式。
+部署专用说明应保存在本地忽略的 skill 或服务器端配置中，不应写入项目文档。
 
-## 3. Code Block Design
+## 3. 代码块设计
 
-### 3.1 Data model
+### 3.1 数据模型
 
-Extend the existing `codeBlock` node with:
+扩展现有 `codeBlock` 节点，增加以下属性：
 
-| Attribute | Type             | Default | HTML representation |
-| --------- | ---------------- | ------- | ------------------- |
-| `title`   | `string \| null` | `null`  | `data-title`        |
-| `wrap`    | `boolean`        | `false` | `data-wrap="true"`  |
+| 属性    | 类型             | 默认值  | HTML 表示方式      |
+| ------- | ---------------- | ------- | ------------------ |
+| `title` | `string \| null` | `null`  | `data-title`       |
+| `wrap`  | `boolean`        | `false` | `data-wrap="true"` |
 
-Title normalization removes control characters and line breaks, trims the value,
-and limits it to 120 characters. Existing JSON and HTML without these attributes
-continue to parse with the defaults.
+标题规范化会移除控制字符和换行符、清理首尾空白，并将长度限制为 120 个字符。
+不包含这些属性的历史 JSON 和 HTML 仍会按默认值正常解析。
 
-### 3.2 UI behavior
+### 3.2 界面行为
 
-The existing React NodeView remains the only code block UI:
+现有 React NodeView 仍是唯一的代码块界面：
 
-- editable mode: title input, language selector, wrap toggle, source toggle for
-  Mermaid, copy, and download;
-- read-only/shared mode: optional title plus copy and download controls;
-- title is single-line and ellipsized so long values cannot resize the block;
-- wrap changes presentation only and never modifies source text;
-- Mermaid preview/source toggling and double-click behavior remain unchanged;
-- mobile controls wrap within a stable toolbar without covering code.
+- 编辑模式：提供标题输入、语言选择、自动换行开关；Mermaid 还提供源码切换；同时提供复制和下载操作；
+- 只读或分享模式：显示可选标题，并提供复制和下载操作；
+- 标题保持单行并在过长时省略，避免长标题改变代码块尺寸；
+- 自动换行只改变显示方式，绝不修改源码文本；
+- Mermaid 预览与源码切换、双击行为保持不变；
+- 移动端控件在尺寸稳定的工具栏内换行，不遮挡代码内容。
 
-Buttons use existing Mantine and Tabler components with tooltips. No global event
-listener is added beyond the existing Mermaid outside-click listener.
+按钮继续使用项目现有的 Mantine 和 Tabler 组件，并提供工具提示。除现有 Mermaid
+外部点击监听器外，不增加全局事件监听器。
 
-### 3.3 Download safety
+### 3.3 下载安全
 
-Download is entirely local through `Blob` and an object URL. It does not call an
-API or upload content.
+下载完全在浏览器本地通过 `Blob` 和对象 URL 完成，不调用 API，也不上传内容。
 
-The filename helper:
+文件名辅助方法会：
 
-- strips path separators, control characters, dot traversal, and reserved names;
-- limits the complete filename to 120 characters;
-- preserves a safe explicit extension;
-- otherwise maps known code languages to an extension;
-- falls back to `code-block.txt`.
+- 移除路径分隔符、控制字符、点路径穿越内容和保留名称；
+- 将完整文件名限制为 120 个字符；
+- 保留安全的显式扩展名；
+- 没有显式扩展名时，将已知代码语言映射为对应扩展名；
+- 无法识别时使用 `code-block.txt`。
 
-Object URLs and temporary anchors are always released. The source is downloaded
-as UTF-8 text without executing or rendering it.
+对象 URL 和临时锚点使用后始终释放。源码以 UTF-8 文本下载，不会执行或渲染。
 
-### 3.4 Compatibility
+### 3.4 兼容性
 
-- JSON, HTML, Yjs, and collaborative undo preserve `title` and `wrap`.
-- Standard Markdown exports only the language and source fence. `title` and
-  `wrap` intentionally degrade because CommonMark has no portable equivalent.
-- Markdown imports and historical documents use `title=null` and `wrap=false`.
-- Page history requires no migration because attributes live in ProseMirror JSON.
+- JSON、HTML、Yjs 和协同撤销会保留 `title` 与 `wrap`。
+- 标准 Markdown 只导出语言和源码围栏。由于 CommonMark 没有可移植的等价语法，
+  `title` 和 `wrap` 会按设计降级丢失。
+- Markdown 导入和历史文档使用 `title=null`、`wrap=false`。
+- 属性存储在 ProseMirror JSON 中，页面历史不需要迁移。
 
-## 4. MCP Refactor Design
+## 4. MCP 重构设计
 
-### 4.1 Module boundaries
+### 4.1 模块边界
 
-`McpService` retains only protocol and session lifecycle. Tool behavior moves to:
+`McpService` 只保留协议与会话生命周期。工具行为拆分到：
 
-- `McpToolRegistryService`: aggregates providers and registers descriptors;
-- `McpToolExecutorService`: the only mode/scope/DTO/audit/error wrapper;
-- `McpToolAccessService`: shared page lookup, pagination, CASL, and page-access
-  helpers;
-- `tools/page.tools.ts`;
-- `tools/comment.tools.ts`;
-- `tools/space.tools.ts`;
-- `tools/search.tools.ts`;
-- `tools/member.tools.ts`.
+- `McpToolRegistryService`：聚合工具提供器并注册工具描述符；
+- `McpToolExecutorService`：唯一的模式、作用域、DTO、审计和错误处理入口；
+- `McpToolAccessService`：复用页面查询、分页、CASL 和页面访问辅助逻辑；
+- `tools/page.tools.ts`；
+- `tools/comment.tools.ts`；
+- `tools/space.tools.ts`；
+- `tools/search.tools.ts`；
+- `tools/member.tools.ts`。
 
-Each provider returns strongly typed `McpToolDescriptor` objects. A descriptor
-declares name, description, schema, access class, DTO mapping, handler, and MCP
-annotations. Registration is rejected if a tool omits DTO/no-DTO policy or if a
-name is duplicated.
+每个提供器返回强类型的 `McpToolDescriptor` 对象。描述符声明工具名称、说明、
+schema、访问类型、DTO 映射、处理器和 MCP annotations。如果工具没有声明 DTO/
+无 DTO 策略，或工具名称重复，注册过程会直接拒绝。
 
-### 4.2 Existing contract baseline
+### 4.2 现有契约基线
 
-The first refactor preserves these tools exactly:
+第一次重构必须原样保留以下工具：
 
-| Provider | Tools                                                                                                   | Access and permission baseline                          |
-| -------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Search   | `search_pages`, `search_attachments`                                                                    | `mcp:read`; existing search/page filtering              |
-| Page     | `get_page`, `list_pages`, `list_child_pages`                                                            | `mcp:read`; page/space view checks                      |
-| Page     | `create_page`, `update_page`, `duplicate_page`, `copy_page_to_space`, `move_page`, `move_page_to_space` | `mcp:write`; existing edit/create checks                |
-| Space    | `get_space`, `list_spaces`                                                                              | `mcp:read`; existing settings/membership checks         |
-| Space    | `create_space`, `update_space`                                                                          | `mcp:write`; existing workspace/space management checks |
-| Comment  | `get_comments`                                                                                          | `mcp:read`; page view check                             |
-| Comment  | `create_comment`, `update_comment`                                                                      | `mcp:write`; comment permission and ownership checks    |
-| Member   | `list_workspace_members`, `get_current_user`                                                            | `mcp:read`; member listing retains `Manage Member`      |
+| 提供器 | 工具                                                                                                    | 访问与权限基线                                |
+| ------ | ------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 搜索   | `search_pages`、`search_attachments`                                                                    | `mcp:read`；保留现有搜索与页面过滤            |
+| 页面   | `get_page`、`list_pages`、`list_child_pages`                                                            | `mcp:read`；检查页面与空间查看权限            |
+| 页面   | `create_page`、`update_page`、`duplicate_page`、`copy_page_to_space`、`move_page`、`move_page_to_space` | `mcp:write`；保留现有编辑与创建权限检查       |
+| 空间   | `get_space`、`list_spaces`                                                                              | `mcp:read`；保留现有设置与成员关系检查        |
+| 空间   | `create_space`、`update_space`                                                                          | `mcp:write`；保留现有工作区与空间管理权限检查 |
+| 评论   | `get_comments`                                                                                          | `mcp:read`；检查页面查看权限                  |
+| 评论   | `create_comment`、`update_comment`                                                                      | `mcp:write`；检查评论权限与所有权             |
+| 成员   | `list_workspace_members`、`get_current_user`                                                            | `mcp:read`；成员列表继续要求 `Manage Member`  |
 
-Contract tests snapshot tool names, descriptions, input schemas, annotations,
-DTO policy, and access class. Existing handler tests continue to verify results,
-workspace binding, page restrictions, and audit redaction.
+契约测试对工具名称、说明、输入 schema、annotations、DTO 策略和访问类型进行快照。
+现有处理器测试继续验证返回结果、工作区绑定、页面限制和审计脱敏。
 
-### 4.3 Executor invariants
+### 4.3 执行器不变量
 
-Every call passes one executor in this order:
+每次调用都必须按以下顺序经过同一个执行器：
 
-1. workspace MCP mode;
-2. API Key/OAuth scopes;
-3. DTO transformation and `class-validator` validation;
-4. provider handler and its CASL/page permission checks;
-5. success/failure audit with sanitized target/result metadata.
+1. 检查工作区 MCP 模式；
+2. 检查 API Key/OAuth 作用域；
+3. 执行 DTO 转换及 `class-validator` 校验；
+4. 调用提供器处理器及其 CASL/页面权限检查；
+5. 使用脱敏后的目标与结果元数据记录成功或失败审计。
 
-Tool providers cannot bypass the executor. Write handlers call core services for
-mutations; they do not write tables directly. Errors may include a bounded public
-message but never document bodies, comments, credentials, or tokens.
+工具提供器不能绕过执行器。写操作处理器必须调用核心服务完成变更，不能直接写表。
+错误可以包含长度受限的公开消息，但绝不能包含文档正文、评论、凭据或令牌。
 
-## 5. Reversible Page Tools
+## 5. 可逆页面工具
 
-### 5.1 Scope model
+### 5.1 作用域模型
 
-Add `mcp:destructive` to API Key and OAuth scope registries.
+在 API Key 和 OAuth 作用域注册表中增加 `mcp:destructive`。
 
-- It implies `mcp:write` and `mcp:read` during normalization.
-- Existing keys, OAuth clients, grants, authorization codes, and refresh tokens do
-  not gain it automatically.
-- Default and “full access” API Key presets remain non-destructive.
-- Owners explicitly enable destructive access for a key or OAuth client.
-- Read-only workspace MCP mode still rejects it.
+- 规范化时，该作用域隐含 `mcp:write` 和 `mcp:read`。
+- 现有密钥、OAuth 客户端、授权、授权码和刷新令牌不会自动获得此作用域。
+- API Key 的默认预设和“完全访问”预设仍不包含破坏性操作。
+- owner 必须为 API Key 或 OAuth 客户端显式开启破坏性访问。
+- 工作区 MCP 为只读模式时仍会拒绝此作用域。
 
 ### 5.2 `trash_page`
 
-Input:
+输入：
 
 ```json
 { "pageId": "uuid", "confirm": true }
 ```
 
-Requirements:
+要求：
 
-- `mcp:destructive` scope and read-write MCP mode;
-- strict DTO and literal `confirm=true`;
-- page belongs to the authenticated workspace and is not already deleted;
-- existing `PageAccessService.validateCanEdit` succeeds;
-- call the same core page lifecycle command used by the web controller;
-- retain existing descendant trashing, share revocation, search/AI events, tree
-  WebSocket event, and `page.trashed` audit.
+- 具备 `mcp:destructive` 作用域，且 MCP 为读写模式；
+- 通过严格 DTO 校验，并且 `confirm` 必须为字面值 `true`；
+- 页面属于当前认证工作区，且尚未删除；
+- 通过现有 `PageAccessService.validateCanEdit` 检查；
+- 调用与 Web 控制器相同的核心页面生命周期命令；
+- 保留现有的后代页面移入回收站、分享撤销、搜索/AI 事件、目录树 WebSocket
+  事件和 `page.trashed` 审计。
 
-MCP annotation uses `destructiveHint=true`. The result contains only page ID,
-title, space ID, and `trashed=true`.
+MCP annotation 使用 `destructiveHint=true`。结果只包含页面 ID、标题、空间 ID
+和 `trashed=true`。
 
 ### 5.3 `restore_page`
 
-Input:
+输入：
 
 ```json
 { "pageId": "uuid" }
 ```
 
-Requirements:
+要求：
 
-- `mcp:write` scope and read-write MCP mode;
-- page belongs to the authenticated workspace and is currently deleted;
-- existing space-edit and page-edit checks succeed;
-- call the same core lifecycle command as the web controller;
-- preserve descendant restoration, deleted-parent detachment, search/AI events,
-  tree WebSocket event, and `page.restored` audit.
+- 具备 `mcp:write` 作用域，且 MCP 为读写模式；
+- 页面属于当前认证工作区，且当前处于已删除状态；
+- 通过现有空间编辑和页面编辑权限检查；
+- 调用与 Web 控制器相同的核心生命周期命令；
+- 保留后代页面恢复、与已删除父页面解除关联、搜索/AI 事件、目录树 WebSocket
+  事件和 `page.restored` 审计。
 
-The result contains only page ID, title, space ID, and `restored=true`.
+结果只包含页面 ID、标题、空间 ID 和 `restored=true`。
 
-### 5.4 Audit and activity display
+### 5.4 审计与活动展示
 
-Both business events and `mcp.tool_called` are retained. MCP audit metadata includes
-tool name, credential identity, page/space IDs, title/path snapshots when already
-available, success, and bounded errors. It excludes page content and credentials.
+业务事件和 `mcp.tool_called` 都会保留。MCP 审计元数据包含工具名称、凭据标识、
+页面/空间 ID、已有的标题与路径快照、成功状态和长度受限的错误信息，不包含页面正文或凭据。
 
-## 6. Frontend Changes
+## 6. 前端变化
 
-- Code blocks gain title, wrap, and download controls in editable and read-only
-  views.
-- API Key custom scopes include `mcp:destructive`; a dedicated maintenance preset
-  is explicit and not the default.
-- Owner OAuth management adds an independent destructive-tools switch. Enabling
-  read-only mode clears destructive access.
-- OAuth consent and authorization tables display the destructive scope distinctly.
-- All new user-facing strings are added to the existing 12 locale files.
+- 编辑和只读视图中的代码块都增加标题、自动换行和下载控件。
+- API Key 自定义作用域增加 `mcp:destructive`；专用的维护预设需要显式选择，且不是默认值。
+- owner OAuth 管理增加独立的破坏性工具开关。切换为只读模式会清除破坏性访问权限。
+- OAuth 同意页面和授权列表会单独展示破坏性作用域。
+- 所有新增的用户可见文本均加入现有 12 个语言文件。
 
-No new page, settings section, state library, or design system is introduced.
+不新增页面、设置分区、状态管理库或设计系统。
 
-## 7. Verification and Rollback
+## 7. 验证与回滚
 
-Verification:
+验证范围：
 
-- code block JSON/HTML/Markdown/Yjs/collaboration compatibility;
-- filename/path traversal and Blob URL cleanup tests;
-- exact 20-tool pre/post-refactor contract comparison;
-- API Key/OAuth legacy scope normalization and grant non-escalation;
-- trash/restore owner/member/restricted-page/cross-workspace/read-only/scope matrix;
-- WebSocket/event and business/MCP audit assertions;
-- full server/client/editor-ext tests, lint, and production build;
-- tracked-tree privacy scan before commit.
+- 代码块 JSON/HTML/Markdown/Yjs/协同编辑兼容性；
+- 文件名路径穿越与 Blob URL 清理测试；
+- 重构前后 20 个工具的精确契约对比；
+- API Key/OAuth 历史作用域规范化和授权不提权；
+- 移入回收站/恢复操作的 owner、成员、受限页面、跨工作区、只读和作用域矩阵；
+- WebSocket/事件及业务/MCP 审计断言；
+- 完整的服务端、客户端、editor-ext 测试、lint 和生产构建；
+- 提交前扫描已跟踪代码树中的隐私信息。
 
-Rollback requires no content or database migration. Older clients ignore unknown
-code block attributes. Removing new MCP tools leaves trashed pages recoverable from
-the existing web trash UI. Existing credentials remain valid with their old scopes.
+回滚不需要内容或数据库迁移。旧客户端会忽略未知代码块属性。移除新增 MCP 工具后，
+已移入回收站的页面仍可通过现有 Web 回收站界面恢复。现有凭据继续使用原有作用域。
 
-## 8. Implementation Result
+## 8. 实现结果
 
-- Code blocks now persist `title` and `wrap`, expose title/wrap/copy/download
-  controls, and preserve the existing Mermaid source/preview flow.
-- The original 20 MCP tools are locked by a registration contract snapshot and
-  implemented by page, comment, space, search, and member providers behind one
-  executor.
-- `trash_page` requires `mcp:destructive` and literal `confirm=true`;
-  `restore_page` requires `mcp:write`.
-- Web and MCP page lifecycle commands share `PageLifecycleService`, including
-  workspace binding, page and space permissions, business audit, recursive page
-  events, search/AI updates, and sidebar WebSocket updates.
-- API Key defaults, OAuth defaults, existing credentials, and existing grants do
-  not receive destructive access implicitly.
-- Comment deletion remains intentionally deferred because the current operation
-  is a hard delete and cannot satisfy reversible-deletion semantics.
+- 代码块现在会持久化 `title` 和 `wrap`，并提供标题、自动换行、复制和下载控件，
+  同时保留原有 Mermaid 源码与预览流程。
+- 原有 20 个 MCP 工具由注册契约快照锁定，并通过同一个执行器后的页面、评论、空间、
+  搜索和成员提供器实现。
+- `trash_page` 要求 `mcp:destructive` 和字面值 `confirm=true`；
+  `restore_page` 要求 `mcp:write`。
+- Web 与 MCP 页面生命周期命令共用 `PageLifecycleService`，包括工作区绑定、页面与空间权限、
+  业务审计、递归页面事件、搜索/AI 更新和侧边栏 WebSocket 更新。
+- API Key 默认值、OAuth 默认值、现有凭据和现有授权都不会隐式获得破坏性访问。
+- 评论删除仍按设计延期，因为当前操作是硬删除，不能满足可逆删除语义。
 
-## 9. Implementation Map
+## 9. 实现位置
 
-| Concern                       | Implementation                                                                 |
-| ----------------------------- | ------------------------------------------------------------------------------ |
-| Code block schema             | `packages/editor-ext/src/lib/custom-code-block/custom-code-block.ts`           |
-| Code block UI                 | `apps/client/src/features/editor/components/code-block/code-block-view.tsx`    |
-| Safe source download          | `apps/client/src/features/editor/components/code-block/code-block-download.ts` |
-| MCP session transport         | `apps/server/src/ee/mcp/mcp.service.ts`                                        |
-| Tool registration             | `apps/server/src/ee/mcp/mcp-tool-registry.service.ts`                          |
-| Scope, DTO, audit, and errors | `apps/server/src/ee/mcp/mcp-tool-executor.service.ts`                          |
-| Shared MCP page access        | `apps/server/src/ee/mcp/mcp-tool-access.service.ts`                            |
-| Tool providers                | `apps/server/src/ee/mcp/tools/*.tools.ts`                                      |
-| Shared trash/restore workflow | `apps/server/src/core/page/services/page-lifecycle.service.ts`                 |
-| API Key scopes                | `apps/server/src/core/api-key/api-key-scopes.ts`                               |
-| OAuth scopes                  | `apps/server/src/ee/oauth/oauth.constants.ts`                                  |
+| 关注点                  | 实现位置                                                                       |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| 代码块 schema           | `packages/editor-ext/src/lib/custom-code-block/custom-code-block.ts`           |
+| 代码块界面              | `apps/client/src/features/editor/components/code-block/code-block-view.tsx`    |
+| 安全的源码下载          | `apps/client/src/features/editor/components/code-block/code-block-download.ts` |
+| MCP 会话传输            | `apps/server/src/ee/mcp/mcp.service.ts`                                        |
+| 工具注册                | `apps/server/src/ee/mcp/mcp-tool-registry.service.ts`                          |
+| 作用域、DTO、审计与错误 | `apps/server/src/ee/mcp/mcp-tool-executor.service.ts`                          |
+| MCP 页面访问复用逻辑    | `apps/server/src/ee/mcp/mcp-tool-access.service.ts`                            |
+| 工具提供器              | `apps/server/src/ee/mcp/tools/*.tools.ts`                                      |
+| 回收站/恢复共用流程     | `apps/server/src/core/page/services/page-lifecycle.service.ts`                 |
+| API Key 作用域          | `apps/server/src/core/api-key/api-key-scopes.ts`                               |
+| OAuth 作用域            | `apps/server/src/ee/oauth/oauth.constants.ts`                                  |
 
-There is no database migration. Code block preferences are ProseMirror node
-attributes, and the new MCP scope is stored in existing scope arrays.
+不需要数据库迁移。代码块偏好属于 ProseMirror 节点属性，新增 MCP 作用域存储在现有作用域数组中。
 
-## 10. Operator and User Flow
+## 10. 管理员与用户操作流程
 
-### 10.1 Code blocks
+### 10.1 代码块
 
-In edit mode, the code block toolbar contains the optional title field,
-language selector, wrap toggle, copy action, and download action. Mermaid blocks
-retain their source/preview toggle. Read-only pages show the title when present
-and reveal copy/download actions without reserving an empty title row.
+编辑模式下，代码块工具栏包含可选标题字段、语言选择、自动换行开关、复制和下载操作。
+Mermaid 代码块保留源码/预览切换。只读页面在标题存在时显示标题，并在不预留空标题行的
+情况下提供复制和下载操作。
 
-`wrap` only changes CSS presentation. Copy and download always use the original
-source text. Standard Markdown export intentionally omits `title` and `wrap`.
+`wrap` 只改变 CSS 显示。复制和下载始终使用原始源码文本。标准 Markdown 导出按设计
+不包含 `title` 和 `wrap`。
 
-### 10.2 Enabling reversible MCP maintenance
+### 10.2 开启可逆 MCP 维护能力
 
-- API Key: choose the explicit `MCP maintenance` preset or add
-  `mcp:destructive` as a custom scope.
-- OAuth: an owner keeps access in read-write mode and enables
-  `Destructive MCP tools` for the ChatGPT client.
-- Existing OAuth authorizations are not expanded. A client must request the new
-  scope and the user must complete authorization again.
-- Scope or workspace-mode changes invalidate existing MCP sessions; reconnect
-  before invoking tools with the new permission set.
+- API Key：选择显式的 `MCP maintenance` 预设，或在自定义作用域中增加
+  `mcp:destructive`。
+- OAuth：owner 保持读写访问模式，并为 ChatGPT 客户端开启
+  `Destructive MCP tools`。
+- 现有 OAuth 授权不会自动扩权。客户端必须请求新增作用域，用户必须重新完成授权。
+- 作用域或工作区模式变更会使现有 MCP 会话失效；使用新权限调用工具前需要重新连接。
 
-Example tool inputs:
+工具输入示例：
 
 ```json
 { "pageId": "00000000-0000-4000-8000-000000000000", "confirm": true }
@@ -306,35 +278,31 @@ Example tool inputs:
 { "pageId": "00000000-0000-4000-8000-000000000000" }
 ```
 
-The first input is for `trash_page`; the second is for `restore_page`.
-`trash_page` rejects missing or false confirmation. Neither tool permanently
-deletes a page.
+第一个输入用于 `trash_page`，第二个用于 `restore_page`。`trash_page` 会拒绝缺失确认
+或确认值为 `false` 的请求。两个工具都不会永久删除页面。
 
-### 10.3 Audit behavior
+### 10.3 审计行为
 
-Each successful maintenance operation produces:
+每次成功的维护操作都会产生：
 
-1. the existing page business event (`page.trashed` or `page.restored`);
-2. an `mcp.tool_called` event identifying the credential, tool, target page,
-   result, and success state.
+1. 现有页面业务事件（`page.trashed` 或 `page.restored`）；
+2. 标识凭据、工具、目标页面、结果和成功状态的 `mcp.tool_called` 事件。
 
-The audit resource resolver adds the space name, page path, and title when the
-viewer is allowed to read the audit entry. Page content, comment content, API
-keys, OAuth tokens, and authorization codes are not stored in MCP audit metadata.
+当查看者有权读取审计条目时，审计资源解析器会补充空间名称、页面路径和标题。
+MCP 审计元数据不会存储页面正文、评论正文、API 密钥、OAuth 令牌或授权码。
 
-## 11. Verification Record
+## 11. 验证记录
 
-| Verification               | Result                                                                                                                        |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Server Jest                | 69 suites, 372 tests passed                                                                                                   |
-| Client Vitest              | 13 files, 106 tests passed                                                                                                    |
-| MCP legacy contract        | 20 tools; names, order, descriptions, Zod types, optional flags, enum/literal values, scopes, and annotations snapshot passed |
-| TypeScript                 | editor extension, server, and client passed                                                                                   |
-| ESLint                     | no errors; existing client warnings remain                                                                                    |
-| Production builds          | editor extension, server, and client passed                                                                                   |
-| Nest dependency resolution | reached application database bootstrap without an unknown dependency error                                                    |
-| Privacy                    | added lines and final tracked tree passed private deployment marker, server path, private key, and common token scans         |
+| 验证项        | 结果                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------- |
+| 服务端 Jest   | 69 个测试套件、372 个测试通过                                                               |
+| 客户端 Vitest | 13 个测试文件、106 个测试通过                                                               |
+| MCP 历史契约  | 20 个工具；名称、顺序、说明、Zod 类型、可选标记、枚举/字面值、作用域和 annotations 快照通过 |
+| TypeScript    | editor extension、服务端和客户端通过                                                        |
+| ESLint        | 无错误；仍保留已有的客户端警告                                                              |
+| 生产构建      | editor extension、服务端和客户端通过                                                        |
+| Nest 依赖解析 | 应用已运行到数据库引导阶段，未出现未知依赖错误                                              |
+| 隐私检查      | 新增行和最终已跟踪代码树均通过私有部署标记、服务器路径、私钥及常见令牌格式扫描              |
 
-The local production-start probe stopped at unavailable local database/cache
-dependencies; it was not an end-to-end deployment test. Sidebar event behavior
-is covered by the existing page lifecycle WebSocket listener tests.
+本地生产启动探测因本地数据库/缓存依赖不可用而停止，不属于端到端部署测试。侧边栏事件行为由
+现有页面生命周期 WebSocket 监听器测试覆盖。
