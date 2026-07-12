@@ -938,6 +938,7 @@
   "SAML": "SAML",
   "SSO": "SSO",
   "SSO (SAML, OIDC, LDAP)": "SSO (SAML, OIDC, LDAP)",
+  "SSO login for this provider type is not available in this server version.": "L’accesso SSO per questo tipo di provider non è disponibile in questa versione del server.",
   "Save": "Salva",
   "Save & Exit": "Salva ed esci",
   "Save codes": "Salva codici",

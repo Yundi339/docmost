@@ -66,7 +66,7 @@ export class BacklinkRepo {
   ) {
     const db = dbOrTx(this.db, trx);
     return db
-      .updateTable('userTokens')
+      .updateTable('backlinks')
       .set(updatableBacklink)
       .where('id', '=', backlinkId)
       .execute();

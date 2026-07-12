@@ -4,9 +4,10 @@ import { WorkspaceController } from './controllers/workspace.controller';
 import { SpaceModule } from '../space/space.module';
 import { WorkspaceInvitationService } from './services/workspace-invitation.service';
 import { TokenModule } from '../auth/token.module';
+import { SsoLoginCapabilityModule } from '../auth/sso-login-capability.module';
 
 @Module({
-  imports: [SpaceModule, TokenModule],
+  imports: [SpaceModule, TokenModule, SsoLoginCapabilityModule],
   controllers: [WorkspaceController],
   providers: [WorkspaceService, WorkspaceInvitationService],
   exports: [WorkspaceService],

@@ -1,5 +1,8 @@
 # Forkmost 功能引入评估
 
+> 本文是 2026-07-11 的调研快照。持续设计、决策、Todo 和实施复盘以
+> [`forkmost-integration.md`](./forkmost-integration.md) 为准。
+
 ## 1. 评估信息
 
 - 评估日期：2026-07-11

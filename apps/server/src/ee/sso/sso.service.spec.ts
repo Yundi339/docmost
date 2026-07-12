@@ -3,6 +3,8 @@ import { UserRole } from '../../common/helpers/types/permission';
 import { AuditEvent } from '../../common/events/audit-events';
 import { SsoSecretService } from './sso-secret.service';
 import { SsoService } from './sso.service';
+import { SsoLoginCapabilityService } from '../../core/auth/services/sso-login-capability.service';
+import { SsoProviderType } from './dto/sso.dto';
 
 describe('SsoService', () => {
   let db: any;
@@ -11,6 +13,7 @@ describe('SsoService', () => {
   let insertQuery: any;
   let auditService: { log: jest.Mock };
   let secretService: SsoSecretService;
+  let loginCapability: SsoLoginCapabilityService;
   let service: SsoService;
 
   const owner = { id: 'owner-id', role: UserRole.OWNER } as any;
@@ -59,7 +62,13 @@ describe('SsoService', () => {
     secretService = new SsoSecretService({
       getAppSecret: () => 'test-app-secret',
     } as any);
-    service = new SsoService(db, secretService, auditService as any);
+    loginCapability = new SsoLoginCapabilityService();
+    service = new SsoService(
+      db,
+      secretService,
+      auditService as any,
+      loginCapability,
+    );
   });
 
   it('rejects non-owners from every management operation before database access', async () => {
@@ -134,7 +143,7 @@ describe('SsoService', () => {
     const result = await service.updateProvider(
       existing.id,
       existing.workspaceId,
-      { oidcClientSecret: 'new-secret', isEnabled: true },
+      { oidcClientSecret: 'new-secret' },
       owner,
     );
 
@@ -165,6 +174,45 @@ describe('SsoService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(db.updateTable).not.toHaveBeenCalled();
+  });
+
+  it.each(Object.values(SsoProviderType))(
+    'rejects enabling %s while no login handler is registered',
+    async (type) => {
+      const existing = provider({ type });
+      selectQuery.executeTakeFirst.mockResolvedValue(existing);
+
+      await expect(
+        service.updateProvider(
+          existing.id,
+          existing.workspaceId,
+          { isEnabled: true },
+          owner,
+        ),
+      ).rejects.toThrow(
+        `SSO login is not available for provider type: ${type}`,
+      );
+
+      expect(updateQuery.set).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows an unavailable legacy provider to be disabled', async () => {
+    const existing = provider({ isEnabled: true });
+    selectQuery.executeTakeFirst.mockResolvedValue(existing);
+    updateQuery.executeTakeFirstOrThrow.mockResolvedValue({
+      ...existing,
+      isEnabled: false,
+    });
+
+    await expect(
+      service.updateProvider(
+        existing.id,
+        existing.workspaceId,
+        { isEnabled: false },
+        owner,
+      ),
+    ).resolves.toMatchObject({ isEnabled: false, loginAvailable: false });
   });
 });
 

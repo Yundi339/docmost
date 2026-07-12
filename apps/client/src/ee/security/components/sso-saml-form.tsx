@@ -20,6 +20,7 @@ import { IAuthProvider } from "@/ee/security/types/security.types.ts";
 import CopyTextButton from "@/components/common/copy.tsx";
 import { useTranslation } from "react-i18next";
 import { useUpdateSsoProviderMutation } from "@/ee/security/queries/security-query.ts";
+import { SsoEnabledSwitch } from "@/ee/security/components/sso-enabled-switch.tsx";
 
 const ssoSchema = z.object({
   name: z.string().min(1, "Display name is required"),
@@ -147,14 +148,11 @@ export function SsoSamlForm({ provider, onClose }: SsoFormProps) {
             />
           </Group>
 
-          <Group justify="space-between">
-            <div>{t("Enabled")}</div>
-            <Switch
-              className={classes.switch}
-              checked={form.values.isEnabled}
-              {...form.getInputProps("isEnabled")}
-            />
-          </Group>
+          <SsoEnabledSwitch
+            checked={form.values.isEnabled}
+            loginAvailable={provider.loginAvailable}
+            onChange={form.getInputProps("isEnabled").onChange}
+          />
 
           <Group mt="md" justify="flex-end">
             <Button type="submit" disabled={!form.isDirty()}>
