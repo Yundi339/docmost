@@ -29,14 +29,18 @@ import {
   Billing as BillingSubscription,
   AuthProviders,
   AuthAccounts,
+  AuthLoginCounters,
   OauthAuthorizationCodes,
   OauthAuthorizations,
   OauthClients,
   OauthRefreshTokens,
+  PasskeyAccounts,
+  PasskeyChallenges,
   Shares,
   Favorites,
   FileTasks,
   UserMfa as _UserMFA,
+  UserPasskeys,
   UserSessions,
   ApiKeys,
   Watchers,
@@ -55,10 +59,7 @@ export type UpdatableAiChat = Updateable<Omit<AiChats, 'id'>>;
 // full-text search. It is omitted from the public type so it never leaks
 // into HTTP responses or the chat history fed to the language model.
 export type AiChatMessage = Omit<Selectable<AiChatMessages>, 'tsv'>;
-export type InsertableAiChatMessage = Omit<
-  Insertable<AiChatMessages>,
-  'tsv'
->;
+export type InsertableAiChatMessage = Omit<Insertable<AiChatMessages>, 'tsv'>;
 
 // Workspace
 export type Workspace = Selectable<Workspaces>;
@@ -149,6 +150,17 @@ export type AuthAccount = Selectable<AuthAccounts>;
 export type InsertableAuthAccount = Insertable<AuthAccounts>;
 export type UpdatableAuthAccount = Updateable<Omit<AuthAccounts, 'id'>>;
 
+// Passkey
+export type PasskeyAccount = Selectable<PasskeyAccounts>;
+export type InsertablePasskeyAccount = Insertable<PasskeyAccounts>;
+export type PasskeyChallenge = Selectable<PasskeyChallenges>;
+export type InsertablePasskeyChallenge = Insertable<PasskeyChallenges>;
+export type UserPasskey = Selectable<UserPasskeys>;
+export type InsertableUserPasskey = Insertable<UserPasskeys>;
+export type UpdatableUserPasskey = Updateable<Omit<UserPasskeys, 'id'>>;
+export type AuthLoginCounter = Selectable<AuthLoginCounters>;
+export type InsertableAuthLoginCounter = Insertable<AuthLoginCounters>;
+
 // OAuth
 export type OauthClient = Selectable<OauthClients>;
 export type InsertableOauthClient = Insertable<OauthClients>;
@@ -232,7 +244,9 @@ export type UpdatablePagePermission = Updateable<Omit<_PagePermissions, 'id'>>;
 // Page Verification
 export type PageVerification = Selectable<_PageVerifications>;
 export type InsertablePageVerification = Insertable<_PageVerifications>;
-export type UpdatablePageVerification = Updateable<Omit<_PageVerifications, 'id'>>;
+export type UpdatablePageVerification = Updateable<
+  Omit<_PageVerifications, 'id'>
+>;
 
 // Page Verifier
 export type PageVerifier = Selectable<_PageVerifiers>;
@@ -266,4 +280,6 @@ export type UpdatableDatabaseRecord = Updateable<Omit<DatabaseRecords, 'id'>>;
 // Database User Mapping
 export type DatabaseUserMapping = Selectable<DatabaseUserMappings>;
 export type InsertableDatabaseUserMapping = Insertable<DatabaseUserMappings>;
-export type UpdatableDatabaseUserMapping = Updateable<Omit<DatabaseUserMappings, 'id'>>;
+export type UpdatableDatabaseUserMapping = Updateable<
+  Omit<DatabaseUserMappings, 'id'>
+>;

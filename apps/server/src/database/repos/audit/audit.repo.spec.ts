@@ -81,4 +81,26 @@ describe('AuditRepo resource enrichment', () => {
     expect(result).toEqual(resource);
     expect(resolvePageResource).not.toHaveBeenCalled();
   });
+
+  it('uses a safe metadata name for resources deleted before enrichment', async () => {
+    const { repo, resolvePageResource } = createRepo();
+
+    const result = await (repo as any).resolveAuditResource(
+      {
+        resourceType: 'passkey',
+        resourceId: '018f3f73-2f69-7c8d-9d79-8f3f4d7d9703',
+        changes: null,
+        metadata: { name: 'Work laptop' },
+      },
+      workspaceId,
+      new Map(),
+    );
+
+    expect(result).toEqual({
+      id: '018f3f73-2f69-7c8d-9d79-8f3f4d7d9703',
+      type: 'passkey',
+      name: 'Work laptop',
+    });
+    expect(resolvePageResource).not.toHaveBeenCalled();
+  });
 });

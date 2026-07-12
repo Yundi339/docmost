@@ -9,6 +9,7 @@ import { AttachmentEeModule } from './attachments-ee/attachment-ee.module';
 import { ConfluenceImportModule } from './confluence-import/confluence-import.module';
 import { McpModule } from './mcp/mcp.module';
 import { OAuthModule } from './oauth/oauth.module';
+import { PasskeyModule } from './passkey/passkey.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { OAuthModule } from './oauth/oauth.module';
     ConfluenceImportModule,
     OAuthModule,
     McpModule,
+    PasskeyModule,
   ],
 })
 export class EeModule {}

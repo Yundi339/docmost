@@ -17,6 +17,8 @@ import {
 } from '../dto/jwt-payload';
 import { User } from '@docmost/db/types/entity.types';
 import { isUserDisabled } from '../../../common/helpers';
+import { LoginFlowContext } from './login-flow.service';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class TokenService {
@@ -78,7 +80,11 @@ export class TokenService {
     return this.jwtService.sign(payload, { expiresIn: '1h' });
   }
 
-  async generateMfaToken(user: User, workspaceId: string): Promise<string> {
+  async generateMfaToken(
+    user: User,
+    workspaceId: string,
+    context: LoginFlowContext,
+  ): Promise<string> {
     if (isUserDisabled(user)) {
       throw new ForbiddenException();
     }
@@ -87,6 +93,10 @@ export class TokenService {
       sub: user.id,
       workspaceId,
       type: JwtType.MFA_TOKEN,
+      jti: randomUUID(),
+      primaryAuth: context.primaryAuth,
+      passkeyId: context.passkeyId,
+      authTime: context.authTime ?? new Date().toISOString(),
     };
     return this.jwtService.sign(payload, { expiresIn: '5m' });
   }

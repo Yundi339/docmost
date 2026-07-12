@@ -150,6 +150,34 @@ async function bootstrap() {
       });
   }
 
+  const sensitivePagePrefixes = [
+    '/login',
+    '/settings/account',
+    '/oauth/authorize',
+    '/api/auth/passkeys/',
+    '/api/passkeys/',
+  ];
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onSend', (req, reply, payload, done) => {
+      if (sensitivePagePrefixes.some((path) => req.url.startsWith(path))) {
+        reply.header('Content-Security-Policy', "frame-ancestors 'self'");
+        reply.header(
+          'Permissions-Policy',
+          'publickey-credentials-create=(self), publickey-credentials-get=(self)',
+        );
+        if (
+          req.url.startsWith('/api/auth/passkeys/') ||
+          req.url.startsWith('/api/passkeys/')
+        ) {
+          reply.header('Cache-Control', 'no-store');
+          reply.header('Pragma', 'no-cache');
+        }
+      }
+      done(null, payload);
+    });
+
   app
     .getHttpAdapter()
     .getInstance()

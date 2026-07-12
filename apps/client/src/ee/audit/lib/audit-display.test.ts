@@ -7,12 +7,13 @@ import {
 
 const t = (key: string) =>
   (
-    {
+    ({
       Yes: "是",
       No: "否",
       "API key": "API 密钥",
       "Search pages": "搜索页面",
-    } as Record<string, string>
+      "Additional verification failed": "二次验证失败",
+    }) as Record<string, string>
   )[key] ?? key;
 
 describe("audit display formatting", () => {
@@ -32,5 +33,8 @@ describe("audit display formatting", () => {
       "API 密钥",
     );
     expect(formatAuditPrimitive(true, "success", t as any)).toBe("是");
+    expect(formatAuditPrimitive("step_up_failed", "reason", t as any)).toBe(
+      "二次验证失败",
+    );
   });
 });

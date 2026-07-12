@@ -120,6 +120,18 @@ export interface AuthProviders {
   workspaceId: string;
 }
 
+export interface AuthLoginCounters {
+  failureCount: Generated<number>;
+  id: Generated<string>;
+  lastFailedAt: Timestamp | null;
+  lockedUntil: Timestamp | null;
+  method: string;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+  windowStartedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
 export interface OauthClients {
   allowClientIdMetadataDocuments: Generated<boolean>;
   allowedScopes: Generated<string[]>;
@@ -134,6 +146,27 @@ export interface OauthClients {
   settings: Json | null;
   trustedClientIdHost: Generated<string>;
   updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
+export interface PasskeyAccounts {
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  userHandle: Buffer;
+  userId: string;
+  workspaceId: string;
+}
+
+export interface PasskeyChallenges {
+  challenge: string;
+  createdAt: Generated<Timestamp>;
+  expectedOrigin: string;
+  expiresAt: Timestamp;
+  id: string;
+  rpId: string;
+  sessionId: string | null;
+  type: string;
+  userId: string | null;
   workspaceId: string;
 }
 
@@ -452,6 +485,24 @@ export interface UserMfa {
   workspaceId: string;
 }
 
+export interface UserPasskeys {
+  backedUp: boolean;
+  counter: Generated<Int8>;
+  createdAt: Generated<Timestamp>;
+  credentialId: string;
+  deviceType: string;
+  disabledAt: Timestamp | null;
+  disabledReason: string | null;
+  id: Generated<string>;
+  lastUsedAt: Timestamp | null;
+  name: string;
+  publicKey: Buffer;
+  transports: Generated<string[]>;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+  workspaceId: string;
+}
+
 export interface Users {
   avatarUrl: string | null;
   createdAt: Generated<Timestamp>;
@@ -689,6 +740,7 @@ export interface DB {
   attachments: Attachments;
   audit: Audit;
   authAccounts: AuthAccounts;
+  authLoginCounters: AuthLoginCounters;
   authProviders: AuthProviders;
   backlinks: Backlinks;
   billing: Billing;
@@ -706,6 +758,8 @@ export interface DB {
   oauthAuthorizations: OauthAuthorizations;
   oauthClients: OauthClients;
   oauthRefreshTokens: OauthRefreshTokens;
+  passkeyAccounts: PasskeyAccounts;
+  passkeyChallenges: PasskeyChallenges;
   pageAccess: PageAccess;
   pageLabels: PageLabels;
   pagePermissions: PagePermissions;
@@ -719,6 +773,7 @@ export interface DB {
   spaces: Spaces;
   templates: Templates;
   userMfa: UserMfa;
+  userPasskeys: UserPasskeys;
   users: Users;
   userSessions: UserSessions;
   userTokens: UserTokens;

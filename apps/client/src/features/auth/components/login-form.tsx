@@ -22,11 +22,10 @@ import { useWorkspacePublicDataQuery } from "@/features/workspace/queries/worksp
 import { Error404 } from "@/components/ui/error-404.tsx";
 import React from "react";
 import { AuthLayout } from "./auth-layout.tsx";
+import { PasskeyLoginButton } from "@/ee/passkey/components/passkey-login-button";
 
 const formSchema = z.object({
-  email: z
-    .email()
-    .min(1, { message: "email is required" }),
+  email: z.email().min(1, { message: "email is required" }),
   password: z.string().min(1, { message: "Password is required" }),
 });
 type FormValues = z.infer<typeof formSchema>;
@@ -62,7 +61,7 @@ export function LoginForm() {
   }
 
   if (isDataLoading) {
-   return null;
+    return null;
   }
 
   if (isError && error?.["response"]?.status === 404) {
@@ -123,6 +122,7 @@ export function LoginForm() {
                 <Button type="submit" fullWidth mt="md" loading={isLoading}>
                   {t("Sign In")}
                 </Button>
+                <PasskeyLoginButton />
               </form>
             </>
           )}

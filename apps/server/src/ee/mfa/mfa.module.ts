@@ -7,6 +7,8 @@ import { TokenModule } from '../../core/auth/token.module';
 import { AuthModule } from '../../core/auth/auth.module';
 import { SessionModule } from '../../core/session/session.module';
 import { UserModule } from '../../core/user/user.module';
+import { MfaSecretService } from './services/mfa-secret.service';
+import { MfaTokenConsumptionService } from './services/mfa-token-consumption.service';
 
 @Module({
   imports: [
@@ -22,7 +24,7 @@ import { UserModule } from '../../core/user/user.module';
     UserModule,
   ],
   controllers: [MfaController],
-  providers: [MfaService],
+  providers: [MfaService, MfaSecretService, MfaTokenConsumptionService],
   exports: [MfaService],
 })
 export class MfaModule {}

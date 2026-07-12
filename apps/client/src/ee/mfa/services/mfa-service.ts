@@ -17,15 +17,19 @@ export async function getMfaStatus(): Promise<MfaStatusResponse> {
 
 export async function setupMfa(
   data: MfaSetupRequest,
+  pending = false,
 ): Promise<MfaSetupResponse> {
-  const req = await api.post<MfaSetupResponse>("/mfa/setup", data);
+  const path = pending ? "/mfa/pending/setup" : "/mfa/setup";
+  const req = await api.post<MfaSetupResponse>(path, data);
   return req.data;
 }
 
 export async function enableMfa(
   data: MfaEnableRequest,
+  pending = false,
 ): Promise<MfaEnableResponse> {
-  const req = await api.post<MfaEnableResponse>("/mfa/enable", data);
+  const path = pending ? "/mfa/pending/enable" : "/mfa/enable";
+  const req = await api.post<MfaEnableResponse>(path, data);
   return req.data;
 }
 

@@ -20,7 +20,9 @@ describe('SsoSecretService', () => {
 
   it('rejects modified ciphertext', () => {
     const encrypted = service.encrypt('client-secret');
-    const modified = `${encrypted.slice(0, -1)}x`;
+    const parts = encrypted.split(':');
+    parts[3] = `${parts[3][0] === 'a' ? 'b' : 'a'}${parts[3].slice(1)}`;
+    const modified = parts.join(':');
 
     expect(() => service.decryptStored(modified)).toThrow();
   });

@@ -8,7 +8,6 @@ import {
   Req,
   Res,
   UseGuards,
-  Logger,
 } from '@nestjs/common';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
@@ -34,28 +33,29 @@ import { PasswordResetDto } from './dto/password-reset.dto';
 import { VerifyUserTokenDto } from './dto/verify-user-token.dto';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { validateSsoEnforcement } from './auth.util';
-import { ModuleRef } from '@nestjs/core';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../integrations/audit/audit.service';
+import { LoginFlowService } from './services/login-flow.service';
+import { AuthCookieService } from './services/auth-cookie.service';
 
 @SkipThrottle({
   [AI_CHAT_THROTTLER]: true,
+  [FORGOT_PASSWORD_THROTTLER]: true,
   [OAUTH_REGISTRATION_THROTTLER]: true,
   [OAUTH_TOKEN_THROTTLER]: true,
 })
 @UseGuards(ThrottlerGuard)
 @Controller('auth')
 export class AuthController {
-  private readonly logger = new Logger(AuthController.name);
-
   constructor(
     private authService: AuthService,
     private sessionService: SessionService,
     private environmentService: EnvironmentService,
-    private moduleRef: ModuleRef,
+    private readonly loginFlowService: LoginFlowService,
+    private readonly authCookieService: AuthCookieService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -68,47 +68,22 @@ export class AuthController {
   ) {
     validateSsoEnforcement(workspace);
 
-    let MfaModule: any;
-    let isMfaModuleReady = false;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      MfaModule = require('./../../ee/mfa/services/mfa.service');
-      isMfaModuleReady = true;
-    } catch (err) {
-      this.logger.debug(
-        'MFA module requested but EE module not bundled in this build',
-      );
-      isMfaModuleReady = false;
+    const user = await this.authService.authenticatePassword(
+      loginInput,
+      workspace.id,
+    );
+    const result = await this.loginFlowService.begin(user, workspace, {
+      primaryAuth: 'password',
+    });
+    if (result.mfaToken) {
+      this.authCookieService.setMfaCookie(res, result.mfaToken);
+      return {
+        userHasMfa: result.userHasMfa,
+        requiresMfaSetup: result.requiresMfaSetup,
+        isMfaEnforced: result.isMfaEnforced,
+      };
     }
-    if (isMfaModuleReady) {
-      const mfaService = this.moduleRef.get(MfaModule.MfaService, {
-        strict: false,
-      });
-
-      const mfaResult = await mfaService.checkMfaRequirements(
-        loginInput,
-        workspace,
-        res,
-      );
-
-      if (mfaResult) {
-        // If user has MFA enabled OR workspace enforces MFA, require MFA verification
-        if (mfaResult.userHasMfa || mfaResult.requiresMfaSetup) {
-          return {
-            userHasMfa: mfaResult.userHasMfa,
-            requiresMfaSetup: mfaResult.requiresMfaSetup,
-            isMfaEnforced: mfaResult.isMfaEnforced,
-          };
-        } else if (mfaResult.authToken) {
-          // User doesn't have MFA and workspace doesn't require it
-          this.setAuthCookie(res, mfaResult.authToken);
-          return;
-        }
-      }
-    }
-
-    const authToken = await this.authService.login(loginInput, workspace.id);
-    this.setAuthCookie(res, authToken);
+    this.authCookieService.setAuthCookie(res, result.authToken);
   }
 
   @UseGuards(SetupGuard)
@@ -219,6 +194,7 @@ export class AuthController {
     }
 
     res.clearCookie('authToken');
+    this.authCookieService.clearMfaCookie(res);
 
     this.auditService.log({
       event: AuditEvent.USER_LOGOUT,
@@ -228,12 +204,6 @@ export class AuthController {
   }
 
   setAuthCookie(res: FastifyReply, token: string) {
-    res.setCookie('authToken', token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
-      expires: this.environmentService.getCookieExpiresIn(),
-      secure: this.environmentService.isHttps(),
-    });
+    this.authCookieService.setAuthCookie(res, token);
   }
 }

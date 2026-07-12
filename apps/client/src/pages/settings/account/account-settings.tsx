@@ -9,6 +9,7 @@ import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 import { AccountMfaSection } from "@/features/user/components/account-mfa-section";
 import SessionList from "@/features/session/components/session-list";
+import { AccountPasskeySection } from "@/ee/passkey/components/account-passkey-section";
 
 export default function AccountSettings() {
   const { t } = useTranslation();
@@ -37,6 +38,10 @@ export default function AccountSettings() {
       <Divider my="lg" />
 
       <AccountMfaSection />
+
+      <Divider my="lg" />
+
+      <AccountPasskeySection />
 
       <Divider my="lg" />
 

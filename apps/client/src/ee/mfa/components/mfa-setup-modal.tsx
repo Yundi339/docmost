@@ -78,7 +78,7 @@ export function MfaSetupModal({
   });
 
   const setupMutation = useMutation({
-    mutationFn: () => setupMfa({ method: "totp" }),
+    mutationFn: () => setupMfa({ method: "totp" }, isRequired),
     onSuccess: (data) => {
       setSetupData(data);
     },
@@ -100,10 +100,13 @@ export function MfaSetupModal({
 
   const enableMutation = useMutation({
     mutationFn: (verificationCode: string) =>
-      enableMfa({
-        secret: setupData!.secret,
-        verificationCode,
-      }),
+      enableMfa(
+        {
+          secret: setupData!.secret,
+          verificationCode,
+        },
+        isRequired,
+      ),
     onSuccess: (data) => {
       setBackupCodes(data.backupCodes);
       setActive(1); // Move to backup codes step
@@ -123,7 +126,7 @@ export function MfaSetupModal({
     if (active === 1 && backupCodes.length > 0) {
       onComplete();
     }
-    onClose();
+    onClose?.();
     // Reset state
     setTimeout(() => {
       setActive(0);

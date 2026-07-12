@@ -25,6 +25,11 @@ export const auditEventLabels: Record<string, string> = {
   "user.updated": "Updated user",
   "user.deactivated": "Deactivated user",
   "user.activated": "Activated user",
+  "user.login_failed": "Failed to log in",
+  "user.passkey_created": "Added passkey",
+  "user.passkey_renamed": "Renamed passkey",
+  "user.passkey_deleted": "Deleted passkey",
+  "user.passkey_counter_anomaly": "Disabled unsafe passkey",
   "user.mfa_enabled": "Enabled MFA",
   "user.mfa_disabled": "Disabled MFA",
   "user.mfa_backup_code_generated": "Generated MFA backup codes",
@@ -104,6 +109,7 @@ export const eventFilterOptions: EventGroup[] = [
     group: "User",
     items: [
       { value: "user.login", label: "Logged in" },
+      { value: "user.login_failed", label: "Failed to log in" },
       { value: "user.logout", label: "Logged out" },
       { value: "user.created", label: "Created user" },
       { value: "user.deleted", label: "Deleted user" },
@@ -113,6 +119,13 @@ export const eventFilterOptions: EventGroup[] = [
       { value: "user.password_changed", label: "Changed password" },
       { value: "user.mfa_enabled", label: "Enabled MFA" },
       { value: "user.mfa_disabled", label: "Disabled MFA" },
+      { value: "user.passkey_created", label: "Added passkey" },
+      { value: "user.passkey_renamed", label: "Renamed passkey" },
+      { value: "user.passkey_deleted", label: "Deleted passkey" },
+      {
+        value: "user.passkey_counter_anomaly",
+        label: "Disabled unsafe passkey",
+      },
     ],
   },
   {

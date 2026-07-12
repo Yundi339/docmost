@@ -31,6 +31,19 @@ export class UserSessionRepo {
       .where('id', '=', id)
       .where('expiresAt', '>', new Date())
       .where('revokedAt', 'is', null)
+      .where(
+        sql<boolean>`
+        (user_sessions.metadata->>'passkeyId') IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM user_passkeys
+          WHERE user_passkeys.id::text = user_sessions.metadata->>'passkeyId'
+            AND user_passkeys.user_id = user_sessions.user_id
+            AND user_passkeys.workspace_id = user_sessions.workspace_id
+            AND user_passkeys.disabled_at IS NULL
+        )
+      `,
+      )
       .executeTakeFirst();
   }
 
@@ -102,10 +115,24 @@ export class UserSessionRepo {
       .execute();
   }
 
-  async deleteByUserId(
+  async revokeByPasskeyId(
+    passkeyId: string,
     userId: string,
     workspaceId: string,
+    trx?: KyselyTransaction,
   ): Promise<void> {
+    const db = dbOrTx(this.db, trx);
+    await db
+      .updateTable('userSessions')
+      .set({ revokedAt: new Date() })
+      .where('userId', '=', userId)
+      .where('workspaceId', '=', workspaceId)
+      .where(sql<string>`metadata->>'passkeyId'`, '=', passkeyId)
+      .where('revokedAt', 'is', null)
+      .execute();
+  }
+
+  async deleteByUserId(userId: string, workspaceId: string): Promise<void> {
     await this.db
       .deleteFrom('userSessions')
       .where('userId', '=', userId)
@@ -131,10 +158,7 @@ export class UserSessionRepo {
     await this.db
       .deleteFrom('userSessions')
       .where((eb) =>
-        eb.or([
-          eb('revokedAt', '<', cutoff),
-          eb('expiresAt', '<', cutoff),
-        ]),
+        eb.or([eb('revokedAt', '<', cutoff), eb('expiresAt', '<', cutoff)]),
       )
       .execute();
   }

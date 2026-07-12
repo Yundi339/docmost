@@ -38,6 +38,11 @@ export interface JwtMfaTokenPayload {
   sub: string;
   workspaceId: string;
   type: 'mfa_token';
+  jti: string;
+  exp?: number;
+  primaryAuth: 'password' | 'passkey' | 'sso';
+  passkeyId?: string;
+  authTime: string;
 }
 
 export type JwtApiKeyPayload = {

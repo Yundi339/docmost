@@ -506,7 +506,14 @@ function getAuditFallbackName(entry: Audit): string | undefined {
   const before = asRecord(changes.before);
   const after = asRecord(changes.after);
   const metadata = asRecord(entry.metadata);
-  return [after.title, before.title, metadata.title, after.name, before.name]
+  return [
+    after.title,
+    before.title,
+    metadata.title,
+    after.name,
+    before.name,
+    metadata.name,
+  ]
     .map(getString)
     .find(Boolean);
 }

@@ -28,6 +28,10 @@ import { FavoriteRepo } from '@docmost/db/repos/favorite/favorite.repo';
 import { TemplateRepo } from '@docmost/db/repos/template/template.repo';
 import { ApiKeyRepo } from '@docmost/db/repos/api-key/api-key.repo';
 import { AuditRepo } from '@docmost/db/repos/audit/audit.repo';
+import { PasskeyAccountRepo } from '@docmost/db/repos/passkey/passkey-account.repo';
+import { UserPasskeyRepo } from '@docmost/db/repos/passkey/user-passkey.repo';
+import { PasskeyChallengeRepo } from '@docmost/db/repos/passkey/passkey-challenge.repo';
+import { LoginCounterRepo } from '@docmost/db/repos/passkey/login-counter.repo';
 import { PageListener } from '@docmost/db/listeners/page.listener';
 import { PostgresJSDialect } from 'kysely-postgres-js';
 import * as postgres from 'postgres';
@@ -95,6 +99,10 @@ import { normalizePostgresUrl } from '../common/helpers';
     TemplateRepo,
     ApiKeyRepo,
     AuditRepo,
+    PasskeyAccountRepo,
+    UserPasskeyRepo,
+    PasskeyChallengeRepo,
+    LoginCounterRepo,
     PageListener,
   ],
   exports: [
@@ -121,6 +129,10 @@ import { normalizePostgresUrl } from '../common/helpers';
     TemplateRepo,
     ApiKeyRepo,
     AuditRepo,
+    PasskeyAccountRepo,
+    UserPasskeyRepo,
+    PasskeyChallengeRepo,
+    LoginCounterRepo,
   ],
 })
 export class DatabaseModule implements OnApplicationBootstrap {

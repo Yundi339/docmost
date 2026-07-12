@@ -40,6 +40,10 @@ import {
   IAuditService,
 } from '../../../integrations/audit/audit.service';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
+import { LoginAttemptService } from './login-attempt.service';
+
+const INVALID_PASSWORD_HASH =
+  '$2b$12$Pfjhq2jcczTPCMuWXM/np.XAimsfZ7y8N1pblw8unuxzPHTz2eIDC';
 
 @Injectable()
 export class AuthService {
@@ -53,26 +57,49 @@ export class AuthService {
     private mailService: MailService,
     private domainService: DomainService,
     private environmentService: EnvironmentService,
+    private loginAttemptService: LoginAttemptService,
     @InjectKysely() private readonly db: KyselyDB,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
   async login(loginDto: LoginDto, workspaceId: string) {
+    return this.authenticatePassword(loginDto, workspaceId);
+  }
+
+  async authenticatePassword(loginDto: LoginDto, workspaceId: string) {
     const user = await this.userRepo.findByEmail(loginDto.email, workspaceId, {
       includePassword: true,
     });
 
     const errorMessage = 'Email or password does not match';
-    if (!user || isUserDisabled(user)) {
-      throw new UnauthorizedException(errorMessage);
+    if (user && !isUserDisabled(user)) {
+      await this.loginAttemptService.assertAllowed(
+        workspaceId,
+        user.id,
+        'password',
+      );
     }
 
     const isPasswordMatch = await comparePasswordHash(
       loginDto.password,
-      user.password,
+      user?.password || INVALID_PASSWORD_HASH,
     );
 
-    if (!isPasswordMatch) {
+    if (!user || isUserDisabled(user) || !isPasswordMatch || !user.password) {
+      if (user && !isUserDisabled(user)) {
+        await this.loginAttemptService.recordFailure(
+          workspaceId,
+          user.id,
+          'password',
+        );
+        this.auditService.setActorId(user.id);
+        this.auditService.log({
+          event: AuditEvent.USER_LOGIN_FAILED,
+          resourceType: AuditResource.USER,
+          resourceId: user.id,
+          metadata: { source: 'password', reason: 'invalid_credentials' },
+        });
+      }
       throw new UnauthorizedException(errorMessage);
     }
 
@@ -84,17 +111,7 @@ export class AuthService {
       appSecret: this.environmentService.getAppSecret(),
     });
 
-    user.lastLoginAt = new Date();
-    await this.userRepo.updateLastLogin(user.id, workspaceId);
-
-    this.auditService.log({
-      event: AuditEvent.USER_LOGIN,
-      resourceType: AuditResource.USER,
-      resourceId: user.id,
-      metadata: { source: 'password' },
-    });
-
-    return this.sessionService.createSessionAndToken(user);
+    return user;
   }
 
   async register(createUserDto: CreateUserDto, workspaceId: string) {

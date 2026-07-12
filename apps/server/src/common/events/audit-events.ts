@@ -17,6 +17,11 @@ export const AuditEvent = {
   USER_UPDATED: 'user.updated',
   USER_DEACTIVATED: 'user.deactivated',
   USER_ACTIVATED: 'user.activated',
+  USER_LOGIN_FAILED: 'user.login_failed',
+  USER_PASSKEY_CREATED: 'user.passkey_created',
+  USER_PASSKEY_RENAMED: 'user.passkey_renamed',
+  USER_PASSKEY_DELETED: 'user.passkey_deleted',
+  USER_PASSKEY_COUNTER_ANOMALY: 'user.passkey_counter_anomaly',
 
   // API Keys
   API_KEY_CREATED: 'api_key.created',
@@ -130,6 +135,7 @@ export const AuditResource = {
   COMMENT: 'comment',
   SHARE: 'share',
   API_KEY: 'api_key',
+  PASSKEY: 'passkey',
   MCP_TOOL: 'mcp_tool',
   MCP_SESSION: 'mcp_session',
   MCP_AUTH: 'mcp_auth',
