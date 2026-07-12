@@ -1537,5 +1537,11 @@
   "Changed share password": "Senha de compartilhamento alterada",
   "Removed share password": "Senha de compartilhamento removida",
   "Failed to unlock share": "Falha ao desbloquear o compartilhamento",
-  "Sampled": "Amostrado"
+  "Sampled": "Amostrado",
+  "Login unavailable": "Login indisponível",
+  "Login is not available for this SSO provider type in this server version.": "O login para este tipo de provedor SSO não está disponível nesta versão do servidor.",
+  "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.": "Exigir SSO requer um provedor habilitado com manipulador de login e um proprietário do espaço de trabalho com senha local.",
+  "Owner recovery sign-in": "Login de recuperação do proprietário",
+  "This sign-in is limited to the workspace owner and still requires password and MFA.": "Este login é limitado ao proprietário do espaço de trabalho e ainda exige senha e MFA.",
+  "Owner recovery": "Recuperação do proprietário"
 }

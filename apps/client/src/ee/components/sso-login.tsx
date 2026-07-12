@@ -62,6 +62,10 @@ export default function SsoLogin() {
   useEffect(() => {
     if (autoRedirectedRef.current) return;
     if (!data?.enforceSso) return;
+    if (
+      new URLSearchParams(window.location.search).get("ownerRecovery") === "1"
+    )
+      return;
     if (!data.authProviders || data.authProviders.length !== 1) return;
     const onlyProvider = data.authProviders[0];
     if (onlyProvider.type === SSO_PROVIDER.LDAP) return;

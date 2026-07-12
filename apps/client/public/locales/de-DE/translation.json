@@ -1537,5 +1537,11 @@
   "Changed share password": "Freigabepasswort geändert",
   "Removed share password": "Freigabepasswort entfernt",
   "Failed to unlock share": "Freigabe konnte nicht entsperrt werden",
-  "Sampled": "Stichprobe"
+  "Sampled": "Stichprobe",
+  "Login unavailable": "Anmeldung nicht verfügbar",
+  "Login is not available for this SSO provider type in this server version.": "Die Anmeldung für diesen SSO-Anbietertyp ist in dieser Serverversion nicht verfügbar.",
+  "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.": "Erzwungenes SSO erfordert einen aktivierten Anbieter mit Anmeldehandler und einen Workspace-Eigentümer mit lokalem Passwort.",
+  "Owner recovery sign-in": "Wiederherstellungsanmeldung für Eigentümer",
+  "This sign-in is limited to the workspace owner and still requires password and MFA.": "Diese Anmeldung ist auf den Workspace-Eigentümer beschränkt und erfordert weiterhin Passwort und MFA.",
+  "Owner recovery": "Eigentümerwiederherstellung"
 }

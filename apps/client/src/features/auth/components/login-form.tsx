@@ -11,10 +11,11 @@ import {
   Box,
   Anchor,
   Group,
+  Text,
 } from "@mantine/core";
 import classes from "./auth.module.css";
 import { useRedirectIfAuthenticated } from "@/features/auth/hooks/use-redirect-if-authenticated.ts";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import APP_ROUTE from "@/lib/app-route.ts";
 import { useTranslation } from "react-i18next";
 import SsoLogin from "@/ee/components/sso-login.tsx";
@@ -33,6 +34,8 @@ type FormValues = z.infer<typeof formSchema>;
 export function LoginForm() {
   const { t } = useTranslation();
   const { signIn, isLoading } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ownerRecovery = searchParams.get("ownerRecovery") === "1";
   useRedirectIfAuthenticated();
   const {
     data,
@@ -50,7 +53,7 @@ export function LoginForm() {
   });
 
   async function onSubmit(data: FormValues) {
-    await signIn(data);
+    await signIn({ ...data, ownerRecovery });
   }
 
   function handleValidationFailure(errors: Record<string, unknown>) {
@@ -78,7 +81,31 @@ export function LoginForm() {
 
           <SsoLogin />
 
-          {!data?.enforceSso && (
+          {data?.enforceSso && !ownerRecovery && (
+            <Anchor
+              component="button"
+              type="button"
+              size="sm"
+              mt="sm"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.set("ownerRecovery", "1");
+                setSearchParams(next);
+              }}
+            >
+              {t("Owner recovery sign-in")}
+            </Anchor>
+          )}
+
+          {ownerRecovery && data?.enforceSso && (
+            <Text size="sm" c="dimmed" mt="sm">
+              {t(
+                "This sign-in is limited to the workspace owner and still requires password and MFA.",
+              )}
+            </Text>
+          )}
+
+          {(!data?.enforceSso || ownerRecovery) && (
             <>
               <form onSubmit={form.onSubmit(onSubmit, handleValidationFailure)}>
                 <TextInput
@@ -108,21 +135,23 @@ export function LoginForm() {
                   {...form.getInputProps("password")}
                 />
 
-                <Group justify="flex-end" mt="sm">
-                  <Anchor
-                    to={APP_ROUTE.AUTH.FORGOT_PASSWORD}
-                    component={Link}
-                    underline="never"
-                    size="sm"
-                  >
-                    {t("Forgot your password?")}
-                  </Anchor>
-                </Group>
+                {!ownerRecovery && (
+                  <Group justify="flex-end" mt="sm">
+                    <Anchor
+                      to={APP_ROUTE.AUTH.FORGOT_PASSWORD}
+                      component={Link}
+                      underline="never"
+                      size="sm"
+                    >
+                      {t("Forgot your password?")}
+                    </Anchor>
+                  </Group>
+                )}
 
                 <Button type="submit" fullWidth mt="md" loading={isLoading}>
                   {t("Sign In")}
                 </Button>
-                <PasskeyLoginButton />
+                {!ownerRecovery && <PasskeyLoginButton />}
               </form>
             </>
           )}

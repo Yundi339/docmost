@@ -3,6 +3,7 @@ import { UserRole } from '../../common/helpers/types/permission';
 import { AuditEvent } from '../../common/events/audit-events';
 import { SsoSecretService } from './sso-secret.service';
 import { SsoService } from './sso.service';
+import { SsoLoginCapabilityService } from '../../core/auth/services/sso-login-capability.service';
 
 describe('SsoService', () => {
   let db: any;
@@ -12,6 +13,11 @@ describe('SsoService', () => {
   let auditService: { log: jest.Mock };
   let secretService: SsoSecretService;
   let service: SsoService;
+  let loginCapability: SsoLoginCapabilityService;
+  let ssoEnforcement: {
+    lockWorkspace: jest.Mock;
+    assertCanDeactivateProvider: jest.Mock;
+  };
 
   const owner = { id: 'owner-id', role: UserRole.OWNER } as any;
   const admin = { id: 'admin-id', role: UserRole.ADMIN } as any;
@@ -54,12 +60,30 @@ describe('SsoService', () => {
       selectFrom: jest.fn().mockReturnValue(selectQuery),
       updateTable: jest.fn().mockReturnValue(updateQuery),
       insertInto: jest.fn().mockReturnValue(insertQuery),
+      transaction: jest.fn().mockReturnValue({
+        execute: (callback: (trx: any) => unknown) => callback(db),
+      }),
     };
     auditService = { log: jest.fn() };
     secretService = new SsoSecretService({
       getAppSecret: () => 'test-app-secret',
     } as any);
-    service = new SsoService(db, secretService, auditService as any);
+    loginCapability = new SsoLoginCapabilityService();
+    loginCapability.register({
+      providerType: 'oidc',
+      handler: 'TestOidcController',
+    });
+    ssoEnforcement = {
+      lockWorkspace: jest.fn(),
+      assertCanDeactivateProvider: jest.fn(),
+    };
+    service = new SsoService(
+      db,
+      secretService,
+      auditService as any,
+      loginCapability,
+      ssoEnforcement as any,
+    );
   });
 
   it('rejects non-owners from every management operation before database access', async () => {
@@ -106,6 +130,7 @@ describe('SsoService', () => {
     expect(result.items[0]).toMatchObject({
       hasOidcClientSecret: true,
       hasLdapBindPassword: true,
+      loginAvailable: true,
     });
     expect(result.items[0]).not.toHaveProperty('oidcClientSecret');
     expect(result.items[0]).not.toHaveProperty('ldapBindPassword');
@@ -165,6 +190,23 @@ describe('SsoService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(db.updateTable).not.toHaveBeenCalled();
+  });
+
+  it('rejects enabling a provider whose login handler is not registered', async () => {
+    const existing = provider({ type: 'saml' });
+    selectQuery.executeTakeFirst.mockResolvedValue(existing);
+
+    await expect(
+      service.updateProvider(
+        existing.id,
+        existing.workspaceId,
+        { isEnabled: true },
+        owner,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'SSO_LOGIN_UNAVAILABLE' }),
+    });
+    expect(updateQuery.set).not.toHaveBeenCalled();
   });
 });
 

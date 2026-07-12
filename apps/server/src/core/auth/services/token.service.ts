@@ -113,6 +113,7 @@ export class TokenService {
       type: JwtType.MFA_TOKEN,
       jti: randomUUID(),
       primaryAuth: context.primaryAuth,
+      ownerRecovery: context.ownerRecovery,
       passkeyId: context.passkeyId,
       authTime: context.authTime ?? new Date().toISOString(),
     };

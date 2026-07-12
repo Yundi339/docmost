@@ -1537,5 +1537,11 @@
   "Changed share password": "共有パスワードを変更",
   "Removed share password": "共有パスワードを削除",
   "Failed to unlock share": "共有のロック解除に失敗",
-  "Sampled": "サンプリング済み"
+  "Sampled": "サンプリング済み",
+  "Login unavailable": "ログインを利用できません",
+  "Login is not available for this SSO provider type in this server version.": "このサーバーバージョンでは、この SSO プロバイダータイプのログインを利用できません。",
+  "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.": "SSO の強制には、ログインハンドラーを持つ有効なプロバイダーと、ローカルパスワードを持つワークスペース所有者が必要です。",
+  "Owner recovery sign-in": "所有者の復旧ログイン",
+  "This sign-in is limited to the workspace owner and still requires password and MFA.": "このログインはワークスペース所有者専用で、パスワードと MFA が引き続き必要です。",
+  "Owner recovery": "所有者の復旧"
 }

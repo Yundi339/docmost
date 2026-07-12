@@ -1701,5 +1701,11 @@
   "Changed share password": "Changed share password",
   "Removed share password": "Removed share password",
   "Failed to unlock share": "Failed to unlock share",
-  "Sampled": "Sampled"
+  "Sampled": "Sampled",
+  "Login unavailable": "Login unavailable",
+  "Login is not available for this SSO provider type in this server version.": "Login is not available for this SSO provider type in this server version.",
+  "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.": "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.",
+  "Owner recovery sign-in": "Owner recovery sign-in",
+  "This sign-in is limited to the workspace owner and still requires password and MFA.": "This sign-in is limited to the workspace owner and still requires password and MFA.",
+  "Owner recovery": "Owner recovery"
 }

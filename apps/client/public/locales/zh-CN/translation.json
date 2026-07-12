@@ -1876,5 +1876,11 @@
   "Changed share password": "修改了分享密码",
   "Removed share password": "移除了分享密码",
   "Failed to unlock share": "分享解锁失败",
-  "Sampled": "已采样"
+  "Sampled": "已采样",
+  "Login unavailable": "登录不可用",
+  "Login is not available for this SSO provider type in this server version.": "当前服务器版本不支持此 SSO 提供商类型的登录。",
+  "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.": "强制 SSO 需要启用具有登录处理器的提供商，并确保工作区所有者保留本地密码。",
+  "Owner recovery sign-in": "所有者恢复登录",
+  "This sign-in is limited to the workspace owner and still requires password and MFA.": "此登录方式仅限工作区所有者使用，仍需验证密码和多因素认证。",
+  "Owner recovery": "所有者恢复"
 }

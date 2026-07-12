@@ -4,6 +4,7 @@ import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { Box, Button, Group, Stack, Switch, TextInput } from "@mantine/core";
 import classes from "@/ee/security/components/sso.module.css";
+import { SsoEnabledSwitch } from "@/ee/security/components/sso-enabled-switch.tsx";
 import { IAuthProvider } from "@/ee/security/types/security.types.ts";
 import { useTranslation } from "react-i18next";
 import { useUpdateSsoProviderMutation } from "@/ee/security/queries/security-query.ts";
@@ -71,14 +72,11 @@ export function SsoGoogleForm({ provider, onClose }: SsoFormProps) {
             />
           </Group>
 
-          <Group justify="space-between">
-            <div>{t("Enabled")}</div>
-            <Switch
-              className={classes.switch}
-              checked={form.values.isEnabled}
-              {...form.getInputProps("isEnabled")}
-            />
-          </Group>
+          <SsoEnabledSwitch
+            checked={form.values.isEnabled}
+            loginAvailable={provider.loginAvailable}
+            onChange={form.getInputProps("isEnabled").onChange}
+          />
 
           <Group mt="md" justify="flex-end">
             <Button type="submit" disabled={!form.isDirty()}>

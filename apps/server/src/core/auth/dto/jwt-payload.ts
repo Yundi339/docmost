@@ -51,6 +51,7 @@ export interface JwtMfaTokenPayload {
   jti: string;
   exp?: number;
   primaryAuth: 'password' | 'passkey' | 'sso';
+  ownerRecovery?: boolean;
   passkeyId?: string;
   authTime: string;
 }

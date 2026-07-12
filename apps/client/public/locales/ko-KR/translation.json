@@ -1537,5 +1537,11 @@
   "Changed share password": "공유 비밀번호 변경",
   "Removed share password": "공유 비밀번호 삭제",
   "Failed to unlock share": "공유 잠금 해제 실패",
-  "Sampled": "샘플링됨"
+  "Sampled": "샘플링됨",
+  "Login unavailable": "로그인 사용 불가",
+  "Login is not available for this SSO provider type in this server version.": "이 서버 버전에서는 해당 SSO 공급자 유형의 로그인을 사용할 수 없습니다.",
+  "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.": "SSO 강제에는 로그인 처리기가 있는 활성 공급자와 로컬 비밀번호를 보유한 작업 공간 소유자가 필요합니다.",
+  "Owner recovery sign-in": "소유자 복구 로그인",
+  "This sign-in is limited to the workspace owner and still requires password and MFA.": "이 로그인은 작업 공간 소유자만 사용할 수 있으며 비밀번호와 MFA가 계속 필요합니다.",
+  "Owner recovery": "소유자 복구"
 }

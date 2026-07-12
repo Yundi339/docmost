@@ -12,6 +12,7 @@ export interface IWorkspace {
   settings: IWorkspaceSettings;
   status: string;
   enforceSso: boolean;
+  ssoEnforcementAvailable?: boolean;
   stripeCustomerId: string;
   billingEmail: string;
   trialEndAt: Date;

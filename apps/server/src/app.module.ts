@@ -35,6 +35,7 @@ import { ThrottleModule } from './integrations/throttle/throttle.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DomainMiddleware } from './common/middlewares/domain.middleware';
 import { AuditContextMiddleware } from './common/middlewares/audit-context.middleware';
+import { SsoSecurityModule } from './core/auth/sso-security.module';
 
 const enterpriseModules = [];
 try {
@@ -59,6 +60,7 @@ try {
     LoggerModule,
     ScheduleModule.forRoot(),
     NoopAuditModule,
+    SsoSecurityModule,
     CoreModule,
     DatabaseModule,
     EnvironmentModule,

@@ -49,6 +49,7 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../../integrations/audit/audit.service';
+import { SsoEnforcementService } from '../../auth/services/sso-enforcement.service';
 
 @Injectable()
 export class WorkspaceService {
@@ -73,6 +74,7 @@ export class WorkspaceService {
     @InjectQueue(QueueName.AI_QUEUE) private aiQueue: Queue,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
     private userSessionRepo: UserSessionRepo,
+    private readonly ssoEnforcement: SsoEnforcementService,
   ) {}
 
   async findById(workspaceId: string) {
@@ -85,7 +87,12 @@ export class WorkspaceService {
       throw new NotFoundException('Workspace not found');
     }
 
-    return workspace;
+    return {
+      ...workspace,
+      ssoEnforcementAvailable: await this.ssoEnforcement.canEnforce(
+        workspace.id,
+      ),
+    };
   }
 
   async getWorkspacePublicData(workspaceId: string) {
@@ -120,9 +127,16 @@ export class WorkspaceService {
       throw new NotFoundException('Workspace not found');
     }
 
-    const { licenseKey, plan, ...rest } = workspace;
+    const { licenseKey, plan, authProviders, ...rest } = workspace;
+    const availableProviders = this.ssoEnforcement.filterAvailableProviders(
+      authProviders ?? [],
+    );
 
-    return rest;
+    return {
+      ...rest,
+      enforceSso: rest.enforceSso && availableProviders.length > 0,
+      authProviders: availableProviders,
+    };
   }
 
   async create(
@@ -298,21 +312,6 @@ export class WorkspaceService {
   }
 
   async update(workspaceId: string, updateWorkspaceDto: UpdateWorkspaceDto) {
-    if (updateWorkspaceDto.enforceSso) {
-      const sso = await this.db
-        .selectFrom('authProviders')
-        .select(['id'])
-        .where('isEnabled', '=', true)
-        .where('workspaceId', '=', workspaceId)
-        .execute();
-
-      if (sso && sso?.length === 0) {
-        throw new BadRequestException(
-          'There must be at least one active SSO provider to enforce SSO.',
-        );
-      }
-    }
-
     if (updateWorkspaceDto.emailDomains) {
       const regex =
         /(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]/;
@@ -396,6 +395,11 @@ export class WorkspaceService {
     >;
 
     await executeTx(this.db, async (trx) => {
+      if (updateWorkspaceDto.enforceSso === true) {
+        await this.ssoEnforcement.lockWorkspace(workspaceId, trx);
+        await this.ssoEnforcement.assertCanEnforce(workspaceId, trx);
+      }
+
       if (typeof updateWorkspaceDto.restrictApiToAdmins !== 'undefined') {
         const prev = settingsBefore?.api?.restrictToAdmins ?? false;
         if (prev !== updateWorkspaceDto.restrictApiToAdmins) {
@@ -616,7 +620,12 @@ export class WorkspaceService {
     }
 
     const { licenseKey, ...rest } = workspace;
-    return rest;
+    return {
+      ...rest,
+      ssoEnforcementAvailable: await this.ssoEnforcement.canEnforce(
+        workspace.id,
+      ),
+    };
   }
 
   async getWorkspaceUsers(

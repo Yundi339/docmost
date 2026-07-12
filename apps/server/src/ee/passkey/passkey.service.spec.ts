@@ -26,6 +26,7 @@ describe('PasskeyService security helpers', () => {
     {} as any,
     {} as any,
     {} as any,
+    {} as any,
   );
 
   it('never exposes credential material in management responses', () => {
@@ -149,6 +150,7 @@ describe('PasskeyService authentication flow', () => {
       loginAttempt,
       securityNotification,
       auditService,
+      { assertLocalAuthAllowed: jest.fn() } as any,
     );
   });
 

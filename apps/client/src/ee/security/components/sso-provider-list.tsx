@@ -114,10 +114,20 @@ export default function SsoProviderList() {
                     </Table.Td>
                     <Table.Td>
                       <Badge
-                        color={provider.isEnabled ? "blue" : "gray"}
+                        color={
+                          !provider.loginAvailable
+                            ? "orange"
+                            : provider.isEnabled
+                              ? "blue"
+                              : "gray"
+                        }
                         variant="light"
                       >
-                        {provider.isEnabled ? t("Active") : t("Inactive")}
+                        {!provider.loginAvailable
+                          ? t("Login unavailable")
+                          : provider.isEnabled
+                            ? t("Active")
+                            : t("Inactive")}
                       </Badge>
                     </Table.Td>
                     <Table.Td>
@@ -141,7 +151,9 @@ export default function SsoProviderList() {
                         <ActionIcon
                           variant="subtle"
                           color="gray"
-                          aria-label={t("Edit {{name}}", { name: provider.name })}
+                          aria-label={t("Edit {{name}}", {
+                            name: provider.name,
+                          })}
                           onClick={() => handleEdit(provider)}
                         >
                           <IconPencil size={16} />

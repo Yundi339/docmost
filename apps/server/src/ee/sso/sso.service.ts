@@ -16,6 +16,10 @@ import {
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import { CreateSsoProviderDto, UpdateSsoProviderDto } from './dto/sso.dto';
 import { SsoSecretService } from './sso-secret.service';
+import { SsoLoginCapabilityService } from '../../core/auth/services/sso-login-capability.service';
+import { SsoEnforcementService } from '../../core/auth/services/sso-enforcement.service';
+import { executeTx } from '@docmost/db/utils';
+import { KyselyTransaction } from '@docmost/db/types/kysely.types';
 
 type SsoProviderView = Omit<
   AuthProvider,
@@ -23,6 +27,7 @@ type SsoProviderView = Omit<
 > & {
   hasOidcClientSecret: boolean;
   hasLdapBindPassword: boolean;
+  loginAvailable: boolean;
 };
 
 type UpdateSsoProviderInput = Omit<UpdateSsoProviderDto, 'providerId'>;
@@ -33,6 +38,8 @@ export class SsoService {
     @InjectKysely() private readonly db: KyselyDB,
     private readonly secretService: SsoSecretService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    private readonly loginCapability: SsoLoginCapabilityService,
+    private readonly ssoEnforcement: SsoEnforcementService,
   ) {}
 
   async getProviders(
@@ -106,21 +113,49 @@ export class SsoService {
     actor: User,
   ): Promise<SsoProviderView> {
     this.assertOwner(actor);
-    const existing = await this.findProviderById(providerId, workspaceId);
-    const updateData = this.prepareUpdate(input);
+    const result = await executeTx(this.db, async (trx) => {
+      await this.ssoEnforcement.lockWorkspace(workspaceId, trx);
+      const existing = await this.findProviderById(
+        providerId,
+        workspaceId,
+        trx,
+      );
 
-    if (Object.keys(updateData).length === 0) {
+      if (input.isEnabled === true) {
+        this.loginCapability.assertLoginAvailable(existing.type);
+      } else if (
+        input.isEnabled === false &&
+        existing.isEnabled &&
+        this.loginCapability.isLoginAvailable(existing.type)
+      ) {
+        await this.ssoEnforcement.assertCanDeactivateProvider(
+          workspaceId,
+          providerId,
+          trx,
+        );
+      }
+
+      const updateData = this.prepareUpdate(input);
+      if (Object.keys(updateData).length === 0) {
+        return { existing, updated: existing, changed: false };
+      }
+
+      const updated = await trx
+        .updateTable('authProviders')
+        .set({ ...updateData, updatedAt: new Date() })
+        .where('id', '=', providerId)
+        .where('workspaceId', '=', workspaceId)
+        .where('deletedAt', 'is', null)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      return { existing, updated, changed: true };
+    });
+
+    const { existing, updated, changed } = result;
+    if (!changed) {
       return this.toProviderView(await this.protectStoredSecrets(existing));
     }
-
-    const updated = await this.db
-      .updateTable('authProviders')
-      .set({ ...updateData, updatedAt: new Date() })
-      .where('id', '=', providerId)
-      .where('workspaceId', '=', workspaceId)
-      .where('deletedAt', 'is', null)
-      .returningAll()
-      .executeTakeFirstOrThrow();
 
     this.auditService.log({
       event: AuditEvent.SSO_PROVIDER_UPDATED,
@@ -141,15 +176,34 @@ export class SsoService {
     actor: User,
   ): Promise<void> {
     this.assertOwner(actor);
-    const existing = await this.findProviderById(providerId, workspaceId);
+    const existing = await executeTx(this.db, async (trx) => {
+      await this.ssoEnforcement.lockWorkspace(workspaceId, trx);
+      const provider = await this.findProviderById(
+        providerId,
+        workspaceId,
+        trx,
+      );
+      if (
+        provider.isEnabled &&
+        this.loginCapability.isLoginAvailable(provider.type)
+      ) {
+        await this.ssoEnforcement.assertCanDeactivateProvider(
+          workspaceId,
+          providerId,
+          trx,
+        );
+      }
 
-    await this.db
-      .updateTable('authProviders')
-      .set({ deletedAt: new Date() })
-      .where('id', '=', providerId)
-      .where('workspaceId', '=', workspaceId)
-      .where('deletedAt', 'is', null)
-      .execute();
+      await trx
+        .updateTable('authProviders')
+        .set({ deletedAt: new Date() })
+        .where('id', '=', providerId)
+        .where('workspaceId', '=', workspaceId)
+        .where('deletedAt', 'is', null)
+        .execute();
+
+      return provider;
+    });
 
     this.auditService.log({
       event: AuditEvent.SSO_PROVIDER_DELETED,
@@ -159,8 +213,12 @@ export class SsoService {
     });
   }
 
-  private async findProviderById(providerId: string, workspaceId: string) {
-    const provider = await this.db
+  private async findProviderById(
+    providerId: string,
+    workspaceId: string,
+    executor: KyselyDB | KyselyTransaction = this.db,
+  ) {
+    const provider = await executor
       .selectFrom('authProviders')
       .selectAll()
       .where('id', '=', providerId)
@@ -272,6 +330,7 @@ export class SsoService {
       ...safeProvider,
       hasOidcClientSecret: Boolean(oidcClientSecret),
       hasLdapBindPassword: Boolean(ldapBindPassword),
+      loginAvailable: this.loginCapability.isLoginAvailable(provider.type),
     };
   }
 

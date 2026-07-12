@@ -33,12 +33,6 @@ export function throwIfEmailNotVerified(opts: {
   });
 }
 
-export function validateSsoEnforcement(workspace: Workspace) {
-  if (workspace.enforceSso) {
-    throw new BadRequestException('This workspace has enforced SSO login.');
-  }
-}
-
 export function validateAllowedEmail(userEmail: string, workspace: Workspace) {
   const emailParts = userEmail.split('@');
   const emailDomain = emailParts[1].toLowerCase();

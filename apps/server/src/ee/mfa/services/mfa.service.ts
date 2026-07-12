@@ -267,6 +267,7 @@ export class MfaService {
     code: string,
     context: {
       primaryAuth: 'password' | 'passkey' | 'sso';
+      ownerRecovery?: boolean;
       passkeyId?: string;
       authTime: string;
       tokenId: string;

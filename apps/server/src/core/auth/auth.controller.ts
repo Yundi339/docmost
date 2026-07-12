@@ -33,7 +33,6 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { PasswordResetDto } from './dto/password-reset.dto';
 import { VerifyUserTokenDto } from './dto/verify-user-token.dto';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { validateSsoEnforcement } from './auth.util';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import {
   AUDIT_SERVICE,
@@ -41,6 +40,7 @@ import {
 } from '../../integrations/audit/audit.service';
 import { LoginFlowService } from './services/login-flow.service';
 import { AuthCookieService } from './services/auth-cookie.service';
+import { SsoEnforcementService } from './services/sso-enforcement.service';
 
 @SkipThrottle({
   [AI_CHAT_THROTTLER]: true,
@@ -58,6 +58,7 @@ export class AuthController {
     private environmentService: EnvironmentService,
     private readonly loginFlowService: LoginFlowService,
     private readonly authCookieService: AuthCookieService,
+    private readonly ssoEnforcement: SsoEnforcementService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -68,14 +69,13 @@ export class AuthController {
     @Res({ passthrough: true }) res: FastifyReply,
     @Body() loginInput: LoginDto,
   ) {
-    validateSsoEnforcement(workspace);
-
     const user = await this.authService.authenticatePassword(
       loginInput,
       workspace.id,
     );
     const result = await this.loginFlowService.begin(user, workspace, {
       primaryAuth: 'password',
+      ownerRecovery: loginInput.ownerRecovery === true,
     });
     if (result.mfaToken) {
       this.authCookieService.setMfaCookie(res, result.mfaToken);
@@ -128,7 +128,7 @@ export class AuthController {
     @Body() forgotPasswordDto: ForgotPasswordDto,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    validateSsoEnforcement(workspace);
+    await this.ssoEnforcement.assertLocalAuthAllowed(workspace);
     return this.authService.forgotPassword(forgotPasswordDto, workspace);
   }
 
@@ -139,6 +139,7 @@ export class AuthController {
     @Body() passwordResetDto: PasswordResetDto,
     @AuthWorkspace() workspace: Workspace,
   ) {
+    await this.ssoEnforcement.assertLocalAuthAllowed(workspace);
     const result = await this.authService.passwordReset(
       passwordResetDto,
       workspace,

@@ -22,6 +22,7 @@ describe("audit display formatting", () => {
     expect(getAuditFieldLabel("oauthAuthorizationId")).toBe(
       "OAuth authorization ID",
     );
+    expect(getAuditFieldLabel("ownerRecovery")).toBe("Owner recovery");
     expect(getAuditFieldLabel("futureAuditField")).toBe("Future Audit Field");
   });
 

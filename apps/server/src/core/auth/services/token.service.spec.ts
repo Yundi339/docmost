@@ -74,4 +74,20 @@ describe('TokenService', () => {
       type: JwtType.ATTACHMENT,
     });
   });
+
+  it('preserves owner recovery through the signed MFA challenge', async () => {
+    const token = await service.generateMfaToken(user, 'workspace-id', {
+      primaryAuth: 'password',
+      ownerRecovery: true,
+      authTime: new Date().toISOString(),
+    });
+
+    expect(jwtService.decode(token)).toMatchObject({
+      sub: user.id,
+      workspaceId: 'workspace-id',
+      primaryAuth: 'password',
+      ownerRecovery: true,
+      type: JwtType.MFA_TOKEN,
+    });
+  });
 });

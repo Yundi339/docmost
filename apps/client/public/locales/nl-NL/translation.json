@@ -1537,5 +1537,11 @@
   "Changed share password": "Wachtwoord voor delen gewijzigd",
   "Removed share password": "Wachtwoord voor delen verwijderd",
   "Failed to unlock share": "Gedeelde pagina kon niet worden ontgrendeld",
-  "Sampled": "Bemonsterd"
+  "Sampled": "Bemonsterd",
+  "Login unavailable": "Aanmelden niet beschikbaar",
+  "Login is not available for this SSO provider type in this server version.": "Aanmelden met dit type SSO-provider is niet beschikbaar in deze serverversie.",
+  "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.": "SSO afdwingen vereist een ingeschakelde provider met aanmeldhandler en een workspace-eigenaar met een lokaal wachtwoord.",
+  "Owner recovery sign-in": "Herstelaanmelding voor eigenaar",
+  "This sign-in is limited to the workspace owner and still requires password and MFA.": "Deze aanmelding is beperkt tot de workspace-eigenaar en vereist nog steeds een wachtwoord en MFA.",
+  "Owner recovery": "Herstel door eigenaar"
 }

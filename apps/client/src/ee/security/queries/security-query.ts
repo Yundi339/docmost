@@ -51,6 +51,7 @@ export function useCreateSsoProviderMutation() {
       queryClient.invalidateQueries({
         queryKey: ["sso-providers"],
       });
+      queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
     onError: (error) => {
       const errorMessage = error["response"]?.data?.message;
@@ -70,6 +71,7 @@ export function useUpdateSsoProviderMutation() {
       queryClient.invalidateQueries({
         queryKey: ["sso-providers"],
       });
+      queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
     onError: (error) => {
       const errorMessage = error["response"]?.data?.message;
@@ -90,6 +92,7 @@ export function useDeleteSsoProviderMutation() {
       queryClient.invalidateQueries({
         queryKey: ["sso-providers"],
       });
+      queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
     onError: (error) => {
       const errorMessage = error["response"]?.data?.message;

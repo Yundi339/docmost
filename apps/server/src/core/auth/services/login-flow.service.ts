@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { User, Workspace } from '@docmost/db/types/entity.types';
@@ -19,11 +14,13 @@ import {
   IAuditService,
 } from '../../../integrations/audit/audit.service';
 import { AuditEvent, AuditResource } from '../../../common/events/audit-events';
+import { SsoEnforcementService } from './sso-enforcement.service';
 
 export type PrimaryAuthMethod = 'password' | 'passkey' | 'sso';
 
 export type LoginFlowContext = {
   primaryAuth: PrimaryAuthMethod;
+  ownerRecovery?: boolean;
   passkeyId?: string;
   authTime?: string;
   mfaVerifiedAt?: string;
@@ -47,6 +44,7 @@ export class LoginFlowService {
     private readonly environmentService: EnvironmentService,
     private readonly loginAttemptService: LoginAttemptService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    private readonly ssoEnforcement: SsoEnforcementService,
   ) {}
 
   async begin(
@@ -54,7 +52,11 @@ export class LoginFlowService {
     workspace: Workspace,
     context: LoginFlowContext,
   ): Promise<LoginFlowResult> {
-    this.assertUserCanLogin(user, workspace, context.primaryAuth);
+    const ownerRecoveryUsed = await this.assertUserCanLogin(
+      user,
+      workspace,
+      context,
+    );
 
     const mfaRecord = await this.db
       .selectFrom('userMfa')
@@ -67,6 +69,7 @@ export class LoginFlowService {
     const isMfaEnforced = workspace.enforceMfa === true;
     const authContext = {
       ...context,
+      ownerRecovery: ownerRecoveryUsed || undefined,
       authTime: context.authTime ?? new Date().toISOString(),
     };
 
@@ -85,7 +88,7 @@ export class LoginFlowService {
     }
 
     return {
-      authToken: await this.complete(user, workspace, authContext),
+      authToken: await this.completeValidated(user, workspace, authContext),
     };
   }
 
@@ -94,7 +97,23 @@ export class LoginFlowService {
     workspace: Workspace,
     context: LoginFlowContext,
   ): Promise<string> {
-    this.assertUserCanLogin(user, workspace, context.primaryAuth);
+    const ownerRecoveryUsed = await this.assertUserCanLogin(
+      user,
+      workspace,
+      context,
+    );
+    const validatedContext = {
+      ...context,
+      ownerRecovery: ownerRecoveryUsed || undefined,
+    };
+    return this.completeValidated(user, workspace, validatedContext);
+  }
+
+  private async completeValidated(
+    user: User,
+    workspace: Workspace,
+    validatedContext: LoginFlowContext,
+  ): Promise<string> {
     await this.userRepo.updateLastLogin(user.id, workspace.id);
     await this.loginAttemptService.clearForUser(workspace.id, user.id);
 
@@ -104,32 +123,42 @@ export class LoginFlowService {
       resourceType: AuditResource.USER,
       resourceId: user.id,
       metadata: {
-        source: context.primaryAuth,
-        ...(context.passkeyId ? { passkeyId: context.passkeyId } : {}),
-        ...(context.mfaVerifiedAt ? { mfaVerified: true } : {}),
+        source: validatedContext.primaryAuth,
+        ...(validatedContext.ownerRecovery ? { ownerRecovery: true } : {}),
+        ...(validatedContext.passkeyId
+          ? { passkeyId: validatedContext.passkeyId }
+          : {}),
+        ...(validatedContext.mfaVerifiedAt ? { mfaVerified: true } : {}),
       },
     });
 
     return this.sessionService.createSessionAndToken(user, {
-      primaryAuth: context.primaryAuth,
-      ...(context.passkeyId ? { passkeyId: context.passkeyId } : {}),
-      authTime: context.authTime ?? new Date().toISOString(),
-      ...(context.mfaVerifiedAt
-        ? { mfaVerifiedAt: context.mfaVerifiedAt }
+      primaryAuth: validatedContext.primaryAuth,
+      ...(validatedContext.passkeyId
+        ? { passkeyId: validatedContext.passkeyId }
+        : {}),
+      authTime: validatedContext.authTime ?? new Date().toISOString(),
+      ...(validatedContext.mfaVerifiedAt
+        ? { mfaVerifiedAt: validatedContext.mfaVerifiedAt }
         : {}),
     });
   }
 
-  private assertUserCanLogin(
+  private async assertUserCanLogin(
     user: User,
     workspace: Workspace,
-    primaryAuth: PrimaryAuthMethod,
-  ): void {
+    context: LoginFlowContext,
+  ): Promise<boolean> {
     if (!user || isUserDisabled(user)) {
       throw new UnauthorizedException('Authentication failed');
     }
-    if (workspace.enforceSso && primaryAuth !== 'sso') {
-      throw new BadRequestException('This workspace has enforced SSO login.');
+    let ownerRecoveryUsed = false;
+    if (context.primaryAuth !== 'sso') {
+      ownerRecoveryUsed = await this.ssoEnforcement.assertPrimaryAuthAllowed(
+        workspace,
+        user,
+        context.ownerRecovery === true,
+      );
     }
     throwIfEmailNotVerified({
       isCloud: this.environmentService.isCloud(),
@@ -138,5 +167,6 @@ export class LoginFlowService {
       workspaceId: workspace.id,
       appSecret: this.environmentService.getAppSecret(),
     });
+    return ownerRecoveryUsed;
   }
 }

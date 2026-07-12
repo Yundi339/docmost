@@ -44,6 +44,7 @@ import {
 } from '../../integrations/audit/audit.service';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import { PasskeySecurityNotificationService } from './passkey-security-notification.service';
+import { SsoEnforcementService } from '../../core/auth/services/sso-enforcement.service';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const CEREMONY_TIMEOUT_MS = 60 * 1000;
@@ -73,6 +74,7 @@ export class PasskeyService {
     private readonly loginAttemptService: LoginAttemptService,
     private readonly securityNotification: PasskeySecurityNotificationService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    private readonly ssoEnforcement: SsoEnforcementService,
   ) {}
 
   @Interval('passkey-challenge-cleanup', 15 * 60 * 1000)
@@ -446,9 +448,7 @@ export class PasskeyService {
     user: User,
     workspace: Workspace,
   ): Promise<void> {
-    if (workspace.enforceSso) {
-      throw new BadRequestException('This workspace has enforced SSO login.');
-    }
+    await this.ssoEnforcement.assertLocalAuthAllowed(workspace);
     const account = await this.userRepo.findById(user.id, workspace.id, {
       includePassword: true,
     });

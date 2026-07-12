@@ -177,6 +177,7 @@ export class MfaController {
       body.code,
       {
         primaryAuth: payload.primaryAuth,
+        ownerRecovery: payload.ownerRecovery,
         passkeyId: payload.passkeyId,
         authTime: payload.authTime,
         tokenId: payload.jti,

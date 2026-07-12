@@ -1537,5 +1537,11 @@
   "Changed share password": "Password della condivisione modificata",
   "Removed share password": "Password della condivisione rimossa",
   "Failed to unlock share": "Impossibile sbloccare la condivisione",
-  "Sampled": "Campionato"
+  "Sampled": "Campionato",
+  "Login unavailable": "Accesso non disponibile",
+  "Login is not available for this SSO provider type in this server version.": "L’accesso per questo tipo di provider SSO non è disponibile in questa versione del server.",
+  "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.": "L’imposizione di SSO richiede un provider abilitato con gestore di accesso e un proprietario dello spazio di lavoro con password locale.",
+  "Owner recovery sign-in": "Accesso di recupero del proprietario",
+  "This sign-in is limited to the workspace owner and still requires password and MFA.": "Questo accesso è riservato al proprietario dello spazio di lavoro e richiede comunque password e MFA.",
+  "Owner recovery": "Recupero del proprietario"
 }

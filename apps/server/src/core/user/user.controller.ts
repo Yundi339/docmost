@@ -17,6 +17,7 @@ import { User, Workspace } from '@docmost/db/types/entity.types';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
+import { SsoEnforcementService } from '../auth/services/sso-enforcement.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -25,6 +26,7 @@ export class UserController {
     private readonly userService: UserService,
     private readonly workspaceRepo: WorkspaceRepo,
     @InjectKysely() private readonly db: KyselyDB,
+    private readonly ssoEnforcement: SsoEnforcementService,
   ) {}
 
   @HttpCode(HttpStatus.OK)
@@ -49,6 +51,7 @@ export class UserController {
 
     const workspaceInfo = {
       ...rest,
+      enforceSso: await this.ssoEnforcement.isEnforced(workspace),
       memberCount,
       invitationCount,
     };

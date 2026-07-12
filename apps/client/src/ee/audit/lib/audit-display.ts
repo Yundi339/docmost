@@ -40,6 +40,7 @@ const auditFieldLabels: Record<string, string> = {
   role: "Role",
   status: "Status",
   source: "Source",
+  ownerRecovery: "Owner recovery",
   passkeyId: "Passkey ID",
   mcpMode: "MCP mode",
   disablePublicSharing: "Disable public sharing",

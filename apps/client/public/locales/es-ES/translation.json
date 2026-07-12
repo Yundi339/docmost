@@ -1537,5 +1537,11 @@
   "Changed share password": "Cambió la contraseña del enlace",
   "Removed share password": "Eliminó la contraseña del enlace",
   "Failed to unlock share": "No se pudo desbloquear el enlace",
-  "Sampled": "Muestreado"
+  "Sampled": "Muestreado",
+  "Login unavailable": "Inicio de sesión no disponible",
+  "Login is not available for this SSO provider type in this server version.": "El inicio de sesión para este tipo de proveedor SSO no está disponible en esta versión del servidor.",
+  "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.": "Exigir SSO requiere un proveedor habilitado con controlador de inicio de sesión y un propietario del espacio de trabajo con contraseña local.",
+  "Owner recovery sign-in": "Inicio de recuperación del propietario",
+  "This sign-in is limited to the workspace owner and still requires password and MFA.": "Este inicio de sesión está limitado al propietario del espacio de trabajo y aún requiere contraseña y MFA.",
+  "Owner recovery": "Recuperación del propietario"
 }

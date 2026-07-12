@@ -1537,5 +1537,11 @@
   "Changed share password": "Пароль общего доступа изменён",
   "Removed share password": "Пароль общего доступа удалён",
   "Failed to unlock share": "Не удалось разблокировать общий доступ",
-  "Sampled": "Выборочно"
+  "Sampled": "Выборочно",
+  "Login unavailable": "Вход недоступен",
+  "Login is not available for this SSO provider type in this server version.": "Вход для этого типа поставщика SSO недоступен в данной версии сервера.",
+  "SSO enforcement requires an enabled provider with a login handler and a workspace owner with a local password.": "Для принудительного SSO нужен включённый поставщик с обработчиком входа и владелец рабочего пространства с локальным паролем.",
+  "Owner recovery sign-in": "Аварийный вход владельца",
+  "This sign-in is limited to the workspace owner and still requires password and MFA.": "Этот вход доступен только владельцу рабочего пространства и по-прежнему требует пароль и MFA.",
+  "Owner recovery": "Восстановление владельца"
 }
