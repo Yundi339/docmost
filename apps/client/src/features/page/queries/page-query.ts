@@ -1,6 +1,5 @@
 import {
   InfiniteData,
-  QueryKey,
   useInfiniteQuery,
   UseInfiniteQueryResult,
   useMutation,
@@ -8,6 +7,7 @@ import {
   UseQueryResult,
   keepPreviousData,
 } from "@tanstack/react-query";
+import type { QueryKey } from "@tanstack/react-query";
 import {
   createPage,
   deletePage,
@@ -42,6 +42,7 @@ import { treeDataAtom } from "@/features/page/tree/atoms/tree-data-atom";
 import { treeModel } from "@/features/page/tree/model/tree-model";
 import { SpaceTreeNode } from "@/features/page/tree/types";
 import { useQueryEmit } from "@/features/websocket/use-query-emit";
+import { invalidateRemovedPageCache } from "./removed-page-cache";
 
 export const fullSidebarTreeQueryKey = (spaceId: string) =>
   ["sidebar-full-tree", spaceId] as const;
@@ -135,13 +136,7 @@ export function useRemovePageMutation() {
     onSuccess: (_, pageId) => {
       notifications.show({ message: t("Page moved to trash") });
 
-      // Stamp deletedAt so a re-visit shows the trash banner, not stale state.
-      const cached = queryClient.getQueryData<IPage>(["pages", pageId]);
-      if (cached) {
-        const stamped = { ...cached, deletedAt: new Date() };
-        queryClient.setQueryData(["pages", cached.id], stamped);
-        queryClient.setQueryData(["pages", cached.slugId], stamped);
-      }
+      invalidateRemovedPageCache(queryClient, pageId);
 
       invalidateOnDeletePage(pageId);
       queryClient.invalidateQueries({

@@ -178,6 +178,37 @@ export function SpaceSidebar() {
               SpaceCaslSubject.Page,
             ) && (
               <UnstyledButton
+                component={Link}
+                to={`/s/${spaceSlug}/trash`}
+                className={clsx(
+                  classes.menu,
+                  location.pathname.toLowerCase() ===
+                    `/s/${spaceSlug}/trash`.toLowerCase()
+                    ? classes.activeButton
+                    : "",
+                )}
+                onClick={() => {
+                  if (mobileSidebarOpened) {
+                    toggleMobileSidebar();
+                  }
+                }}
+              >
+                <div className={classes.menuItemInner}>
+                  <IconTrash
+                    size={18}
+                    className={classes.menuItemIcon}
+                    stroke={2}
+                  />
+                  <span>{t("Trash")}</span>
+                </div>
+              </UnstyledButton>
+            )}
+
+            {spaceAbility.can(
+              SpaceCaslAction.Manage,
+              SpaceCaslSubject.Page,
+            ) && (
+              <UnstyledButton
                 className={classes.menu}
                 onClick={() => {
                   handleCreatePage();
