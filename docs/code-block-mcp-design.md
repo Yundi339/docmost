@@ -1,6 +1,7 @@
 # Code Block and MCP Maintenance Design
 
-> Status: implemented and verified on `feat/native-database-fusion`.
+> Status: implemented and verified in `efba9a38` on
+> `feat/native-database-fusion`.
 > The stable Todo and implementation reviews remain in
 > [`forkmost-integration.md`](./forkmost-integration.md).
 
@@ -252,3 +253,88 @@ the existing web trash UI. Existing credentials remain valid with their old scop
   not receive destructive access implicitly.
 - Comment deletion remains intentionally deferred because the current operation
   is a hard delete and cannot satisfy reversible-deletion semantics.
+
+## 9. Implementation Map
+
+| Concern                       | Implementation                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| Code block schema             | `packages/editor-ext/src/lib/custom-code-block/custom-code-block.ts`           |
+| Code block UI                 | `apps/client/src/features/editor/components/code-block/code-block-view.tsx`    |
+| Safe source download          | `apps/client/src/features/editor/components/code-block/code-block-download.ts` |
+| MCP session transport         | `apps/server/src/ee/mcp/mcp.service.ts`                                        |
+| Tool registration             | `apps/server/src/ee/mcp/mcp-tool-registry.service.ts`                          |
+| Scope, DTO, audit, and errors | `apps/server/src/ee/mcp/mcp-tool-executor.service.ts`                          |
+| Shared MCP page access        | `apps/server/src/ee/mcp/mcp-tool-access.service.ts`                            |
+| Tool providers                | `apps/server/src/ee/mcp/tools/*.tools.ts`                                      |
+| Shared trash/restore workflow | `apps/server/src/core/page/services/page-lifecycle.service.ts`                 |
+| API Key scopes                | `apps/server/src/core/api-key/api-key-scopes.ts`                               |
+| OAuth scopes                  | `apps/server/src/ee/oauth/oauth.constants.ts`                                  |
+
+There is no database migration. Code block preferences are ProseMirror node
+attributes, and the new MCP scope is stored in existing scope arrays.
+
+## 10. Operator and User Flow
+
+### 10.1 Code blocks
+
+In edit mode, the code block toolbar contains the optional title field,
+language selector, wrap toggle, copy action, and download action. Mermaid blocks
+retain their source/preview toggle. Read-only pages show the title when present
+and reveal copy/download actions without reserving an empty title row.
+
+`wrap` only changes CSS presentation. Copy and download always use the original
+source text. Standard Markdown export intentionally omits `title` and `wrap`.
+
+### 10.2 Enabling reversible MCP maintenance
+
+- API Key: choose the explicit `MCP maintenance` preset or add
+  `mcp:destructive` as a custom scope.
+- OAuth: an owner keeps access in read-write mode and enables
+  `Destructive MCP tools` for the ChatGPT client.
+- Existing OAuth authorizations are not expanded. A client must request the new
+  scope and the user must complete authorization again.
+- Scope or workspace-mode changes invalidate existing MCP sessions; reconnect
+  before invoking tools with the new permission set.
+
+Example tool inputs:
+
+```json
+{ "pageId": "00000000-0000-4000-8000-000000000000", "confirm": true }
+```
+
+```json
+{ "pageId": "00000000-0000-4000-8000-000000000000" }
+```
+
+The first input is for `trash_page`; the second is for `restore_page`.
+`trash_page` rejects missing or false confirmation. Neither tool permanently
+deletes a page.
+
+### 10.3 Audit behavior
+
+Each successful maintenance operation produces:
+
+1. the existing page business event (`page.trashed` or `page.restored`);
+2. an `mcp.tool_called` event identifying the credential, tool, target page,
+   result, and success state.
+
+The audit resource resolver adds the space name, page path, and title when the
+viewer is allowed to read the audit entry. Page content, comment content, API
+keys, OAuth tokens, and authorization codes are not stored in MCP audit metadata.
+
+## 11. Verification Record
+
+| Verification               | Result                                                                                                                        |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Server Jest                | 69 suites, 372 tests passed                                                                                                   |
+| Client Vitest              | 13 files, 106 tests passed                                                                                                    |
+| MCP legacy contract        | 20 tools; names, order, descriptions, Zod types, optional flags, enum/literal values, scopes, and annotations snapshot passed |
+| TypeScript                 | editor extension, server, and client passed                                                                                   |
+| ESLint                     | no errors; existing client warnings remain                                                                                    |
+| Production builds          | editor extension, server, and client passed                                                                                   |
+| Nest dependency resolution | reached application database bootstrap without an unknown dependency error                                                    |
+| Privacy                    | added lines and final tracked tree passed private deployment marker, server path, private key, and common token scans         |
+
+The local production-start probe stopped at unavailable local database/cache
+dependencies; it was not an end-to-end deployment test. Sidebar event behavior
+is covered by the existing page lifecycle WebSocket listener tests.

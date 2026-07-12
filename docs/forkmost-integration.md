@@ -817,7 +817,7 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 - 遗留风险和下一步：`FM-REL-004` 的两个真实浏览器部署升级验证不属于本次两项功能，
   仍保持未勾选；上线后可再做一次反向代理下的 Cookie/SEO 人工验收。
 
-### 2026-07-12：代码块增强、MCP 模块化与可逆页面维护
+### 2026-07-12：代码块增强、MCP 模块化与可逆页面维护（`efba9a38`）
 
 - 完成 Todo：`FM-CODE-001` 至 `FM-CODE-006`、`FM-MCP-001` 至
   `FM-MCP-007`、`FM-MCP-010` 至 `FM-MCP-014`，以及实施中发现的
@@ -847,6 +847,8 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
   增加 Todo、修复并回归。
 - 遗留风险和下一步：`FM-MCP-008/009` 保持未勾选；评论当前是硬删除，在设计并实现
   comment soft-delete/restore 前不得增加 MCP 删除评论工具。
+- 详细设计、模块落点、授权方式、工具输入和最终验收记录见
+  [`code-block-mcp-design.md`](./code-block-mcp-design.md)。
 
 ### 复盘模板
 
