@@ -84,7 +84,7 @@ const SpaceGraphCanvas = forwardRef<SpaceGraphCanvasApi, Props>(
             },
           },
           {
-            selector: "node[centered = true]",
+            selector: "node[?centered]",
             style: {
               "background-color": "#2f9e44",
               "border-color": "#2b8a3e",
@@ -129,7 +129,6 @@ const SpaceGraphCanvas = forwardRef<SpaceGraphCanvasApi, Props>(
             : { name: "grid", animate: false, avoidOverlap: true },
         minZoom: 0.2,
         maxZoom: 2.5,
-        wheelSensitivity: 0.2,
       });
 
       graph.on("tap", "node", (event) => {
