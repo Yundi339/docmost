@@ -19,7 +19,7 @@ import {
 import { IAuditLog } from "@/ee/audit/types/audit.types";
 import { CustomAvatar } from "@/components/ui/custom-avatar";
 import { getEventLabel } from "@/ee/audit/lib/audit-event-labels";
-import { formattedDate } from "@/lib/time";
+import { formattedDateWithSeconds } from "@/lib/time";
 import { buildPageUrl } from "@/features/page/page.utils";
 import NoTableResults from "@/components/common/no-table-results";
 import classes from "./audit-logs.module.css";
@@ -27,6 +27,7 @@ import {
   formatAuditPrimitive,
   getAuditFieldLabel,
   getMcpToolLabel,
+  getVisibleAuditMetadataEntries,
 } from "@/ee/audit/lib/audit-display";
 
 type AuditLogsTableProps = {
@@ -230,9 +231,7 @@ function ChangesDiff({ changes }: { changes: IAuditLog["changes"] }) {
 
 function MetadataDisplay({ metadata }: { metadata: Record<string, any> }) {
   const { t } = useTranslation();
-  const entries = Object.entries(metadata).filter(
-    ([key]) => key !== "resourceSnapshot",
-  );
+  const entries = getVisibleAuditMetadataEntries(metadata);
   if (entries.length === 0) return null;
 
   return (
@@ -524,7 +523,7 @@ export default function AuditLogsTable({
 
                     <Table.Td>
                       <Text fz="sm" style={{ whiteSpace: "nowrap" }}>
-                        {formattedDate(new Date(entry.createdAt))}
+                        {formattedDateWithSeconds(new Date(entry.createdAt))}
                       </Text>
                     </Table.Td>
                   </Table.Tr>

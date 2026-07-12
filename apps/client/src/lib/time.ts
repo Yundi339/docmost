@@ -23,3 +23,18 @@ export function formattedDate(date: Date) {
     return formatLocalized(date, "MMM dd, yyyy, h:mma", "PPp", locale);
   }
 }
+
+export function formattedDateWithSeconds(date: Date) {
+  const locale = getDateFnsLocale();
+  if (isToday(date)) {
+    return i18n.t("Today, {{time}}", {
+      time: formatLocalized(date, "h:mm:ssa", "pp", locale),
+    });
+  } else if (isYesterday(date)) {
+    return i18n.t("Yesterday, {{time}}", {
+      time: formatLocalized(date, "h:mm:ssa", "pp", locale),
+    });
+  } else {
+    return formatLocalized(date, "MMM dd, yyyy, h:mm:ssa", "PPpp", locale);
+  }
+}

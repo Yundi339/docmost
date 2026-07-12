@@ -3,6 +3,7 @@ import {
   formatAuditPrimitive,
   getAuditFieldLabel,
   getMcpToolLabel,
+  getVisibleAuditMetadataEntries,
 } from "./audit-display";
 
 const t = (key: string) =>
@@ -36,5 +37,26 @@ describe("audit display formatting", () => {
     expect(formatAuditPrimitive("step_up_failed", "reason", t as any)).toBe(
       "二次验证失败",
     );
+  });
+
+  it("hides internal snapshots and duplicate generic credential IDs", () => {
+    expect(
+      getVisibleAuditMetadataEntries({
+        authType: "api_key",
+        credentialId: "key-id",
+        apiKeyId: "key-id",
+        resourceSnapshot: { id: "page-id" },
+      }),
+    ).toEqual([
+      ["authType", "api_key"],
+      ["apiKeyId", "key-id"],
+    ]);
+
+    expect(
+      getVisibleAuditMetadataEntries({
+        credentialId: "session-credential",
+        apiKeyId: "key-id",
+      }),
+    ).toContainEqual(["credentialId", "session-credential"]);
   });
 });

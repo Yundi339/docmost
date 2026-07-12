@@ -103,6 +103,25 @@ export function getMcpToolLabel(toolName: string): string {
   return mcpToolLabels[toolName] ?? humanizeIdentifier(toolName);
 }
 
+export function getVisibleAuditMetadataEntries(
+  metadata: Record<string, unknown>,
+): [string, unknown][] {
+  const credentialId = metadata.credentialId;
+  const specificCredentialIds = [
+    metadata.apiKeyId,
+    metadata.oauthAuthorizationId,
+  ];
+
+  return Object.entries(metadata).filter(
+    ([key]) =>
+      key !== "resourceSnapshot" &&
+      !(
+        key === "credentialId" &&
+        specificCredentialIds.some((value) => value === credentialId)
+      ),
+  );
+}
+
 export function formatAuditPrimitive(
   value: unknown,
   fieldKey: string,
