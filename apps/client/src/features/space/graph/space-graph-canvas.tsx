@@ -47,6 +47,9 @@ const SpaceGraphCanvas = forwardRef<SpaceGraphCanvasApi, Props>(
     useEffect(() => {
       if (!containerRef.current) return;
 
+      const touchOptimized =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(any-pointer: coarse)").matches;
       const graph = cytoscape({
         container: containerRef.current,
         elements: [
@@ -79,8 +82,8 @@ const SpaceGraphCanvas = forwardRef<SpaceGraphCanvasApi, Props>(
               "text-wrap": "ellipsis",
               "text-valign": "bottom",
               "text-margin-y": 8,
-              height: 28,
-              width: 28,
+              height: touchOptimized ? 40 : 28,
+              width: touchOptimized ? 40 : 28,
             },
           },
           {
@@ -89,8 +92,8 @@ const SpaceGraphCanvas = forwardRef<SpaceGraphCanvasApi, Props>(
               "background-color": "#2f9e44",
               "border-color": "#2b8a3e",
               color: "#1b4332",
-              height: 36,
-              width: 36,
+              height: touchOptimized ? 48 : 36,
+              width: touchOptimized ? 48 : 36,
             },
           },
           {
@@ -99,8 +102,8 @@ const SpaceGraphCanvas = forwardRef<SpaceGraphCanvasApi, Props>(
               "background-color": "#1971c2",
               "border-color": "#1864ab",
               color: "#0b3d66",
-              height: 36,
-              width: 36,
+              height: touchOptimized ? 48 : 36,
+              width: touchOptimized ? 48 : 36,
             },
           },
           {
@@ -129,6 +132,9 @@ const SpaceGraphCanvas = forwardRef<SpaceGraphCanvasApi, Props>(
             : { name: "grid", animate: false, avoidOverlap: true },
         minZoom: 0.2,
         maxZoom: 2.5,
+        boxSelectionEnabled: false,
+        selectionType: "single",
+        autoungrabify: touchOptimized,
       });
 
       graph.on("tap", "node", (event) => {

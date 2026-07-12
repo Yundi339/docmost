@@ -27,6 +27,8 @@
   width: 100%;
   height: 100%;
   outline: none;
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .canvas:focus-visible {
@@ -47,6 +49,19 @@
   min-height: 58px;
   border-bottom: 1px solid var(--mantine-color-default-border);
   padding: var(--mantine-spacing-sm) 0;
+}
+
+.pageLink {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+}
+
+@media (any-pointer: coarse) {
+  .pageLink {
+    min-height: 44px;
+  }
 }
 
 @media (max-width: 48em) {

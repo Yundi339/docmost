@@ -165,6 +165,7 @@ export default function SpaceGraphView({ space }: Props) {
             <ActionIcon
               variant="subtle"
               color="gray"
+              size="lg"
               onClick={() => {
                 setCenterPageId(undefined);
                 setSelectedId(null);
@@ -227,6 +228,7 @@ export default function SpaceGraphView({ space }: Props) {
                 <ActionIcon
                   variant="subtle"
                   color="gray"
+                  size="lg"
                   onClick={() => canvasRef.current?.zoomIn()}
                   aria-label={t("Zoom in")}
                 >
@@ -237,6 +239,7 @@ export default function SpaceGraphView({ space }: Props) {
                 <ActionIcon
                   variant="subtle"
                   color="gray"
+                  size="lg"
                   onClick={() => canvasRef.current?.zoomOut()}
                   aria-label={t("Zoom out")}
                 >
@@ -247,6 +250,7 @@ export default function SpaceGraphView({ space }: Props) {
                 <ActionIcon
                   variant="subtle"
                   color="gray"
+                  size="lg"
                   onClick={() => canvasRef.current?.fit()}
                   aria-label={t("Fit view")}
                 >
@@ -271,6 +275,7 @@ export default function SpaceGraphView({ space }: Props) {
                   <Tooltip label={t("Focus page")}>
                     <ActionIcon
                       variant="default"
+                      size="lg"
                       onClick={() => setCenterPageId(selected.id)}
                       aria-label={t("Focus page")}
                     >
@@ -286,6 +291,7 @@ export default function SpaceGraphView({ space }: Props) {
                         selected.title ?? undefined,
                       )}
                       variant="default"
+                      size="lg"
                       aria-label={t("Open page")}
                     >
                       <IconExternalLink size={18} />
@@ -318,6 +324,7 @@ export default function SpaceGraphView({ space }: Props) {
                     <Table.Td>
                       <UnstyledButton
                         component={Link}
+                        className={classes.pageLink}
                         to={buildPageUrl(
                           space.slug,
                           node.slugId,
