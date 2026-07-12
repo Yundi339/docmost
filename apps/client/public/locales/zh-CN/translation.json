@@ -1003,7 +1003,6 @@
   "SAML": "SAML",
   "SSO": "SSO",
   "SSO (SAML, OIDC, LDAP)": "单点登录（SAML、OIDC、LDAP）",
-  "SSO login for this provider type is not available in this server version.": "此服务器版本暂不支持该类型的 SSO 登录。",
   "Save": "保存",
   "Save & Exit": "保存并退出",
   "Save codes": "保存代码",

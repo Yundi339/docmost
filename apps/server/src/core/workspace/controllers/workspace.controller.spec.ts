@@ -82,37 +82,21 @@ describe('WorkspaceController', () => {
     expect(workspaceService.update).not.toHaveBeenCalled();
   });
 
-  it.each([
-    { enforceSso: true },
-    { enforceSso: false },
-    { emailDomains: ['example.com'] },
-  ])('blocks admins from changing SSO settings: %j', async (settings) => {
-    await expect(
-      controller.updateWorkspace(
-        response(),
-        dto(settings),
-        user(UserRole.ADMIN),
-        workspace(),
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+  it.each([{ enforceSso: true }, { emailDomains: ['example.com'] }])(
+    'blocks admins from changing SSO settings: %j',
+    async (settings) => {
+      await expect(
+        controller.updateWorkspace(
+          response(),
+          dto(settings),
+          user(UserRole.ADMIN),
+          workspace(),
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
 
-    expect(workspaceService.update).not.toHaveBeenCalled();
-  });
-
-  it('allows an owner with an active session to disable enforced SSO', async () => {
-    await expect(
-      controller.updateWorkspace(
-        response(),
-        dto({ enforceSso: false }),
-        user(UserRole.OWNER),
-        workspace(),
-      ),
-    ).resolves.toMatchObject({ id: 'workspace-id' });
-
-    expect(workspaceService.update).toHaveBeenCalledWith('workspace-id', {
-      enforceSso: false,
-    });
-  });
+      expect(workspaceService.update).not.toHaveBeenCalled();
+    },
+  );
 
   it('allows owners to change member management settings', async () => {
     await expect(

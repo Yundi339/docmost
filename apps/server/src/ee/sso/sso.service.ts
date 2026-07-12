@@ -16,7 +16,6 @@ import {
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import { CreateSsoProviderDto, UpdateSsoProviderDto } from './dto/sso.dto';
 import { SsoSecretService } from './sso-secret.service';
-import { SsoLoginCapabilityService } from '../../core/auth/services/sso-login-capability.service';
 
 type SsoProviderView = Omit<
   AuthProvider,
@@ -24,7 +23,6 @@ type SsoProviderView = Omit<
 > & {
   hasOidcClientSecret: boolean;
   hasLdapBindPassword: boolean;
-  loginAvailable: boolean;
 };
 
 type UpdateSsoProviderInput = Omit<UpdateSsoProviderDto, 'providerId'>;
@@ -35,7 +33,6 @@ export class SsoService {
     @InjectKysely() private readonly db: KyselyDB,
     private readonly secretService: SsoSecretService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
-    private readonly loginCapability: SsoLoginCapabilityService,
   ) {}
 
   async getProviders(
@@ -110,9 +107,6 @@ export class SsoService {
   ): Promise<SsoProviderView> {
     this.assertOwner(actor);
     const existing = await this.findProviderById(providerId, workspaceId);
-    if (input.isEnabled === true) {
-      this.loginCapability.assertLoginAvailable(existing.type);
-    }
     const updateData = this.prepareUpdate(input);
 
     if (Object.keys(updateData).length === 0) {
@@ -278,7 +272,6 @@ export class SsoService {
       ...safeProvider,
       hasOidcClientSecret: Boolean(oidcClientSecret),
       hasLdapBindPassword: Boolean(ldapBindPassword),
-      loginAvailable: this.loginCapability.isLoginAvailable(provider.type),
     };
   }
 

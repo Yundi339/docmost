@@ -938,7 +938,6 @@
   "SAML": "SAML",
   "SSO": "SSO",
   "SSO (SAML, OIDC, LDAP)": "SSO (SAML, OIDC, LDAP)",
-  "SSO login for this provider type is not available in this server version.": "Вхід через SSO для цього типу постачальника недоступний у цій версії сервера.",
   "Save": "Зберегти",
   "Save & Exit": "Зберегти та вийти",
   "Save codes": "Зберегти коди",

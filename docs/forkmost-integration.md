@@ -89,7 +89,7 @@
 | ---------------------------- | ---------------- | ------------------------------------------------ |
 | SSO Provider 管理安全        | 已完成           | owner-only、DTO、密钥加密/脱敏和审计已落地       |
 | OIDC 实际登录                | 未开发           | 前端生成登录 URL，服务端无 login/callback 路由   |
-| SAML/LDAP/Google 实际登录    | 未开发           | 可启用但无对应服务端认证处理器，存在锁死风险     |
+| SSO 启用策略                 | 已有             | owner 自主配置并决定是否启用，不作为当前缺陷     |
 | 公开分享密码                 | 未开发           | 高价值，需要统一分享访问 Guard                   |
 | 成员目录隐私                 | 未开发           | 普通成员搜索当前会返回全工作区用户及邮箱         |
 | 代码块标题/换行/下载         | 未开发           | 低风险、高频技术文档能力                         |
@@ -114,8 +114,7 @@
 
 1. 修复 Backlink 更新错表。
 2. 修复搜索建议缓存 key。
-3. 阻止未实现的 SSO 类型被启用或用于 `enforceSso`，避免工作区锁死。
-4. 为上述缺陷增加回归测试。
+3. 为上述缺陷增加回归测试。
 
 ### 阶段 1：高价值、低到中风险体验
 
@@ -170,29 +169,16 @@
 - 覆盖提及、页面选择器和成员/群组选择器切换测试。
 - 目录隐私上线时主动失效旧 suggestion cache。
 
-#### BUG-FM-003：未实现的 SSO 可以启用并锁死登录
+#### 排除项：SSO 可用性限制
 
-当前公开工作区信息会返回启用的 Provider，登录页会跳转至
-`/api/sso/{type}/{providerId}/login`；服务端 `SsoController` 只有管理接口。
-SSO 和 `enforceSso` 都是 owner 主动选择的设置，不存在普通用户越权开启问题。
-问题在于系统此前允许 owner 选择一个没有登录处理器的配置：启用 Provider 并打开
-`enforceSso` 后，密码与 Passkey 会被隐藏/拒绝，但 SSO 路由仍不存在。
+经业务确认，SSO Provider 和 `enforceSso` 都由 owner 自主选择是否开启。项目不维护
+硬编码的“可用 Provider 类型”名单，也不因当前代码库是否包含特定登录处理器而禁止
+owner 启用配置。因此原 `BUG-FM-003` 不是当前缺陷，相关 `BUG-FM-004`、
+`FM-P0-001` 和 `FM-P0-002` 也没有实施前提；误加的运行时限制已撤回。
 
-短期修复：
-
-- 服务端只允许“已有认证处理器”的类型设置 `isEnabled=true`。
-- `enforceSso` 校验可用 Provider，而不是只检查数据库中启用标记。
-- 前端对未实现类型显示“暂不可用”，不能显示可启用控件和可点击登录按钮。
-- 已有会话的 owner 始终可以关闭 Provider 和 `enforceSso`；普通管理员仍不能修改。
-- 不增加网页密码绕过、环境变量后门或自动改写 owner 选择。
-
-OIDC 完成后只解除 OIDC 的限制，SAML、LDAP、Google 必须分别通过同样验收。
-
-#### BUG-FM-004：P0 初版造成 core 反向依赖可选 EE 模块
-
-P0 实施复核时发现，若 `WorkspaceModule` 为复用 capability 而直接导入 `SsoModule`，
-会破坏当前项目通过 `EeModule` 可选加载企业模块的边界。最终实现将 capability 下沉为
-无 EE 依赖的 core auth 子模块，`WorkspaceModule` 和 EE `SsoModule` 单向依赖它。
+保留的安全边界是：SSO 管理接口仍然仅 owner 可调用，DTO、workspace 绑定、密钥
+加密/脱敏和审计不变。未来实现具体 OIDC/SAML/LDAP 登录流程时，再按对应协议单独完成
+回调校验、账号绑定和恢复测试。
 
 ### 6.2 OIDC 登录
 
@@ -567,10 +553,10 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 - [x] `BUG-FM-001` 修复 `BacklinkRepo.updateBacklink()` 更新错表并增加回归测试。
 - [x] `BUG-FM-002` 修复搜索建议 Query key 缺少完整上下文并增加切换场景测试。
-- [x] `BUG-FM-003` 阻止没有认证处理器的 SSO Provider 被启用或用于强制 SSO。
-- [x] `BUG-FM-004` 修复 P0 初版的 core 到可选 EE 反向模块依赖。
-- [x] `FM-P0-001` 增加 SSO 可用性服务端测试：enable、public data、enforce 和登录路由一致。
-- [x] `FM-P0-002` 验证已有会话的 owner 可以关闭无效 SSO，admin 不能修改且不增加登录绕过。
+- [x] `BUG-FM-003` 关闭（不适用）：SSO 是否启用是 owner 的自主配置，不增加 Provider 类型硬限制。
+- [x] `BUG-FM-004` 关闭（不适用）：仅由误判的 `BUG-FM-003` 实现引出，相关代码已撤回。
+- [x] `FM-P0-001` 关闭（不适用）：不为硬编码 SSO 可用性名单增加测试。
+- [x] `FM-P0-002` 关闭（不适用）：owner-only 权限由既有 SSO 管理测试覆盖。
 
 ### 10.3 OIDC
 
@@ -696,32 +682,24 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 - 用户可见变化：无；本次只建立设计和实施约束。
 - 鉴权/审计/数据库：未改运行时代码。
 - 验证：对照当前 SSO、搜索、Backlink、MCP、编辑器、分享、认证和技术栈代码。
-- 新发现缺陷：`BUG-FM-001`、`BUG-FM-002`、`BUG-FM-003`。
-- 关键修正：SSO Provider 管理安全已完成，但 OIDC/SAML/LDAP/Google 认证处理器未完成，
-  不能把“设置页可配置”等同于“SSO 可登录”。
+- 新发现缺陷：`BUG-FM-001`、`BUG-FM-002`。原 `BUG-FM-003` 经业务确认不适用。
+- 关键修正：SSO Provider 管理安全已完成；是否启用由 owner 决定，不增加硬编码的
+  Provider 可用性限制。
 
-### 2026-07-12：P0 正确性与 SSO 配置有效性
+### 2026-07-12：P0 正确性修复与 SSO 误判撤回
 
-- 完成 Todo：`BUG-FM-001`、`BUG-FM-002`、`BUG-FM-003`、`BUG-FM-004`、
-  `FM-P0-001`、`FM-P0-002`。
-- 用户可见变化：没有登录处理器的 SSO 类型显示不可用且不能开启；历史已启用记录
-  仍允许 owner 单向关闭。登录页不会展示这些无效 Provider。
-- 前端实现与兼容：使用现有 React、Mantine、i18next 和 TanStack Query；搜索建议
-  cache key 包含用户/群组/页面、空间和 limit 上下文；新增提示同步 12 个 locale。
-- 后端鉴权与资源边界：在 core auth 子模块新增 `SsoLoginCapabilityService`，作为
-  Provider 启用、公开展示和强制 SSO 校验的唯一能力来源；core 不反向依赖可选 EE。
-  owner-only 规则保持不变，没有新增登录绕过。
-- 审计与敏感数据：无新增凭据和数据库字段；被拒绝的配置不产生状态变更，现有 SSO
-  创建、更新、删除审计保持不变。
-- 数据库迁移与回滚：无迁移。修复 `BacklinkRepo` 只更新 `backlinks` 指定 ID。
-- 测试和人工验证：P0 定向 server 25 项、client 9 项通过；完整 server 59 个 suite、
-  334 项和完整 client 10 个文件、91 项通过；server/client production build、受影响
-  文件 ESLint、Prettier、版本同步和 `git diff --check` 通过。
-- 性能/部署验证：没有增加网络请求和首屏依赖；capability 判断为内存 Set，公开
-  Provider 在现有查询结果上做有界过滤。
-- 新发现 BUG Todo：`BUG-FM-004`，已在本次复核中修复并通过构建。
-- 遗留风险和下一步：所有 SSO 类型当前均不可用，这是服务端没有 login/callback
-  处理器的真实状态。OIDC 实现完成后才能在 capability 注册并解除 OIDC 开关限制。
+- 完成 Todo：`BUG-FM-001`、`BUG-FM-002`；关闭不适用的 `BUG-FM-003`、
+  `BUG-FM-004`、`FM-P0-001` 和 `FM-P0-002`。
+- 用户可见变化：SSO 维持原有 owner 自主启用行为，不显示额外的不可用提示，也不
+  禁止开关。搜索建议在不同用户/群组/页面、空间和 limit 上下文间不再误用缓存。
+- 前端实现与兼容：搜索建议 cache key 使用完整规范化上下文；误加的 SSO 控件和
+  12 个 locale 提示已撤回。
+- 后端鉴权与资源边界：SSO 原有 owner-only、workspace 绑定和 DTO 校验不变；没有
+  引入 Provider 类型名单或 core/EE 新依赖。
+- 审计与敏感数据：无新增凭据和数据库字段；现有 SSO 创建、更新、删除审计不变。
+- 数据库迁移与回滚：无迁移。`BacklinkRepo` 只更新 `backlinks` 指定 ID。
+- 测试和人工验证：Backlink 与搜索回归测试保留；撤回后重新执行相关测试和构建。
+- 遗留风险和下一步：具体 SSO 协议实现按独立功能评估，不再作为当前 P0 缺陷处理。
 
 ### 复盘模板
 

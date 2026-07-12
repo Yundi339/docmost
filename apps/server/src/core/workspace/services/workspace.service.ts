@@ -49,7 +49,6 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../../integrations/audit/audit.service';
-import { SsoLoginCapabilityService } from '../../auth/services/sso-login-capability.service';
 
 @Injectable()
 export class WorkspaceService {
@@ -74,7 +73,6 @@ export class WorkspaceService {
     @InjectQueue(QueueName.AI_QUEUE) private aiQueue: Queue,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
     private userSessionRepo: UserSessionRepo,
-    private readonly ssoLoginCapability: SsoLoginCapabilityService,
   ) {}
 
   async findById(workspaceId: string) {
@@ -122,14 +120,9 @@ export class WorkspaceService {
       throw new NotFoundException('Workspace not found');
     }
 
-    const { licenseKey, plan, authProviders, ...rest } = workspace;
+    const { licenseKey, plan, ...rest } = workspace;
 
-    return {
-      ...rest,
-      authProviders: (authProviders ?? []).filter((provider) =>
-        this.ssoLoginCapability.isLoginAvailable(provider.type),
-      ),
-    };
+    return rest;
   }
 
   async create(
@@ -308,18 +301,14 @@ export class WorkspaceService {
     if (updateWorkspaceDto.enforceSso) {
       const sso = await this.db
         .selectFrom('authProviders')
-        .select(['id', 'type'])
+        .select(['id'])
         .where('isEnabled', '=', true)
         .where('workspaceId', '=', workspaceId)
         .execute();
 
-      const hasAvailableProvider = sso.some((provider) =>
-        this.ssoLoginCapability.isLoginAvailable(provider.type),
-      );
-
-      if (!hasAvailableProvider) {
+      if (sso && sso?.length === 0) {
         throw new BadRequestException(
-          'There must be at least one active and available SSO provider to enforce SSO.',
+          'There must be at least one active SSO provider to enforce SSO.',
         );
       }
     }

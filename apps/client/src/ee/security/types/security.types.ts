@@ -14,7 +14,6 @@ export interface IAuthProvider {
   ldapBindDn: string;
   ldapBindPassword?: string;
   hasLdapBindPassword: boolean;
-  loginAvailable: boolean;
   ldapBaseDn: string;
   ldapUserSearchFilter: string;
   ldapUserAttributes: any;

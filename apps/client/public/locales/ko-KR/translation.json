@@ -938,7 +938,6 @@
   "SAML": "SAML",
   "SSO": "SSO",
   "SSO (SAML, OIDC, LDAP)": "SSO (SAML, OIDC, LDAP)",
-  "SSO login for this provider type is not available in this server version.": "이 서버 버전에서는 이 공급자 유형의 SSO 로그인을 사용할 수 없습니다.",
   "Save": "저장",
   "Save & Exit": "저장 후 나가기",
   "Save codes": "코드 저장",
