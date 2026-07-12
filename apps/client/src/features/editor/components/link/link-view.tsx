@@ -30,6 +30,10 @@ import { buildSharedPageUrl } from "@/features/page/page.utils.ts";
 import { extractPageSlugId } from "@/lib";
 import { sanitizeUrl, copyToClipboard } from "@docmost/editor-ext";
 import { normalizeUrl } from "@/lib/utils";
+import {
+  resolveSafeNewTabUrl,
+  shouldOpenLinkInNewTab,
+} from "@/features/editor/components/link/link-navigation.ts";
 
 const parseInternalLink = (
   href: string,
@@ -282,17 +286,35 @@ export default function LinkView(props: MarkViewProps) {
     pageSlug,
   ]);
 
+  const displayHref = sanitizeUrl(
+    isInternal
+      ? isShareRoute && slugId
+        ? buildSharedPageUrl({ shareId, pageSlugId: slugId, pageTitle })
+        : href
+      : normalizeUrl(href),
+  );
+
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       if (isEditable) {
+        if (shouldOpenLinkInNewTab(true, e)) {
+          const target = resolveSafeNewTabUrl(
+            displayHref,
+            window.location.origin,
+          );
+          if (target) {
+            window.open(target, "_blank", "noopener,noreferrer");
+          }
+          return;
+        }
         setPopoverState("preview");
       } else {
         handleNavigate();
       }
     },
-    [handleNavigate, isEditable],
+    [displayHref, handleNavigate, isEditable],
   );
 
   const handleCopy = useCallback(
@@ -316,14 +338,6 @@ export default function LinkView(props: MarkViewProps) {
     editor.chain().focus().extendMarkRange("link").unsetLink().run();
     setPopoverState("closed");
   }, [editor]);
-
-  const displayHref = sanitizeUrl(
-    isInternal
-      ? isShareRoute && slugId
-        ? buildSharedPageUrl({ shareId, pageSlugId: slugId, pageTitle })
-        : href
-      : normalizeUrl(href),
-  );
 
   const linkTitleInput = (
     <>

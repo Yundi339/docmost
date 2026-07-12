@@ -9,6 +9,9 @@ import {
   IconH1,
   IconH2,
   IconH3,
+  IconH4,
+  IconH5,
+  IconH6,
   IconMenu4,
   IconPageBreak,
   IconTypography,
@@ -28,6 +31,9 @@ export const BlockTypeGroup: FC<Props> = ({ editor }) => {
       isHeading1: ctx.editor.isActive("heading", { level: 1 }),
       isHeading2: ctx.editor.isActive("heading", { level: 2 }),
       isHeading3: ctx.editor.isActive("heading", { level: 3 }),
+      isHeading4: ctx.editor.isActive("heading", { level: 4 }),
+      isHeading5: ctx.editor.isActive("heading", { level: 5 }),
+      isHeading6: ctx.editor.isActive("heading", { level: 6 }),
       isBlockquote: ctx.editor.isActive("blockquote"),
       isCodeBlock: ctx.editor.isActive("codeBlock"),
     }),
@@ -37,6 +43,9 @@ export const BlockTypeGroup: FC<Props> = ({ editor }) => {
   if (state.isHeading1) label = t("Heading 1");
   else if (state.isHeading2) label = t("Heading 2");
   else if (state.isHeading3) label = t("Heading 3");
+  else if (state.isHeading4) label = t("Heading 4");
+  else if (state.isHeading5) label = t("Heading 5");
+  else if (state.isHeading6) label = t("Heading 6");
   else if (state.isBlockquote) label = t("Quote");
   else if (state.isCodeBlock) label = t("Code block");
 
@@ -84,6 +93,30 @@ export const BlockTypeGroup: FC<Props> = ({ editor }) => {
           }
         >
           {t("Heading 3")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconH4 size={16} />}
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 4 }).run()
+          }
+        >
+          {t("Heading 4")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconH5 size={16} />}
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 5 }).run()
+          }
+        >
+          {t("Heading 5")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconH6 size={16} />}
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 6 }).run()
+          }
+        >
+          {t("Heading 6")}
         </Menu.Item>
         <Menu.Item
           leftSection={<IconBlockquote size={16} />}

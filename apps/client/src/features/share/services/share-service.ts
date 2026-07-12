@@ -10,6 +10,7 @@ import {
   IShareForPage,
   IShareInfoInput,
   IUpdateShare,
+  IUnlockShare,
 } from "@/features/share/types/share.types.ts";
 import { IPagination, QueryParams } from "@/lib/types.ts";
 
@@ -56,4 +57,24 @@ export async function getSharedPageTree(
 ): Promise<ISharedPageTree> {
   const req = await api.post<ISharedPageTree>("/shares/tree", { shareId });
   return req.data;
+}
+
+export async function setSharePassword(
+  shareId: string,
+  password: string,
+): Promise<IShare> {
+  const req = await api.post<IShare>("/shares/password/set", {
+    shareId,
+    password,
+  });
+  return req.data;
+}
+
+export async function removeSharePassword(shareId: string): Promise<IShare> {
+  const req = await api.post<IShare>("/shares/password/remove", { shareId });
+  return req.data;
+}
+
+export async function unlockShare(data: IUnlockShare): Promise<void> {
+  await api.post("/shares/unlock", data);
 }

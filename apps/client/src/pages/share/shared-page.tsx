@@ -14,6 +14,8 @@ import {
   sharedTreeDataAtom,
 } from "@/features/share/atoms/shared-page-atom.ts";
 import { isPageInTree } from "@/features/share/utils.ts";
+import { isSharePasswordRequired } from "@/features/share/share-errors.ts";
+import { SharePasswordPrompt } from "@/features/share/components/share-password-prompt.tsx";
 
 export default function SharedPage() {
   const { t } = useTranslation();
@@ -47,6 +49,9 @@ export default function SharedPage() {
   }
 
   if (isError || !data) {
+    if (isSharePasswordRequired(error)) {
+      return <SharePasswordPrompt pageId={extractPageSlugId(pageSlug)} />;
+    }
     if ([401, 403, 404].includes(error?.["status"])) {
       return <Error404 />;
     }

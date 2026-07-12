@@ -26,6 +26,7 @@ import {
   getSharePageInfo,
   getShares,
   updateShare,
+  removeSharePassword,
 } from "@/features/share/services/share-service.ts";
 import { IPagination, QueryParams } from "@/lib/types.ts";
 
@@ -46,6 +47,7 @@ export function useGetShareByIdQuery(
     queryKey: ["share-by-id", shareId],
     queryFn: () => getShareInfo(shareId),
     enabled: !!shareId,
+    retry: false,
   });
 
   return query;
@@ -58,6 +60,7 @@ export function useSharePageQuery(
     queryKey: ["shares", shareInput],
     queryFn: () => getSharePageInfo(shareInput),
     enabled: !!shareInput.pageId,
+    retry: false,
   });
 
   return query;
@@ -91,7 +94,8 @@ export function useCreateShareMutation() {
     },
     onError: (error) => {
       notifications.show({
-        message: error?.["response"]?.data?.message || t("Failed to share page"),
+        message:
+          error?.["response"]?.data?.message || t("Failed to share page"),
         color: "red",
       });
     },
@@ -167,6 +171,36 @@ export function useDeleteShareMutation() {
   });
 }
 
+export function invalidateShareManagementQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  return queryClient.invalidateQueries({
+    predicate: (item) =>
+      ["share-for-page", "share-list"].includes(item.queryKey[0] as string),
+  });
+}
+
+export function useRemoveSharePasswordMutation() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  return useMutation<IShare, Error, string>({
+    mutationFn: (shareId) => removeSharePassword(shareId),
+    onSuccess: () => {
+      invalidateShareManagementQueries(queryClient);
+      notifications.show({ message: t("Share password removed") });
+    },
+    onError: (error) => {
+      notifications.show({
+        message:
+          error?.["response"]?.data?.message ||
+          t("Failed to remove share password"),
+        color: "red",
+      });
+    },
+  });
+}
+
 export function useGetSharedPageTreeQuery(
   shareId: string,
 ): UseQueryResult<ISharedPageTree, Error> {
@@ -176,5 +210,6 @@ export function useGetSharedPageTreeQuery(
     enabled: !!shareId,
     placeholderData: keepPreviousData,
     staleTime: 60 * 60 * 1000,
+    retry: false,
   });
 }

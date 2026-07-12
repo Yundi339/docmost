@@ -29,6 +29,7 @@ import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { Public } from 'src/common/decorators/public.decorator';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { ModuleRef } from '@nestjs/core';
+import { ShareAccessGuard } from '../share/share-access.guard';
 
 @UseGuards(JwtAuthGuard)
 @Controller('search')
@@ -88,6 +89,7 @@ export class SearchController {
   }
 
   @Public()
+  @UseGuards(ShareAccessGuard)
   @HttpCode(HttpStatus.OK)
   @Post('share-search')
   async searchShare(

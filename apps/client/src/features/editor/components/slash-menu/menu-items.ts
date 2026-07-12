@@ -6,6 +6,9 @@ import {
   IconH1,
   IconH2,
   IconH3,
+  IconH4,
+  IconH5,
+  IconH6,
   IconInfoCircle,
   IconList,
   IconListNumbers,
@@ -39,7 +42,10 @@ import { uploadAudioAction } from "@/features/editor/components/audio/upload-aud
 import { uploadAttachmentAction } from "@/features/editor/components/attachment/upload-attachment-action.tsx";
 import { uploadPdfAction } from "@/features/editor/components/pdf/upload-pdf-action.tsx";
 import { createDatabase } from "@/features/database/services/database-service";
-import { DatabaseTemplate, DatabaseViewType } from "@/features/database/types/database.types";
+import {
+  DatabaseTemplate,
+  DatabaseViewType,
+} from "@/features/database/types/database.types";
 import { notifications } from "@mantine/notifications";
 import IconExcalidraw from "@/components/icons/icon-excalidraw";
 import IconMermaid from "@/components/icons/icon-mermaid";
@@ -149,7 +155,8 @@ const CommandGroups: SlashMenuGroupedItemsType = {
     },
     {
       title: "Tasks",
-      description: "Create a task database with assignees, status, and due dates.",
+      description:
+        "Create a task database with assignees, status, and due dates.",
       searchTerms: ["tasks", "todo", "project", "assignee"],
       icon: IconCheckbox,
       command: insertDatabaseCommand({
@@ -252,6 +259,48 @@ const CommandGroups: SlashMenuGroupedItemsType = {
           .focus()
           .deleteRange(range)
           .setNode("heading", { level: 3 })
+          .run();
+      },
+    },
+    {
+      title: "Heading 4",
+      description: "Lower-level section heading.",
+      searchTerms: ["subtitle", "small", "h4"],
+      icon: IconH4,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setNode("heading", { level: 4 })
+          .run();
+      },
+    },
+    {
+      title: "Heading 5",
+      description: "Lower-level section heading.",
+      searchTerms: ["subtitle", "small", "h5"],
+      icon: IconH5,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setNode("heading", { level: 5 })
+          .run();
+      },
+    },
+    {
+      title: "Heading 6",
+      description: "Lower-level section heading.",
+      searchTerms: ["subtitle", "small", "h6"],
+      icon: IconH6,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setNode("heading", { level: 6 })
           .run();
       },
     },
@@ -374,7 +423,15 @@ const CommandGroups: SlashMenuGroupedItemsType = {
     {
       title: "Audio",
       description: "Upload any audio from your device.",
-      searchTerms: ["audio", "music", "sound", "mp3", "media", "file", "attachment"],
+      searchTerms: [
+        "audio",
+        "music",
+        "sound",
+        "mp3",
+        "media",
+        "file",
+        "attachment",
+      ],
       icon: IconMusic,
       command: ({ editor, range }) => {
         editor.chain().focus().deleteRange(range).run();
@@ -561,14 +618,18 @@ const CommandGroups: SlashMenuGroupedItemsType = {
           .insertContent("flowchart LR\n" + "    A --> B")
           .run(),
     },
-    ...(isDrawioEnabled() ? [{
-      title: "Draw.io (diagrams.net)",
-      description: "Insert and design Drawio diagrams",
-      searchTerms: ["drawio", "diagrams", "charts", "uml", "whiteboard"],
-      icon: IconDrawio,
-      command: ({ editor, range }: CommandProps) =>
-        editor.chain().focus().deleteRange(range).setDrawio().run(),
-    }] : []),
+    ...(isDrawioEnabled()
+      ? [
+          {
+            title: "Draw.io (diagrams.net)",
+            description: "Insert and design Drawio diagrams",
+            searchTerms: ["drawio", "diagrams", "charts", "uml", "whiteboard"],
+            icon: IconDrawio,
+            command: ({ editor, range }: CommandProps) =>
+              editor.chain().focus().deleteRange(range).setDrawio().run(),
+          },
+        ]
+      : []),
     {
       title: "Excalidraw (Whiteboard)",
       description: "Draw and sketch excalidraw diagrams",
@@ -617,7 +678,14 @@ const CommandGroups: SlashMenuGroupedItemsType = {
     {
       title: "Emoji",
       description: "Insert emoji.",
-      searchTerms: ["emoji", "icon", "smiley", "emoticon", "symbol", "reaction"],
+      searchTerms: [
+        "emoji",
+        "icon",
+        "smiley",
+        "emoticon",
+        "symbol",
+        "reaction",
+      ],
       icon: IconMoodSmile,
       command: ({ editor, range }: CommandProps) => {
         editor.chain().focus().deleteRange(range).insertContent(":").run();

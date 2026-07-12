@@ -8,6 +8,32 @@
     }
   }
 
+  figure[data-type="image"] {
+    margin: 0;
+    max-width: 100%;
+  }
+
+  .image-caption {
+    width: 100%;
+    min-height: 0;
+    margin-top: 6px;
+    color: var(--mantine-color-dimmed);
+    font-size: var(--mantine-font-size-sm);
+    line-height: var(--mantine-line-height-sm);
+    text-align: center;
+    overflow-wrap: anywhere;
+    outline: none;
+  }
+
+  .image-caption[contenteditable="true"] {
+    min-height: 1.25em;
+    cursor: text;
+  }
+
+  .image-caption:empty:not([contenteditable="true"]) {
+    display: none;
+  }
+
   .node-image, .node-video, .node-pdf, .node-excalidraw, .node-drawio {
     &.ProseMirror-selectednode {
       outline: none;
@@ -61,4 +87,3 @@
     }
   }
 }
-

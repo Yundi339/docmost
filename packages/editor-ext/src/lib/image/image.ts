@@ -8,6 +8,7 @@ import {
 import { ResizableNodeView } from "../resizable-nodeview";
 import type { ResizableNodeViewDirection } from "../resizable-nodeview";
 import { normalizeFileUrl } from "../media-utils";
+import type { DOMOutputSpec } from "@tiptap/pm/model";
 
 export type ImageResizeOptions = {
   enabled: boolean;
@@ -32,6 +33,7 @@ export interface ImageOptions extends DefaultImageOptions {
 export interface ImageAttributes {
   src?: string;
   alt?: string;
+  caption?: string;
   align?: string;
   attachmentId?: string;
   size?: number;
@@ -54,6 +56,7 @@ declare module "@tiptap/core" {
       setImageAlign: (align: "left" | "center" | "right") => ReturnType;
       setImageWidth: (width: number) => ReturnType;
       setImageSize: (width: number, height: number) => ReturnType;
+      setImageCaption: (caption?: string) => ReturnType;
     };
   }
 }
@@ -79,7 +82,7 @@ export const TiptapImage = Image.extend<ImageOptions>({
     return {
       src: {
         default: "",
-        parseHTML: (element) => element.getAttribute("src"),
+        parseHTML: (element) => getImageElement(element)?.getAttribute("src"),
         renderHTML: (attributes) => ({
           src: attributes.src,
         }),
@@ -87,7 +90,7 @@ export const TiptapImage = Image.extend<ImageOptions>({
       width: {
         default: null,
         parseHTML: (element) => {
-          const raw = element.getAttribute("width");
+          const raw = getImageElement(element)?.getAttribute("width");
           if (!raw) return null;
           if (raw.endsWith("%")) return raw;
           const num = parseFloat(raw);
@@ -100,7 +103,7 @@ export const TiptapImage = Image.extend<ImageOptions>({
       height: {
         default: null,
         parseHTML: (element) => {
-          const raw = element.getAttribute("height");
+          const raw = getImageElement(element)?.getAttribute("height");
           if (!raw) return null;
           const num = parseFloat(raw);
           return isNaN(num) ? null : num;
@@ -111,35 +114,52 @@ export const TiptapImage = Image.extend<ImageOptions>({
       },
       align: {
         default: "center",
-        parseHTML: (element) => element.getAttribute("data-align"),
+        parseHTML: (element) =>
+          element.getAttribute("data-align") ||
+          getImageElement(element)?.getAttribute("data-align"),
         renderHTML: (attributes: ImageAttributes) => ({
           "data-align": attributes.align,
         }),
       },
       alt: {
         default: undefined,
-        parseHTML: (element) => element.getAttribute("alt"),
+        parseHTML: (element) => getImageElement(element)?.getAttribute("alt"),
         renderHTML: (attributes: ImageAttributes) => ({
           alt: attributes.alt,
         }),
       },
+      caption: {
+        default: undefined,
+        rendered: false,
+        parseHTML: (element) => {
+          if (element.tagName === "FIGURE") {
+            return sanitizeImageCaption(
+              element.querySelector("figcaption")?.textContent || "",
+            );
+          }
+          return undefined;
+        },
+      },
       attachmentId: {
         default: undefined,
-        parseHTML: (element) => element.getAttribute("data-attachment-id"),
+        parseHTML: (element) =>
+          getImageElement(element)?.getAttribute("data-attachment-id"),
         renderHTML: (attributes: ImageAttributes) => ({
           "data-attachment-id": attributes.attachmentId,
         }),
       },
       size: {
         default: null,
-        parseHTML: (element) => element.getAttribute("data-size"),
+        parseHTML: (element) =>
+          getImageElement(element)?.getAttribute("data-size"),
         renderHTML: (attributes: ImageAttributes) => ({
           "data-size": attributes.size,
         }),
       },
       aspectRatio: {
         default: null,
-        parseHTML: (element) => element.getAttribute("data-aspect-ratio"),
+        parseHTML: (element) =>
+          getImageElement(element)?.getAttribute("data-aspect-ratio"),
         renderHTML: (attributes: ImageAttributes) => ({
           "data-aspect-ratio": attributes.aspectRatio,
         }),
@@ -151,11 +171,26 @@ export const TiptapImage = Image.extend<ImageOptions>({
     };
   },
 
-  renderHTML({ HTMLAttributes }) {
+  parseHTML() {
     return [
+      { tag: 'figure[data-type="image"]' },
+      { tag: "img[src]" },
+    ];
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    const image: DOMOutputSpec = [
       "img",
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
     ];
+    const caption = sanitizeImageCaption(node.attrs.caption || "");
+    if (!caption) return image;
+    return [
+      "figure",
+      { "data-type": "image", "data-align": node.attrs.align || "center" },
+      image,
+      ["figcaption", {}, caption],
+    ] as DOMOutputSpec;
   },
 
   addCommands() {
@@ -192,6 +227,13 @@ export const TiptapImage = Image.extend<ImageOptions>({
         (width, height) =>
         ({ commands }) =>
           commands.updateAttributes("image", { width, height }),
+
+      setImageCaption:
+        (caption) =>
+        ({ commands }) =>
+          commands.updateAttributes("image", {
+            caption: sanitizeImageCaption(caption || "") || undefined,
+          }),
     };
   },
 
@@ -266,6 +308,49 @@ export const TiptapImage = Image.extend<ImageOptions>({
       }
 
       let currentNode = node;
+      const captionEl = createCaptionElement(
+        node.attrs.caption,
+        editor.isEditable,
+      );
+
+      const commitCaption = () => {
+        if (!editor.isEditable) return;
+        const pos = getPos();
+        if (pos === undefined) return;
+        const caption = sanitizeImageCaption(captionEl.textContent || "");
+        if (captionEl.textContent !== caption) {
+          captionEl.textContent = caption;
+        }
+        if ((currentNode.attrs.caption || "") === caption) return;
+        editor.view.dispatch(
+          editor.state.tr.setNodeMarkup(pos, undefined, {
+            ...currentNode.attrs,
+            caption: caption || undefined,
+          }),
+        );
+      };
+      const handleCaptionKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commitCaption();
+          captionEl.blur();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          captionEl.textContent = currentNode.attrs.caption || "";
+          captionEl.blur();
+        }
+      };
+      const handleCaptionPaste = (event: ClipboardEvent) => {
+        event.preventDefault();
+        const text = sanitizeImageCaption(
+          event.clipboardData?.getData("text/plain") || "",
+        );
+        document.execCommand("insertText", false, text);
+      };
+      captionEl.addEventListener("input", commitCaption);
+      captionEl.addEventListener("blur", commitCaption);
+      captionEl.addEventListener("keydown", handleCaptionKeyDown);
+      captionEl.addEventListener("paste", handleCaptionPaste);
 
       const nodeView = new ResizableNodeView({
         element: el,
@@ -302,6 +387,14 @@ export const TiptapImage = Image.extend<ImageOptions>({
             el.alt = updatedNode.attrs.alt || "";
           }
 
+          if (
+            updatedNode.attrs.caption !== currentNode.attrs.caption &&
+            document.activeElement !== captionEl
+          ) {
+            captionEl.textContent = updatedNode.attrs.caption || "";
+          }
+          captionEl.contentEditable = String(editor.isEditable);
+
           const w = updatedNode.attrs.width;
           const h = updatedNode.attrs.height;
           if (w != null) {
@@ -332,6 +425,18 @@ export const TiptapImage = Image.extend<ImageOptions>({
       });
 
       const dom = nodeView.dom as HTMLElement;
+      nodeView.wrapper.appendChild(captionEl);
+
+      const originalDestroy = nodeView.destroy.bind(nodeView);
+      nodeView.destroy = () => {
+        captionEl.removeEventListener("input", commitCaption);
+        captionEl.removeEventListener("blur", commitCaption);
+        captionEl.removeEventListener("keydown", handleCaptionKeyDown);
+        captionEl.removeEventListener("paste", handleCaptionPaste);
+        originalDestroy();
+      };
+      (nodeView as any).stopEvent = (event: Event) =>
+        captionEl.contains(event.target as Node);
 
       // Apply initial alignment
       applyAlignment(dom, node.attrs.align || "center");
@@ -382,4 +487,31 @@ function applyAlignment(container: HTMLElement, align: string) {
   } else {
     container.style.justifyContent = "center";
   }
+}
+
+export const IMAGE_CAPTION_MAX_LENGTH = 300;
+
+export function sanitizeImageCaption(value: string): string {
+  return value
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, IMAGE_CAPTION_MAX_LENGTH);
+}
+
+function getImageElement(element: HTMLElement): HTMLElement | null {
+  return element.tagName === "IMG" ? element : element.querySelector("img");
+}
+
+function createCaptionElement(
+  caption: string | undefined,
+  editable: boolean,
+): HTMLElement {
+  const element = document.createElement("figcaption");
+  element.className = "image-caption";
+  element.textContent = sanitizeImageCaption(caption || "");
+  element.contentEditable = String(editable);
+  element.spellcheck = true;
+  element.setAttribute("aria-label", "Image caption");
+  return element;
 }

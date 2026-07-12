@@ -87,6 +87,10 @@ export const AuditEvent = {
   // Share
   SHARE_CREATED: 'share.created',
   SHARE_DELETED: 'share.deleted',
+  SHARE_PASSWORD_SET: 'share.password_set',
+  SHARE_PASSWORD_UPDATED: 'share.password_updated',
+  SHARE_PASSWORD_REMOVED: 'share.password_removed',
+  SHARE_PASSWORD_UNLOCK_FAILED: 'share.password_unlock_failed',
 
   // Import / Export
   PAGE_IMPORTED: 'page.imported',

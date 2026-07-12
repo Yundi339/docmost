@@ -22,6 +22,7 @@ import {
   FORGOT_PASSWORD_THROTTLER,
   OAUTH_REGISTRATION_THROTTLER,
   OAUTH_TOKEN_THROTTLER,
+  SHARE_UNLOCK_THROTTLER,
 } from '../../integrations/throttle/throttler-names';
 import { PasskeyService } from './passkey.service';
 import {
@@ -37,6 +38,7 @@ import {
   [FORGOT_PASSWORD_THROTTLER]: true,
   [OAUTH_REGISTRATION_THROTTLER]: true,
   [OAUTH_TOKEN_THROTTLER]: true,
+  [SHARE_UNLOCK_THROTTLER]: true,
 })
 @UseGuards(ThrottlerGuard)
 @Controller()

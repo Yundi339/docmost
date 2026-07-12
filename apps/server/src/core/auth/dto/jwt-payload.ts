@@ -6,6 +6,7 @@ export enum JwtType {
   MFA_TOKEN = 'mfa_token',
   API_KEY = 'api_key',
   MCP_OAUTH = 'mcp_oauth',
+  SHARE_ACCESS = 'share_access',
 }
 export type JwtPayload = {
   sub: string;
@@ -31,7 +32,16 @@ export type JwtAttachmentPayload = {
   attachmentId: string;
   pageId: string;
   workspaceId: string;
+  shareId: string;
+  sharePasswordVersion: number;
   type: 'attachment';
+};
+
+export type JwtShareAccessPayload = {
+  shareId: string;
+  workspaceId: string;
+  passwordVersion: number;
+  type: 'share_access';
 };
 
 export interface JwtMfaTokenPayload {

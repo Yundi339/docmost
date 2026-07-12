@@ -46,6 +46,8 @@ const auditFieldLabels: Record<string, string> = {
   emailDomains: "Email domains",
   expiresAt: "Expires at",
   closeReason: "Close reason",
+  passwordProtected: "Password protection",
+  sampled: "Sampled",
   id: "ID",
 };
 

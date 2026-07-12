@@ -19,6 +19,7 @@ import {
   ShareIdDto,
   ShareInfoDto,
   SharePageIdDto,
+  SetSharePasswordDto,
   UpdateShareDto,
 } from './dto/share.dto';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
@@ -36,6 +37,8 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../integrations/audit/audit.service';
+import { SharePasswordService } from './share-password.service';
+import { ShareAccessGuard } from './share-access.guard';
 
 @UseGuards(JwtAuthGuard)
 @Controller('shares')
@@ -47,6 +50,7 @@ export class ShareController {
     private readonly pagePermissionRepo: PagePermissionRepo,
     private readonly pageAccessService: PageAccessService,
     private readonly licenseCheckService: LicenseCheckService,
+    private readonly sharePasswordService: SharePasswordService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -61,13 +65,14 @@ export class ShareController {
   }
 
   @Public()
+  @UseGuards(ShareAccessGuard)
   @HttpCode(HttpStatus.OK)
   @Post('/page-info')
   async getSharedPageInfo(
     @Body() dto: ShareInfoDto,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    if (!dto.pageId && !dto.shareId) {
+    if (!dto.pageId) {
       throw new BadRequestException();
     }
 
@@ -91,6 +96,7 @@ export class ShareController {
   }
 
   @Public()
+  @UseGuards(ShareAccessGuard)
   @HttpCode(HttpStatus.OK)
   @Post('/info')
   async getShare(@Body() dto: ShareIdDto) {
@@ -204,6 +210,61 @@ export class ShareController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_WRITE)
+  @Post('password/set')
+  async setPassword(
+    @Body() dto: SetSharePasswordDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    const share = await this.getEditableShare(dto.shareId, user, workspace.id);
+    const result = await this.sharePasswordService.setPassword(
+      share.id,
+      dto.password,
+    );
+
+    this.auditService.log({
+      event: result.wasProtected
+        ? AuditEvent.SHARE_PASSWORD_UPDATED
+        : AuditEvent.SHARE_PASSWORD_SET,
+      resourceType: AuditResource.SHARE,
+      resourceId: share.id,
+      spaceId: share.spaceId,
+      metadata: { pageId: share.pageId },
+      changes: {
+        before: { passwordProtected: result.wasProtected },
+        after: { passwordProtected: true },
+      },
+    });
+    return result.share;
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_WRITE)
+  @Post('password/remove')
+  async removePassword(
+    @Body() dto: ShareIdDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    const share = await this.getEditableShare(dto.shareId, user, workspace.id);
+    const result = await this.sharePasswordService.removePassword(share.id);
+
+    this.auditService.log({
+      event: AuditEvent.SHARE_PASSWORD_REMOVED,
+      resourceType: AuditResource.SHARE,
+      resourceId: share.id,
+      spaceId: share.spaceId,
+      metadata: { pageId: share.pageId },
+      changes: {
+        before: { passwordProtected: true },
+        after: { passwordProtected: false },
+      },
+    });
+    return result;
+  }
+
+  @HttpCode(HttpStatus.OK)
   @Post('delete')
   async delete(@Body() shareIdDto: ShareIdDto, @AuthUser() user: User) {
     const share = await this.shareRepo.findById(shareIdDto.shareId);
@@ -237,6 +298,7 @@ export class ShareController {
   }
 
   @Public()
+  @UseGuards(ShareAccessGuard)
   @HttpCode(HttpStatus.OK)
   @Post('/tree')
   async getSharePageTree(
@@ -263,5 +325,22 @@ export class ShareController {
         workspace.plan,
       ),
     };
+  }
+
+  private async getEditableShare(
+    shareId: string,
+    user: User,
+    workspaceId: string,
+  ) {
+    const share = await this.shareRepo.findById(shareId);
+    if (!share || share.workspaceId !== workspaceId) {
+      throw new NotFoundException('Share not found');
+    }
+    const page = await this.pageRepo.findById(share.pageId);
+    if (!page || page.workspaceId !== workspaceId) {
+      throw new NotFoundException('Page not found');
+    }
+    await this.pageAccessService.validateCanEdit(page, user);
+    return share;
   }
 }

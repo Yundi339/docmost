@@ -32,6 +32,7 @@ export function htmlToMarkdown(html: string): string {
     mathInline,
     mathBlock,
     iframeEmbed,
+    imageFigure,
     image,
     video,
   ]);
@@ -53,7 +54,9 @@ function listParagraph(turndownService: _TurndownService) {
 function orderedListItem(turndownService: _TurndownService) {
   turndownService.addRule('orderedListItem', {
     filter: function (node: HTMLInputElement) {
-      return node.nodeName === 'LI' && node.getAttribute('data-type') !== 'taskItem';
+      return (
+        node.nodeName === 'LI' && node.getAttribute('data-type') !== 'taskItem'
+      );
     },
     replacement: (content: string, node: HTMLInputElement, options: any) => {
       const parent = node.parentNode as HTMLElement;
@@ -195,14 +198,32 @@ function image(turndownService: _TurndownService) {
   turndownService.addRule('image', {
     filter: 'img',
     replacement: function (_content: string, node: HTMLInputElement) {
-      const src = node.getAttribute('src') || '';
-      if (!src) return '';
-      const alt = sanitizeMdLinkText(node.getAttribute('alt') || '');
-      const title = node.getAttribute('title') || '';
-      const titlePart = title ? ' "' + title.replace(/"/g, '\\"') + '"' : '';
-      return '![' + alt + '](' + src + titlePart + ')';
+      return markdownImage(node);
     },
   });
+}
+
+function imageFigure(turndownService: _TurndownService) {
+  turndownService.addRule('imageFigure', {
+    filter: function (node: HTMLInputElement) {
+      return (
+        node.nodeName === 'FIGURE' && node.getAttribute('data-type') === 'image'
+      );
+    },
+    replacement: function (_content: string, node: HTMLInputElement) {
+      const image = node.querySelector('img');
+      return image ? `\n\n${markdownImage(image)}\n\n` : '';
+    },
+  });
+}
+
+function markdownImage(node: HTMLElement): string {
+  const src = node.getAttribute('src') || '';
+  if (!src) return '';
+  const alt = sanitizeMdLinkText(node.getAttribute('alt') || '');
+  const title = node.getAttribute('title') || '';
+  const titlePart = title ? ' "' + title.replace(/"/g, '\\"') + '"' : '';
+  return '![' + alt + '](' + src + titlePart + ')';
 }
 
 function video(turndownService: _TurndownService) {
@@ -213,9 +234,7 @@ function video(turndownService: _TurndownService) {
     replacement: function (_content: string, node: HTMLInputElement) {
       const src = node.getAttribute('src') || '';
       const ariaLabel = node.getAttribute('aria-label');
-      const name = sanitizeMdLinkText(
-        ariaLabel || getBasename(src) || src,
-      );
+      const name = sanitizeMdLinkText(ariaLabel || getBasename(src) || src);
       return '[' + name + '](' + src + ')';
     },
   });

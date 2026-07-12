@@ -54,6 +54,7 @@ import { validate as isValidUUID } from 'uuid';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { TokenService } from '../auth/services/token.service';
 import { JwtAttachmentPayload, JwtType } from '../auth/dto/jwt-payload';
+import { ShareAccessService } from '../share/share-access.service';
 import * as path from 'path';
 import { AttachmentInfoDto, RemoveIconDto } from './dto/attachment.dto';
 import { PageAccessService } from '../page/page-access/page-access.service';
@@ -78,6 +79,7 @@ export class AttachmentController {
     private readonly environmentService: EnvironmentService,
     private readonly tokenService: TokenService,
     private readonly pageAccessService: PageAccessService,
+    private readonly shareAccessService: ShareAccessService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -237,7 +239,8 @@ export class AttachmentController {
     if (
       !isValidUUID(fileId) ||
       fileId !== jwtPayload.attachmentId ||
-      jwtPayload.workspaceId !== workspace.id
+      jwtPayload.workspaceId !== workspace.id ||
+      !(await this.shareAccessService.validateAttachmentCapability(jwtPayload))
     ) {
       throw new NotFoundException('File not found');
     }

@@ -9,6 +9,9 @@ import {
   IconH1,
   IconH2,
   IconH3,
+  IconH4,
+  IconH5,
+  IconH6,
   IconInfoCircle,
   IconList,
   IconListNumbers,
@@ -54,6 +57,9 @@ export const NodeSelector: FC<NodeSelectorProps> = ({
         isHeading1: ctx.editor.isActive("heading", { level: 1 }),
         isHeading2: ctx.editor.isActive("heading", { level: 2 }),
         isHeading3: ctx.editor.isActive("heading", { level: 3 }),
+        isHeading4: ctx.editor.isActive("heading", { level: 4 }),
+        isHeading5: ctx.editor.isActive("heading", { level: 5 }),
+        isHeading6: ctx.editor.isActive("heading", { level: 6 }),
         isTaskItem: ctx.editor.isActive("taskItem"),
         isBlockquote: ctx.editor.isActive("blockquote"),
         isCodeBlock: ctx.editor.isActive("codeBlock"),
@@ -91,6 +97,24 @@ export const NodeSelector: FC<NodeSelectorProps> = ({
       icon: IconH3,
       command: () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
       isActive: () => editorState?.isHeading3,
+    },
+    {
+      name: "Heading 4",
+      icon: IconH4,
+      command: () => editor.chain().focus().toggleHeading({ level: 4 }).run(),
+      isActive: () => editorState?.isHeading4,
+    },
+    {
+      name: "Heading 5",
+      icon: IconH5,
+      command: () => editor.chain().focus().toggleHeading({ level: 5 }).run(),
+      isActive: () => editorState?.isHeading5,
+    },
+    {
+      name: "Heading 6",
+      icon: IconH6,
+      command: () => editor.chain().focus().toggleHeading({ level: 6 }).run(),
+      isActive: () => editorState?.isHeading6,
     },
     {
       name: "To-do List",
@@ -149,7 +173,12 @@ export const NodeSelector: FC<NodeSelectorProps> = ({
   return (
     <Popover opened={isOpen} onChange={setIsOpen} withArrow>
       <Popover.Target>
-        <Tooltip label={t("Turn into")} withArrow withinPortal={false} disabled={isOpen}>
+        <Tooltip
+          label={t("Turn into")}
+          withArrow
+          withinPortal={false}
+          disabled={isOpen}
+        >
           <Button
             className={classes.buttonRoot}
             variant="default"

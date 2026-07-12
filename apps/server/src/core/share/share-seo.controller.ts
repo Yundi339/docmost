@@ -8,6 +8,7 @@ import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { Workspace } from '@docmost/db/types/entity.types';
 import { htmlEscape } from '../../common/helpers/html-escaper';
+import { ShareAccessService } from './share-access.service';
 
 @Controller('share')
 export class ShareSeoController {
@@ -15,6 +16,7 @@ export class ShareSeoController {
     private readonly shareService: ShareService,
     private workspaceRepo: WorkspaceRepo,
     private environmentService: EnvironmentService,
+    private readonly shareAccessService: ShareAccessService,
   ) {}
 
   /*
@@ -69,6 +71,17 @@ export class ShareSeoController {
         return this.sendIndex(indexFilePath, res);
       }
 
+      if (
+        share.passwordProtected &&
+        !(await this.shareAccessService.hasRequestAccess(
+          req,
+          share.id,
+          workspace.id,
+        ))
+      ) {
+        return this.sendProtectedIndex(indexFilePath, res);
+      }
+
       const rawTitle = htmlEscape(share?.sharedPage.title ?? 'untitled');
       const metaTitle =
         rawTitle.length > 80 ? `${rawTitle.slice(0, 77)}…` : rawTitle;
@@ -95,6 +108,13 @@ export class ShareSeoController {
   sendIndex(indexFilePath: string, res: FastifyReply) {
     const stream = fs.createReadStream(indexFilePath);
     res.type('text/html').send(stream);
+  }
+
+  sendProtectedIndex(indexFilePath: string, res: FastifyReply) {
+    const html = fs
+      .readFileSync(indexFilePath, 'utf8')
+      .replace('<!--meta-tags-->', '<meta name="robots" content="noindex" />');
+    res.type('text/html').send(html);
   }
 
   extractPageSlugId(slug: string): string {

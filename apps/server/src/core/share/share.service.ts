@@ -43,8 +43,9 @@ export class ShareService {
       throw new NotFoundException('Share not found');
     }
 
-    const isRestricted =
-      await this.pagePermissionRepo.hasRestrictedAncestor(share.pageId);
+    const isRestricted = await this.pagePermissionRepo.hasRestrictedAncestor(
+      share.pageId,
+    );
     if (isRestricted) {
       throw new NotFoundException('Share not found');
     }
@@ -123,13 +124,14 @@ export class ShareService {
     }
 
     // Block access to restricted pages
-    const isRestricted =
-      await this.pagePermissionRepo.hasRestrictedAncestor(page.id);
+    const isRestricted = await this.pagePermissionRepo.hasRestrictedAncestor(
+      page.id,
+    );
     if (isRestricted) {
       throw new NotFoundException('Shared page not found');
     }
 
-    page.content = await this.updatePublicAttachments(page);
+    page.content = await this.updatePublicAttachments(page, share.id);
 
     return { page, share };
   }
@@ -152,6 +154,9 @@ export class ShareService {
             'shares.key as shareKey',
             'shares.includeSubPages',
             'shares.searchIndexing',
+            sql<boolean>`shares.password_hash is not null`.as(
+              'passwordProtected',
+            ),
             'shares.creatorId',
             'shares.spaceId',
             'shares.workspaceId',
@@ -176,6 +181,9 @@ export class ShareService {
                   's.key as shareKey',
                   's.includeSubPages',
                   's.searchIndexing',
+                  sql<boolean>`s.password_hash is not null`.as(
+                    'passwordProtected',
+                  ),
                   's.creatorId',
                   's.spaceId',
                   's.workspaceId',
@@ -205,6 +213,7 @@ export class ShareService {
       key: share.shareKey,
       includeSubPages: share.includeSubPages,
       searchIndexing: share.searchIndexing,
+      passwordProtected: share.passwordProtected,
       pageId: share.id,
       creatorId: share.creatorId,
       spaceId: share.spaceId,
@@ -306,7 +315,11 @@ export class ShareService {
     return !workspaceDisabled && !spaceDisabled;
   }
 
-  async updatePublicAttachments(page: Page): Promise<any> {
+  async updatePublicAttachments(page: Page, shareId: string): Promise<any> {
+    const passwordState = await this.shareRepo.findPasswordStateById(shareId);
+    if (!passwordState || passwordState.workspaceId !== page.workspaceId) {
+      throw new NotFoundException('Share not found');
+    }
     const prosemirrorJson = getProsemirrorContent(page.content);
     const attachmentIds = getAttachmentIds(prosemirrorJson);
     const attachmentMap = new Map<string, string>();
@@ -317,6 +330,8 @@ export class ShareService {
           attachmentId,
           pageId: page.id,
           workspaceId: page.workspaceId,
+          shareId: passwordState.id,
+          sharePasswordVersion: passwordState.passwordVersion,
         });
         attachmentMap.set(attachmentId, token);
       }),

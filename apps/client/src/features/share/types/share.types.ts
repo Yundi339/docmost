@@ -6,6 +6,7 @@ export interface IShare {
   pageId: string;
   includeSubPages: boolean;
   searchIndexing: boolean;
+  passwordProtected: boolean;
   creatorId: string;
   spaceId: string;
   workspaceId: string;
@@ -66,6 +67,12 @@ export type IUpdateShare = ICreateShare & { shareId: string; pageId?: string };
 
 export interface IShareInfoInput {
   pageId: string;
+}
+
+export interface IUnlockShare {
+  shareId?: string;
+  pageId?: string;
+  password: string;
 }
 
 export interface ISharedPageTree {

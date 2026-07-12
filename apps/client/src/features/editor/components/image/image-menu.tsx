@@ -22,6 +22,7 @@ import { getFileUrl } from "@/lib/config.ts";
 import { uploadImageAction } from "@/features/editor/components/image/upload-image-action.tsx";
 import { useAltTextControl } from "@/features/editor/components/common/use-alt-text-control.tsx";
 import classes from "../common/toolbar-menu.module.css";
+import { useImageCaptionControl } from "@/features/editor/components/image/use-image-caption-control.tsx";
 
 export function ImageMenu({ editor }: EditorMenuProps) {
   const { t } = useTranslation();
@@ -43,6 +44,7 @@ export function ImageMenu({ editor }: EditorMenuProps) {
         isAlignRight: ctx.editor.isActive("image", { align: "right" }),
         src: imageAttrs?.src || null,
         alt: imageAttrs?.alt || "",
+        caption: imageAttrs?.caption || "",
       };
     },
   });
@@ -147,6 +149,14 @@ export function ImageMenu({ editor }: EditorMenuProps) {
     nodeName: "image",
     currentAlt: editorState?.alt || "",
   });
+  const {
+    button: captionButton,
+    panel: captionPanel,
+    isEditing: isEditingCaption,
+  } = useImageCaptionControl({
+    editor,
+    currentCaption: editorState?.caption || "",
+  });
 
   return (
     <BaseBubbleMenu
@@ -163,6 +173,8 @@ export function ImageMenu({ editor }: EditorMenuProps) {
     >
       {isEditingAlt ? (
         altTextPanel
+      ) : isEditingCaption ? (
+        captionPanel
       ) : (
         <div className={classes.toolbar}>
         <Tooltip position="top" label={t("Align left")} withinPortal={false}>
@@ -204,6 +216,8 @@ export function ImageMenu({ editor }: EditorMenuProps) {
         <div className={classes.divider} />
 
         {altTextButton}
+
+        {captionButton}
 
         <div className={classes.divider} />
 

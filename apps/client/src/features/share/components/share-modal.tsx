@@ -29,6 +29,7 @@ import useTrial from "@/ee/hooks/use-trial.tsx";
 import { useAtom } from "jotai";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
 import { useSpaceQuery } from "@/features/space/queries/space-query.ts";
+import { SharePasswordControl } from "@/features/share/components/share-password-control.tsx";
 
 interface ShareModalProps {
   readOnly: boolean;
@@ -277,6 +278,11 @@ export default function ShareModal({ readOnly }: ShareModalProps) {
                     disabled={readOnly}
                   />
                 </Group>
+                <SharePasswordControl
+                  shareId={share.id}
+                  passwordProtected={share.passwordProtected}
+                  readOnly={readOnly}
+                />
               </>
             )}
           </>

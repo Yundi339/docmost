@@ -10,6 +10,7 @@ import {
   FORGOT_PASSWORD_THROTTLER,
   OAUTH_REGISTRATION_THROTTLER,
   OAUTH_TOKEN_THROTTLER,
+  SHARE_UNLOCK_THROTTLER,
 } from './throttler-names';
 import Redis from 'ioredis';
 
@@ -27,6 +28,7 @@ import Redis from 'ioredis';
             { name: FORGOT_PASSWORD_THROTTLER, ttl: 300_000, limit: 3 },
             { name: OAUTH_REGISTRATION_THROTTLER, ttl: 60_000, limit: 10 },
             { name: OAUTH_TOKEN_THROTTLER, ttl: 60_000, limit: 120 },
+            { name: SHARE_UNLOCK_THROTTLER, ttl: 60_000, limit: 10 },
           ],
           errorMessage: 'Too many requests',
           storage: new ThrottlerStorageRedisService(

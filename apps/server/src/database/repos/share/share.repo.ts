@@ -15,6 +15,24 @@ import { DB } from '@docmost/db/types/db';
 import { jsonObjectFrom } from 'kysely/helpers/postgres';
 import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 
+export type ShareView = Omit<
+  Share,
+  'passwordHash' | 'passwordVersion' | 'passwordUpdatedAt'
+> & {
+  passwordProtected: boolean;
+};
+
+export type SharePasswordState = Pick<
+  Share,
+  | 'id'
+  | 'pageId'
+  | 'spaceId'
+  | 'workspaceId'
+  | 'passwordHash'
+  | 'passwordVersion'
+  | 'passwordUpdatedAt'
+>;
+
 @Injectable()
 export class ShareRepo {
   constructor(
@@ -36,6 +54,9 @@ export class ShareRepo {
     'deletedAt',
   ];
 
+  private passwordProtectedSelection =
+    sql<boolean>`password_hash is not null`.as('passwordProtected');
+
   async findById(
     shareId: string,
     opts?: {
@@ -44,10 +65,13 @@ export class ShareRepo {
       withLock?: boolean;
       trx?: KyselyTransaction;
     },
-  ): Promise<Share> {
+  ): Promise<ShareView> {
     const db = dbOrTx(this.db, opts?.trx);
 
-    let query = db.selectFrom('shares').select(this.baseFields);
+    let query = db
+      .selectFrom('shares')
+      .select(this.baseFields)
+      .select(this.passwordProtectedSelection);
 
     if (opts?.includeSharedPage) {
       query = query.select((eb) => this.withSharedPage(eb));
@@ -67,7 +91,7 @@ export class ShareRepo {
       query = query.where(sql`LOWER(key)`, '=', shareId.toLowerCase());
     }
 
-    return query.executeTakeFirst();
+    return query.executeTakeFirst() as Promise<ShareView>;
   }
 
   async findByPageId(
@@ -77,12 +101,13 @@ export class ShareRepo {
       withLock?: boolean;
       trx?: KyselyTransaction;
     },
-  ): Promise<Share> {
+  ): Promise<ShareView> {
     const db = dbOrTx(this.db, opts?.trx);
 
     let query = db
       .selectFrom('shares')
       .select(this.baseFields)
+      .select(this.passwordProtectedSelection)
       .where('pageId', '=', pageId);
 
     if (opts?.includeCreator) {
@@ -92,6 +117,32 @@ export class ShareRepo {
     if (opts?.withLock && opts?.trx) {
       query = query.forUpdate();
     }
+    return query.executeTakeFirst() as Promise<ShareView>;
+  }
+
+  async findPasswordStateById(
+    shareId: string,
+    trx?: KyselyTransaction,
+  ): Promise<SharePasswordState> {
+    const db = dbOrTx(this.db, trx);
+    let query = db
+      .selectFrom('shares')
+      .select([
+        'id',
+        'pageId',
+        'spaceId',
+        'workspaceId',
+        'passwordHash',
+        'passwordVersion',
+        'passwordUpdatedAt',
+      ]);
+
+    if (isValidUUID(shareId)) {
+      query = query.where('id', '=', shareId);
+    } else {
+      query = query.where(sql`LOWER(key)`, '=', shareId.toLowerCase());
+    }
+
     return query.executeTakeFirst();
   }
 
@@ -100,28 +151,67 @@ export class ShareRepo {
     shareId: string,
     trx?: KyselyTransaction,
   ) {
+    const updateData =
+      typeof updatableShare.includeSubPages === 'boolean'
+        ? {
+            ...updatableShare,
+            passwordVersion: sql<number>`password_version + 1`,
+          }
+        : updatableShare;
     return dbOrTx(this.db, trx)
       .updateTable('shares')
-      .set({ ...updatableShare, updatedAt: new Date() })
+      .set({ ...updateData, updatedAt: new Date() })
       .where(
         isValidUUID(shareId) ? 'id' : sql`LOWER(key)`,
         '=',
         shareId.toLowerCase(),
       )
       .returning(this.baseFields)
-      .executeTakeFirst();
+      .returning(this.passwordProtectedSelection)
+      .executeTakeFirst() as Promise<ShareView>;
+  }
+
+  async setPassword(shareId: string, passwordHash: string): Promise<ShareView> {
+    return this.db
+      .updateTable('shares')
+      .set({
+        passwordHash,
+        passwordVersion: sql`password_version + 1`,
+        passwordUpdatedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where('id', '=', shareId)
+      .returning(this.baseFields)
+      .returning(this.passwordProtectedSelection)
+      .executeTakeFirst() as Promise<ShareView>;
+  }
+
+  async removePassword(shareId: string): Promise<ShareView> {
+    return this.db
+      .updateTable('shares')
+      .set({
+        passwordHash: null,
+        passwordVersion: sql`password_version + 1`,
+        passwordUpdatedAt: null,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', shareId)
+      .returning(this.baseFields)
+      .returning(this.passwordProtectedSelection)
+      .executeTakeFirst() as Promise<ShareView>;
   }
 
   async insertShare(
     insertableShare: InsertableShare,
     trx?: KyselyTransaction,
-  ): Promise<Share> {
+  ): Promise<ShareView> {
     const db = dbOrTx(this.db, trx);
     return db
       .insertInto('shares')
       .values(insertableShare)
       .returning(this.baseFields)
-      .executeTakeFirst();
+      .returning(this.passwordProtectedSelection)
+      .executeTakeFirst() as Promise<ShareView>;
   }
 
   async deleteShare(shareId: string): Promise<void> {
@@ -141,10 +231,7 @@ export class ShareRepo {
     trx?: KyselyTransaction,
   ): Promise<void> {
     const db = dbOrTx(this.db, trx);
-    await db
-      .deleteFrom('shares')
-      .where('spaceId', '=', spaceId)
-      .execute();
+    await db.deleteFrom('shares').where('spaceId', '=', spaceId).execute();
   }
 
   async deleteByWorkspaceId(
@@ -162,10 +249,15 @@ export class ShareRepo {
     const query = this.db
       .selectFrom('shares')
       .select(this.baseFields)
+      .select(this.passwordProtectedSelection)
       .select((eb) => this.withPage(eb))
       .select((eb) => this.withSpace(eb, userId))
       .select((eb) => this.withCreator(eb))
-      .where('spaceId', 'in', this.spaceMemberRepo.getUserSpaceIdsQuery(userId));
+      .where(
+        'spaceId',
+        'in',
+        this.spaceMemberRepo.getUserSpaceIdsQuery(userId),
+      );
 
     return executeWithCursorPagination(query, {
       perPage: pagination.limit,

@@ -83,6 +83,10 @@ export const auditEventLabels: Record<string, string> = {
 
   "share.created": "Created share link",
   "share.deleted": "Deleted share link",
+  "share.password_set": "Set share password",
+  "share.password_updated": "Changed share password",
+  "share.password_removed": "Removed share password",
+  "share.password_unlock_failed": "Failed to unlock share",
 
   "sso.provider_created": "Created SSO provider",
   "sso.provider_updated": "Updated SSO provider",
@@ -213,6 +217,13 @@ export const eventFilterOptions: EventGroup[] = [
     items: [
       { value: "share.created", label: "Created share link" },
       { value: "share.deleted", label: "Deleted share link" },
+      { value: "share.password_set", label: "Set share password" },
+      { value: "share.password_updated", label: "Changed share password" },
+      { value: "share.password_removed", label: "Removed share password" },
+      {
+        value: "share.password_unlock_failed",
+        label: "Failed to unlock share",
+      },
     ],
   },
   {

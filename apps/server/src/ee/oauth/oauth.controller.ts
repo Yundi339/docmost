@@ -33,6 +33,7 @@ import {
   FORGOT_PASSWORD_THROTTLER,
   OAUTH_REGISTRATION_THROTTLER,
   OAUTH_TOKEN_THROTTLER,
+  SHARE_UNLOCK_THROTTLER,
 } from '../../integrations/throttle/throttler-names';
 
 @Controller('.well-known')
@@ -105,6 +106,7 @@ export class OAuthController {
     [AI_CHAT_THROTTLER]: true,
     [FORGOT_PASSWORD_THROTTLER]: true,
     [OAUTH_TOKEN_THROTTLER]: true,
+    [SHARE_UNLOCK_THROTTLER]: true,
   })
   @Throttle({ [OAUTH_REGISTRATION_THROTTLER]: { ttl: 60_000, limit: 10 } })
   @HttpCode(HttpStatus.CREATED)
@@ -131,6 +133,7 @@ export class OAuthController {
     [AI_CHAT_THROTTLER]: true,
     [FORGOT_PASSWORD_THROTTLER]: true,
     [OAUTH_REGISTRATION_THROTTLER]: true,
+    [SHARE_UNLOCK_THROTTLER]: true,
   })
   @Throttle({ [OAUTH_TOKEN_THROTTLER]: { ttl: 60_000, limit: 120 } })
   @HttpCode(HttpStatus.OK)

@@ -26,7 +26,7 @@ const recalculateLinks = (nodePos: NodePos[]) => {
       (acc, item) => {
         const label = item.node.textContent;
         const level = Number(item.node.attrs.level);
-        if (label.length && level <= 4) {
+        if (label.length && level <= 6) {
           acc.push({
             label,
             level,
@@ -153,7 +153,7 @@ export const TableOfContents: FC<TableOfContentsProps> = (props) => {
       <>
         {!props.isShare && (
           <Text size="sm">
-            {t("Add headings (H1, H2, H3) to generate a table of contents.")}
+            {t("Add headings (H1-H6) to generate a table of contents.")}
           </Text>
         )}
 

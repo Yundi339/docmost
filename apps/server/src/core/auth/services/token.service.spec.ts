@@ -46,4 +46,32 @@ describe('TokenService', () => {
     });
     expect(payload.exp - payload.iat).toBe(60);
   });
+
+  it('binds share access and attachment tokens to the share password version', async () => {
+    const accessToken = await service.generateShareAccessToken({
+      shareId: 'share-id',
+      workspaceId: 'workspace-id',
+      passwordVersion: 4,
+    });
+    expect(jwtService.decode(accessToken)).toMatchObject({
+      shareId: 'share-id',
+      workspaceId: 'workspace-id',
+      passwordVersion: 4,
+      type: JwtType.SHARE_ACCESS,
+    });
+
+    const attachmentToken = await service.generateAttachmentToken({
+      attachmentId: 'attachment-id',
+      pageId: 'page-id',
+      workspaceId: 'workspace-id',
+      shareId: 'share-id',
+      sharePasswordVersion: 4,
+    });
+    expect(jwtService.decode(attachmentToken)).toMatchObject({
+      attachmentId: 'attachment-id',
+      shareId: 'share-id',
+      sharePasswordVersion: 4,
+      type: JwtType.ATTACHMENT,
+    });
+  });
 });

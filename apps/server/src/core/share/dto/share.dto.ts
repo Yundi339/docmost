@@ -4,6 +4,8 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
+  MinLength,
 } from 'class-validator';
 
 export class CreateShareDto {
@@ -43,11 +45,7 @@ export class SpaceIdDto {
 
 export class ShareInfoDto {
   @IsString()
-  @IsOptional()
-  shareId?: string;
-
-  @IsString()
-  @IsOptional()
+  @IsNotEmpty()
   pageId: string;
 }
 
@@ -55,4 +53,26 @@ export class SharePageIdDto {
   @IsString()
   @IsNotEmpty()
   pageId: string;
+}
+
+export class SetSharePasswordDto extends ShareIdDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  password: string;
+}
+
+export class UnlockShareDto {
+  @IsString()
+  @IsOptional()
+  shareId?: string;
+
+  @IsString()
+  @IsOptional()
+  pageId?: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  password: string;
 }

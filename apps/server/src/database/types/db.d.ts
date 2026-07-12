@@ -439,6 +439,9 @@ export interface Shares {
   includeSubPages: Generated<boolean | null>;
   key: string;
   pageId: string | null;
+  passwordHash: string | null;
+  passwordUpdatedAt: Timestamp | null;
+  passwordVersion: Generated<number>;
   searchIndexing: Generated<boolean | null>;
   spaceId: string;
   updatedAt: Generated<Timestamp>;

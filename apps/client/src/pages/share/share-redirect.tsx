@@ -3,12 +3,19 @@ import { useEffect } from "react";
 import { buildSharedPageUrl } from "@/features/page/page.utils.ts";
 import { Error404 } from "@/components/ui/error-404.tsx";
 import { useGetShareByIdQuery } from "@/features/share/queries/share-query.ts";
+import { isSharePasswordRequired } from "@/features/share/share-errors.ts";
+import { SharePasswordPrompt } from "@/features/share/components/share-password-prompt.tsx";
 
 export default function ShareRedirect() {
   const { shareId } = useParams();
   const navigate = useNavigate();
 
-  const { data: share, isLoading, isError } = useGetShareByIdQuery(shareId);
+  const {
+    data: share,
+    isLoading,
+    isError,
+    error,
+  } = useGetShareByIdQuery(shareId);
 
   useEffect(() => {
     if (share) {
@@ -24,6 +31,9 @@ export default function ShareRedirect() {
   }, [isLoading, share]);
 
   if (isError) {
+    if (isSharePasswordRequired(error)) {
+      return <SharePasswordPrompt shareId={shareId} />;
+    }
     return <Error404 />;
   }
 

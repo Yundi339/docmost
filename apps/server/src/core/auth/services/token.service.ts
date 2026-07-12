@@ -13,6 +13,7 @@ import {
   JwtMcpOAuthPayload,
   JwtMfaTokenPayload,
   JwtPayload,
+  JwtShareAccessPayload,
   JwtType,
 } from '../dto/jwt-payload';
 import { User } from '@docmost/db/types/entity.types';
@@ -69,15 +70,32 @@ export class TokenService {
     attachmentId: string;
     pageId: string;
     workspaceId: string;
+    shareId: string;
+    sharePasswordVersion: number;
   }): Promise<string> {
-    const { attachmentId, pageId, workspaceId } = opts;
+    const { attachmentId, pageId, workspaceId, shareId, sharePasswordVersion } =
+      opts;
     const payload: JwtAttachmentPayload = {
-      attachmentId: attachmentId,
-      pageId: pageId,
-      workspaceId: workspaceId,
+      attachmentId,
+      pageId,
+      workspaceId,
+      shareId,
+      sharePasswordVersion,
       type: JwtType.ATTACHMENT,
     };
     return this.jwtService.sign(payload, { expiresIn: '1h' });
+  }
+
+  async generateShareAccessToken(opts: {
+    shareId: string;
+    workspaceId: string;
+    passwordVersion: number;
+  }): Promise<string> {
+    const payload: JwtShareAccessPayload = {
+      ...opts,
+      type: JwtType.SHARE_ACCESS,
+    };
+    return this.jwtService.sign(payload, { expiresIn: '12h' });
   }
 
   async generateMfaToken(

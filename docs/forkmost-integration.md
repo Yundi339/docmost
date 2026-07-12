@@ -345,6 +345,24 @@ owner 启用配置。因此原 `BUG-FM-003` 不是当前缺陷，相关 `BUG-FM-
 `ShareAccessGuard`、`SharePasswordService` 和严格 DTO。密码使用项目批准的慢哈希，
 只在解锁时计算；后续内容请求验证短期 capability Cookie，避免每个资源请求重复哈希。
 
+实际公开访问面清单：
+
+| 公开面                        | 入口                                      | 统一保护方式                         |
+| ----------------------------- | ----------------------------------------- | ------------------------------------ |
+| 分享跳转与信息                | `POST /api/shares/info`                   | `ShareAccessGuard`                   |
+| 页面及继承分享                | `POST /api/shares/page-info`              | `ShareAccessGuard`                   |
+| 子页面树                      | `POST /api/shares/tree`                   | `ShareAccessGuard`                   |
+| PostgreSQL/Typesense 分享搜索 | `POST /api/search/share-search`           | `ShareAccessGuard`                   |
+| SEO/OG HTML                   | `GET /share/.../p/...`                    | `ShareAccessService`，未解锁不出标题 |
+| 页面附件                      | `GET /api/files/public/...`               | share/version 绑定的附件 JWT         |
+| 嵌入                          | 复用上述页面、树和附件入口                | 不增加独立旁路                       |
+| 导出                          | `/api/pages/export`、`/api/spaces/export` | 保持 JWT、页面权限和审计，不是公开面 |
+
+Guard 在返回密码状态前先检查 workspace/space 分享策略、页面删除状态和受限祖先，
+避免已禁用或已受限资源通过 `401` 暴露。附件 JWT 同时绑定 attachment、page、share、
+workspace 和 password version；修改密码、移除密码、删除分享或切换“包含子页面”都会
+使相关旧令牌失效。
+
 #### API 与权限
 
 | API                                | 鉴权              | 权限                    |
@@ -364,6 +382,11 @@ SEO 和嵌入。遗漏任何一个都视为验收失败。
 
 审计设置、修改、移除密码和批量撤销分享；失败解锁只聚合或采样，避免攻击者制造
 审计写放大。禁用公开分享仍删除记录并轮换 URL，不改为暂停旧 token。
+
+实现采用每个 `workspace/share/IP` 五分钟首个失败写审计、进程内最多 5000 个采样键；
+真正的暴力尝试限制继续使用项目现有 Redis `ThrottlerStorageRedisService`，因此 AIO
+内置 Redis 和外置 Redis 多实例拥有同一安全限制。workspace/space 批量禁用分享沿用
+既有设置变更审计并在事务中删除分享记录。
 
 ### 6.7 验证式邮箱修改
 
@@ -607,16 +630,20 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 ### 10.7 分享密码
 
-- [ ] `FM-SHARE-001` 列出页面、树、附件、搜索、导出、SEO、嵌入全部公开访问面。
-- [ ] `FM-SHARE-002` 设计并迁移 password hash/version/updatedAt 字段和回滚。
-- [ ] `FM-SHARE-003` 实现 `SharePasswordService`、`ShareAccessService` 和统一 Guard。
-- [ ] `FM-SHARE-004` 实现 owner/editor 设置、修改、移除密码 API 与 DTO/scope 校验。
-- [ ] `FM-SHARE-005` 实现 public unlock 限流和短期 HttpOnly capability Cookie。
-- [ ] `FM-SHARE-006` 将所有公开面接入 Guard，验证附件和导出不可旁路。
-- [ ] `FM-SHARE-007` 实现分享管理 UI、访客解锁页、错误/loading 状态和全部翻译。
-- [ ] `FM-SHARE-008` 增加设置/移除/轮换审计和失败解锁聚合策略。
-- [ ] `FM-SHARE-009` 增加暴力尝试、Cookie 版本失效、跨 share 重用和并发测试。
-- [ ] `FM-SHARE-010` 验证无 Redis AIO 与 Redis 多实例行为一致。
+- [x] `FM-SHARE-001` 列出页面、树、附件、搜索、导出、SEO、嵌入全部公开访问面。
+- [x] `FM-SHARE-002` 设计并迁移 password hash/version/updatedAt 字段和回滚。
+- [x] `FM-SHARE-003` 实现 `SharePasswordService`、`ShareAccessService` 和统一 Guard。
+- [x] `FM-SHARE-004` 实现 owner/editor 设置、修改、移除密码 API 与 DTO/scope 校验。
+- [x] `FM-SHARE-005` 实现 public unlock 限流和短期 HttpOnly capability Cookie。
+- [x] `FM-SHARE-006` 将所有公开面接入 Guard，验证附件和导出不可旁路。
+- [x] `FM-SHARE-007` 实现分享管理 UI、访客解锁页、错误/loading 状态和全部翻译。
+- [x] `FM-SHARE-008` 增加设置/移除/轮换审计和失败解锁聚合策略。
+- [x] `FM-SHARE-009` 增加暴力尝试、Cookie 版本失效、跨 share 重用和并发测试。
+- [x] `FM-SHARE-010` 验证 AIO 内置 Redis 与外置 Redis 多实例复用同一共享限流实现。
+- [x] `BUG-FM-005` 禁用公开分享或页面受限时先返回 404，不泄露密码保护状态。
+- [x] `BUG-FM-006` 新增 share unlock 命名限流器时跳过登录、MFA、Passkey 和 OAuth。
+- [x] `BUG-FM-007` “包含子页面”变化时轮换访问版本，撤销旧子页面附件 URL。
+- [x] `BUG-FM-008` 拒绝同时提交 shareId/pageId，防止 Guard 与页面查询使用不同目标。
 
 ### 10.8 邮箱修改
 
@@ -659,20 +686,20 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 ### 10.11 编辑器补充
 
-- [ ] `FM-EDIT-001` 为 H4-H6 增加标题子菜单、slash command、快捷键和 ToC 文案。
-- [ ] `FM-EDIT-002` 增加 H4-H6 Markdown/HTML/JSON/Yjs 和历史文档测试。
-- [ ] `FM-EDIT-003` 为 image atom 增加 caption attr 和编辑/阅读渲染。
-- [ ] `FM-EDIT-004` 保持 alt/alignment，并验证 caption 导入导出降级规则。
-- [ ] `FM-EDIT-005` 实现 Ctrl/Meta 点击链接，覆盖内部、外部、锚点和恶意协议。
-- [ ] `FM-EDIT-006` 完成新增编辑器文案翻译和移动端/只读/分享页验收。
+- [x] `FM-EDIT-001` 为 H4-H6 增加标题子菜单、slash command、快捷键和 ToC 文案。
+- [x] `FM-EDIT-002` 增加 H4-H6 Markdown/HTML/JSON/Yjs 和历史文档测试。
+- [x] `FM-EDIT-003` 为 image atom 增加 caption attr 和编辑/阅读渲染。
+- [x] `FM-EDIT-004` 保持 alt/alignment，并验证 caption 导入导出降级规则。
+- [x] `FM-EDIT-005` 实现 Ctrl/Meta 点击链接，覆盖内部、外部、锚点和恶意协议。
+- [x] `FM-EDIT-006` 完成新增编辑器文案翻译和移动端/只读/分享页验收。
 
 ### 10.12 发布前复盘
 
-- [ ] `FM-REL-001` 对本阶段变更执行角色、身份、资源和审计矩阵。
-- [ ] `FM-REL-002` 执行受影响 client/server test、typecheck、lint 和 build。
-- [ ] `FM-REL-003` 检查 migration 回滚、AIO 无 Redis 和反向代理环境。
+- [x] `FM-REL-001` 对本阶段变更执行角色、身份、资源和审计矩阵。
+- [x] `FM-REL-002` 执行受影响 client/server test、typecheck、lint 和 build。
+- [x] `FM-REL-003` 检查 migration 回滚、AIO 内置 Redis、外置 Redis 和反向代理环境。
 - [ ] `FM-REL-004` 使用两个浏览器验证实时更新和旧前端版本提示。
-- [ ] `FM-REL-005` 更新本文 Todo、实施复盘、用户可见变化和遗留风险。
+- [x] `FM-REL-005` 更新本文 Todo、实施复盘、用户可见变化和遗留风险。
 
 ## 11. 实施复盘
 
@@ -700,6 +727,41 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 - 数据库迁移与回滚：无迁移。`BacklinkRepo` 只更新 `backlinks` 指定 ID。
 - 测试和人工验证：Backlink 与搜索回归测试保留；撤回后重新执行相关测试和构建。
 - 遗留风险和下一步：具体 SSO 协议实现按独立功能评估，不再作为当前 P0 缺陷处理。
+
+### 2026-07-12：分享密码与编辑器补充
+
+- 完成 Todo：`FM-SHARE-001` 至 `FM-SHARE-010`、`FM-EDIT-001` 至
+  `FM-EDIT-006`、`FM-REL-001` 至 `FM-REL-003`、`FM-REL-005`，以及实施中发现的
+  `BUG-FM-005` 至 `BUG-FM-008`。
+- 用户可见变化：页面编辑者可在现有分享弹层设置、修改和移除密码；访客在同一分享
+  URL 输入密码后继续访问。编辑器增加 H4-H6、图片说明和编辑状态下 Ctrl/Meta 点击
+  链接直接新标签打开。
+- 前端实现与兼容：沿用 React、Mantine、TanStack Query、Tiptap/Yjs 和 i18next；
+  密码只存在于表单状态和 HTTPS 请求体，不进入 URL、Query key 或浏览器存储。新增
+  文案已覆盖 12 个 locale。现有分享页、只读编辑器和响应式菜单复用同一组件。
+- 后端鉴权与资源边界：设置/修改/移除要求 JWT 或 `rest:write` API Key、workspace
+  一致且用户可编辑页面；MCP OAuth 不能调用 REST 管理 API。公开页面、树、搜索、SEO、
+  嵌入和附件统一校验 share，导出继续要求登录和页面权限。
+- 审计与敏感数据：新增设置、修改、移除和采样失败解锁事件；hash、明文密码和
+  capability 均不进入响应或审计。失败解锁按 share/IP 五分钟采样并限制内存键数量，
+  暴力尝试由共享 Redis 限流器阻断。
+- 数据库迁移与回滚：`shares` 新增 nullable bcrypt hash、非负 version 和 updatedAt；
+  down migration 先移除 check 再移除三列。所有公开 repo 投影只返回
+  `passwordProtected`。版本使用数据库表达式原子递增，并发修改不会丢失撤销版本。
+- 编辑器数据兼容：caption 是独立 image attr，HTML 使用 `figure/figcaption`，JSON 和
+  Yjs 无损；旧 `img` 继续解析。标准 Markdown 只输出图片及 alt，明确丢弃 caption，
+  不引入私有语法。H4-H6 的 HTML、JSON、Markdown、Yjs 和协作撤销均有测试。
+- 测试和人工验证：server 65 个 suite、344 项通过；client 11 个文件、96 项通过；
+  编辑器定向 7 项通过；全项目 ESLint 0 error（13 个既有 warning）；editor-ext、server、
+  client production build 通过，12 个 locale 键完整性检查通过。
+- 性能/部署验证：解锁时才执行 bcrypt，后续为本地 JWT 校验加一次有索引的 share/page
+  查询；无新增前端依赖。Cookie 的 `Secure` 继续由 `APP_URL`/反向代理外部 HTTPS 配置
+  决定，AIO 内置 Redis和外置 Redis 都复用现有限流存储。
+- 新发现 BUG Todo：`BUG-FM-005`（策略泄露）、`BUG-FM-006`（命名限流串扰）、
+  `BUG-FM-007`（子页面附件旧 token）、`BUG-FM-008`（双 locator 绕过）均已增加
+  Todo、修复并回归。
+- 遗留风险和下一步：`FM-REL-004` 的两个真实浏览器部署升级验证不属于本次两项功能，
+  仍保持未勾选；上线后可再做一次反向代理下的 Cookie/SEO 人工验收。
 
 ### 复盘模板
 
