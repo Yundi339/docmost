@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: docmost-production
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   REGISTRY: ${{ vars.PRODUCTION_REGISTRY }}
@@ -34,6 +34,7 @@ jobs:
   build:
     needs: authorize-production
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
     steps:
       - name: Checkout production source branch
@@ -57,8 +58,15 @@ jobs:
           short_sha="${source_sha:0:12}"
           build_prefix="$(TZ=Asia/Shanghai date '+%y.%m.%d.%H%M')"
           app_version="${build_prefix}+g${short_sha}"
+          printf 'source_sha=%s\n' "$source_sha" >> "$GITHUB_OUTPUT"
           printf 'version=%s\n' "$app_version" >> "$GITHUB_OUTPUT"
           printf 'tag=%s-%s\n' "$build_prefix" "$short_sha" >> "$GITHUB_OUTPUT"
+          {
+            printf '### Production image\n\n'
+            printf -- '- Version: `%s`\n' "$app_version"
+            printf -- '- Immutable tag: `%s`\n' "${build_prefix}-${short_sha}"
+            printf -- '- Source commit: `%s`\n' "$source_sha"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Log in to private Registry
         uses: docker/login-action@v3
@@ -70,7 +78,7 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push production AIO image
+      - name: Build and push immutable production AIO image
         id: build
         uses: docker/build-push-action@v6
         with:
@@ -78,13 +86,25 @@ jobs:
           file: docker/aio/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.metadata.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:production
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.metadata.outputs.tag }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.metadata.outputs.source_sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           build-args: APP_VERSION=${{ steps.metadata.outputs.version }}
           cache-from: type=gha,scope=docmost-aio-amd64
           cache-to: type=gha,scope=docmost-aio-amd64,mode=max
           provenance: false
+
+      - name: Advance production tag
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$DIGEST"
+          docker buildx imagetools create \
+            --tag "$REGISTRY/$IMAGE_REPOSITORY:production" \
+            "$REGISTRY/$IMAGE_REPOSITORY@$DIGEST"
 
       - name: Record published image
         env:
@@ -95,3 +115,9 @@ jobs:
           test -n "$DIGEST"
           printf 'Pushed %s/%s:%s and advanced the production tag to %s\n' \
             "$REGISTRY" "$IMAGE_REPOSITORY" "$TAG" "$DIGEST"
+          {
+            printf '\n### Published\n\n'
+            printf -- '- Image: `%s/%s:%s`\n' "$REGISTRY" "$IMAGE_REPOSITORY" "$TAG"
+            printf -- '- Digest: `%s`\n' "$DIGEST"
+            printf -- '- Mutable tag: `production`\n'
+          } >> "$GITHUB_STEP_SUMMARY"

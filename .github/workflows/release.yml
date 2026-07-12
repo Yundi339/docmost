@@ -70,10 +70,9 @@ jobs:
         id: metadata
         shell: bash
         run: |
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
-          echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          ref_slug=$(echo "${SOURCE_REF}" | tr '/:@' '-' | tr -cd '[:alnum:]._-')
-          echo "ref_slug=${ref_slug:-manual}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build Docker image
         uses: docker/build-push-action@v6
@@ -85,21 +84,25 @@ jobs:
           tags: |
             ${{ matrix.image }}:latest
             ${{ matrix.image }}:${{ steps.metadata.outputs.version }}
-            ${{ matrix.image }}:${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.ref_slug }}-${{ steps.metadata.outputs.sha_short }}
+            ${{ matrix.image }}:${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.sha_short }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.metadata.outputs.source_sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           build-args: |
             APP_VERSION=${{ steps.metadata.outputs.version }}
-          outputs: type=docker,dest=${{ matrix.artifact_prefix }}-${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.ref_slug }}-${{ steps.metadata.outputs.sha_short }}-${{ matrix.suffix }}.docker.tar
+          outputs: type=docker,dest=${{ matrix.artifact_prefix }}-${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.sha_short }}-${{ matrix.suffix }}.docker.tar
           cache-from: type=gha,scope=${{ matrix.variant }}-${{ matrix.suffix }}
           cache-to: type=gha,scope=${{ matrix.variant }}-${{ matrix.suffix }},mode=max
 
       - name: Compress image
-        run: gzip ${{ matrix.artifact_prefix }}-${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.ref_slug }}-${{ steps.metadata.outputs.sha_short }}-${{ matrix.suffix }}.docker.tar
+        run: gzip ${{ matrix.artifact_prefix }}-${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.sha_short }}-${{ matrix.suffix }}.docker.tar
 
       - name: Upload image archive
         uses: actions/upload-artifact@v4
         with:
           name: docker-image-${{ matrix.variant }}-${{ matrix.suffix }}
-          path: ${{ matrix.artifact_prefix }}-${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.ref_slug }}-${{ steps.metadata.outputs.sha_short }}-${{ matrix.suffix }}.docker.tar.gz
+          path: ${{ matrix.artifact_prefix }}-${{ steps.metadata.outputs.version }}-${{ steps.metadata.outputs.sha_short }}-${{ matrix.suffix }}.docker.tar.gz
           if-no-files-found: error
 
   release:
