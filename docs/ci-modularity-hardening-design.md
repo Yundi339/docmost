@@ -56,9 +56,10 @@
 1. `pnpm install --frozen-lockfile`；
 2. `pnpm version:check`；
 3. `pnpm lint`；
-4. 服务端 Jest；
-5. 客户端 Vitest；
-6. `pnpm build`。
+4. 构建服务端测试依赖的 `@docmost/editor-ext`；
+5. 服务端 Jest；
+6. 客户端 Vitest；
+7. `pnpm build`。
 
 生产工作流和 Release 工作流均以 reusable workflow job 为前置依赖。Registry 登录、镜像构建、产物上传和 Release 创建只能在验证成功后执行。
 
@@ -200,7 +201,7 @@ Todo ID 创建后不改含义。实现中发现问题必须先新增 `BUG-GOV-NN
 - [x] `GOV-CI-001` 升级现有 GitHub Action 到支持 Node 24 的 major。
 - [x] `GOV-CI-002` 新增 reusable verify workflow，执行版本、lint、服务端测试、客户端测试和 build。
 - [x] `GOV-CI-003` 让 production 和 release 在 verify 成功后才接触发布凭据或产物。
-- [x] `GOV-CI-004` 验证 workflow 权限、YAML、矩阵构建依赖和失败阻断行为。
+- [ ] `GOV-CI-004` 验证 workflow 权限、YAML、矩阵构建依赖和失败阻断行为。
 
 ### 10.3 OAuth 数据与模块
 
@@ -235,6 +236,7 @@ Todo ID 创建后不改含义。实现中发现问题必须先新增 `BUG-GOV-NN
 - [x] `BUG-GOV-003` 修复独立数据库迁移 CLI 的 `postgres` CommonJS 导入错误，确保构建产物可以执行迁移命令。
 - [x] `BUG-GOV-004` 修复 OAuth 数据迁移 UPDATE 别名使用 PostgreSQL 保留关键字导致的 SQL 解析失败。
 - [x] `BUG-GOV-005` 校验 access token、授权码和 Refresh Token 关联的 workspace、用户及 OAuth 客户端身份一致，避免只依赖上游签名或写入逻辑维持跨表绑定。
+- [ ] `BUG-GOV-006` 修复全新 CI runner 在构建 `@docmost/editor-ext` 之前运行服务端 Jest，导致无法解析该工作区包的问题。
 
 ## 11. 实施复盘
 
@@ -281,3 +283,10 @@ Todo ID 创建后不改含义。实现中发现问题必须先新增 `BUG-GOV-NN
 - 隐私：扫描暂存内容和全部待推送提交，真实域名/服务器标识、凭据特征、私钥和服务器绝对路径均无命中；字面邮箱与 IP 仅为保留测试值和回环地址。
 - 提交边界：只暂存本文计划涉及的 33 个文件，明确排除工作区原有的系统状态服务修改。
 - 待完成：创建有边界的提交、最终 push 和线上 CI 结果确认。
+
+### 2026-07-14：首次线上门禁复盘
+
+- 结果：verify 在服务端 Jest 前失败，生产授权和镜像构建 job 均被阻断，发布凭据未被使用。
+- 原因：`@docmost/editor-ext` 的包入口和类型声明指向 `dist`；全新 runner 安装依赖后尚无构建产物，本地则因已有产物没有暴露该顺序问题。
+- 处理：新增 `BUG-GOV-006`，在服务端 Jest 前显式构建该工作区包；重新打开 `GOV-CI-004`，必须由下一次线上流水线证明修复有效。
+- 用户影响：失败流水线没有发布镜像，也没有更新生产标签。

@@ -51,6 +51,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Build server test dependencies
+        run: pnpm --filter @docmost/editor-ext build
+
       - name: Test server
         run: pnpm --filter ./apps/server exec jest --runInBand
 
