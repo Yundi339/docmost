@@ -1,6 +1,6 @@
 # CI 与模块化治理设计
 
-> 状态：实施中（功能实现完成，等待最终门禁与推送）
+> 状态：已完成
 > 范围：CI 发布门禁、MCP OAuth 模块化与数据一致性、协同编辑连接生命周期、模块边界约束  
 > 原则：先证明有必要，再修改；每项实现与本文 Todo、测试和复盘同步提交。
 
@@ -201,7 +201,7 @@ Todo ID 创建后不改含义。实现中发现问题必须先新增 `BUG-GOV-NN
 - [x] `GOV-CI-001` 升级现有 GitHub Action 到支持 Node 24 的 major。
 - [x] `GOV-CI-002` 新增 reusable verify workflow，执行版本、lint、服务端测试、客户端测试和 build。
 - [x] `GOV-CI-003` 让 production 和 release 在 verify 成功后才接触发布凭据或产物。
-- [ ] `GOV-CI-004` 验证 workflow 权限、YAML、矩阵构建依赖和失败阻断行为。
+- [x] `GOV-CI-004` 验证 workflow 权限、YAML、矩阵构建依赖和失败阻断行为。
 
 ### 10.3 OAuth 数据与模块
 
@@ -227,7 +227,7 @@ Todo ID 创建后不改含义。实现中发现问题必须先新增 `BUG-GOV-NN
 - [x] `GOV-VERIFY-001` 运行全量 lint、Jest、Vitest 和 build。
 - [x] `GOV-VERIFY-002` 使用 PostgreSQL 验证 migration up/down 和并发不变量。
 - [x] `GOV-VERIFY-003` 扫描敏感信息、审查 staged diff、确认不包含部署和个人信息。
-- [ ] `GOV-VERIFY-004` 更新复盘与 Todo，创建有边界的 commits，并在全部完成后 push。
+- [x] `GOV-VERIFY-004` 更新复盘与 Todo，创建有边界的 commits，并在全部完成后 push。
 
 ### 10.6 实施缺陷
 
@@ -236,7 +236,7 @@ Todo ID 创建后不改含义。实现中发现问题必须先新增 `BUG-GOV-NN
 - [x] `BUG-GOV-003` 修复独立数据库迁移 CLI 的 `postgres` CommonJS 导入错误，确保构建产物可以执行迁移命令。
 - [x] `BUG-GOV-004` 修复 OAuth 数据迁移 UPDATE 别名使用 PostgreSQL 保留关键字导致的 SQL 解析失败。
 - [x] `BUG-GOV-005` 校验 access token、授权码和 Refresh Token 关联的 workspace、用户及 OAuth 客户端身份一致，避免只依赖上游签名或写入逻辑维持跨表绑定。
-- [ ] `BUG-GOV-006` 修复全新 CI runner 在构建 `@docmost/editor-ext` 之前运行服务端 Jest，导致无法解析该工作区包的问题。
+- [x] `BUG-GOV-006` 修复全新 CI runner 在构建 `@docmost/editor-ext` 之前运行服务端 Jest，导致无法解析该工作区包的问题。
 
 ## 11. 实施复盘
 
@@ -290,3 +290,12 @@ Todo ID 创建后不改含义。实现中发现问题必须先新增 `BUG-GOV-NN
 - 原因：`@docmost/editor-ext` 的包入口和类型声明指向 `dist`；全新 runner 安装依赖后尚无构建产物，本地则因已有产物没有暴露该顺序问题。
 - 处理：新增 `BUG-GOV-006`，在服务端 Jest 前显式构建该工作区包；重新打开 `GOV-CI-004`，必须由下一次线上流水线证明修复有效。
 - 用户影响：失败流水线没有发布镜像，也没有更新生产标签。
+
+### 2026-07-14：最终完成复盘
+
+- 完成：`BUG-GOV-006`、`GOV-CI-004`、`GOV-VERIFY-004`，本文 Todo 已全部关闭。
+- 线上门禁：全新 runner 依次完成版本校验、lint、工作区测试依赖构建、服务端 Jest、客户端 Vitest 和全量 build；分支授权通过后才执行生产镜像发布。
+- 部署核验：运行镜像 revision 与目标提交一致，构建版本采用东八区时间前缀；进程无重启，启动日志无 error，内部和公开健康检查通过。
+- OAuth/MCP：受保护资源和授权服务器 metadata 使用 canonical public origin；未认证 MCP 请求返回 401 且包含 OAuth challenge。
+- 提交：功能与 CI 修复均使用有边界的提交；并行开发中的代码块、编辑器可编辑状态和系统状态文件保持未暂存，没有混入本计划提交。
+- 隐私：最终文档只记录通用验证结论，不包含公网主机、Registry、证书、目录、凭据或个人信息。
