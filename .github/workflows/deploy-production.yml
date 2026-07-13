@@ -18,7 +18,11 @@ env:
   IMAGE_REPOSITORY: docmost/docmost-aio
 
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
   authorize-production:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - name: Require the production source branch
@@ -38,7 +42,7 @@ jobs:
     environment: production
     steps:
       - name: Checkout production source branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate deployment configuration
         run: |
@@ -69,18 +73,18 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Log in to private Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push immutable production AIO image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/aio/Dockerfile

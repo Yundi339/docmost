@@ -1,0 +1,61 @@
+name: Verify
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Git ref to verify. Defaults to the triggering commit.
+        required: false
+        type: string
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Git ref to verify. Defaults to the selected workflow branch.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.event.pull_request.number || inputs.source_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate workspace versions
+        run: pnpm version:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test server
+        run: pnpm --filter ./apps/server exec jest --runInBand
+
+      - name: Test client
+        run: pnpm --filter ./apps/client exec vitest run
+
+      - name: Build
+        run: pnpm build
