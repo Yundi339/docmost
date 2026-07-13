@@ -856,6 +856,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
     (node.attrs.title as string | undefined) || DEFAULT_DATABASE_TITLE;
   const fallbackViewType =
     (node.attrs.viewType as DatabaseViewType | undefined) || "table";
+  const hostPageId = (editor.storage as { pageId?: string }).pageId;
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [openedRecord, setOpenedRecord] = useState<DatabaseRecord | null>(null);
   const [filterVisible, setFilterVisible] = useState(false);
@@ -897,8 +898,11 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const userSuggestionsQuery = useSearchSuggestionsQuery({
     query: userSearch,
     includeUsers: true,
+    context: "database-person",
+    pageId: hostPageId,
     limit: 50,
     preload: true,
+    enabled: Boolean(hostPageId),
   });
 
   const database = databaseQuery.data;
@@ -944,7 +948,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
 
   const userOptions: PeopleOption[] = users.map((user) => ({
     value: user.id,
-    label: user.name || user.email,
+    label: user.name || user.id,
     email: user.email,
     avatarUrl: user.avatarUrl,
   }));

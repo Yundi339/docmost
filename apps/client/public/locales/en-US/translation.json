@@ -1752,5 +1752,22 @@
   "Fit view": "Fit view",
   "Focus page": "Focus page",
   "Failed to export relationship graph": "Failed to export relationship graph",
-  "Exported space relationship graph": "Exported space relationship graph"
+  "Exported space relationship graph": "Exported space relationship graph",
+  "Member directory updated": "Member directory updated",
+  "Failed to update member directory": "Failed to update member directory",
+  "Member directory visibility": "Member directory visibility",
+  "Workspace members": "Workspace members",
+  "Current page or space": "Current page or space",
+  "Administrators only": "Administrators only",
+  "All changes are synced": "All changes are synced",
+  "Changes are saved on this device and waiting to sync": "Changes are saved on this device and waiting to sync",
+  "Changes are waiting to sync": "Changes are waiting to sync",
+  "You are offline": "You are offline",
+  "Sync failed. Try reconnecting": "Sync failed. Try reconnecting",
+  "Connecting to the collaboration server": "Connecting to the collaboration server",
+  "You are offline. Select to reconnect": "You are offline. Select to reconnect",
+  "Sync failed. Select to reconnect": "Sync failed. Select to reconnect",
+  "Unsynced changes": "Unsynced changes",
+  "Some changes are still waiting to sync. Refreshing now may interrupt synchronization.": "Some changes are still waiting to sync. Refreshing now may interrupt synchronization.",
+  "Refresh anyway": "Refresh anyway"
 }

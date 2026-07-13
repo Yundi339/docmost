@@ -1,21 +1,22 @@
 import { Group, SelectProps, Text } from "@mantine/core";
 import { CustomAvatar } from "@/components/ui/custom-avatar";
-import { IUser } from "@/features/user/types/user.types";
+import { IDirectoryUser } from "@/features/search/types/search.types";
 
 export const MAX_VERIFIERS = 5;
 
 export type UserOptionItem = {
   value: string;
   label: string;
-  email: string;
-  avatarUrl: string;
+  email?: string;
+  avatarUrl?: string;
 };
 
-export function toUserOptions(users: IUser[] | undefined): UserOptionItem[] {
+export function toUserOptions(
+  users: IDirectoryUser[] | undefined,
+): UserOptionItem[] {
   return (users ?? []).map((user) => ({
     value: user.id,
     label: user.name,
-    email: user.email,
     avatarUrl: user.avatarUrl,
   }));
 }

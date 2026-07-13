@@ -1926,5 +1926,22 @@
   "Fit view": "适应视图",
   "Focus page": "聚焦页面",
   "Failed to export relationship graph": "关系图导出失败",
-  "Exported space relationship graph": "导出了空间关系图"
+  "Exported space relationship graph": "导出了空间关系图",
+  "Member directory updated": "成员目录已更新",
+  "Failed to update member directory": "更新成员目录失败",
+  "Member directory visibility": "成员目录可见范围",
+  "Workspace members": "工作区成员",
+  "Current page or space": "当前页面或空间",
+  "Administrators only": "仅管理员",
+  "All changes are synced": "所有更改已同步",
+  "Changes are saved on this device and waiting to sync": "更改已保存在本机，正在等待同步",
+  "Changes are waiting to sync": "更改正在等待同步",
+  "You are offline": "您已离线",
+  "Sync failed. Try reconnecting": "同步失败，请尝试重新连接",
+  "Connecting to the collaboration server": "正在连接协作服务器",
+  "You are offline. Select to reconnect": "您已离线，点击重新连接",
+  "Sync failed. Select to reconnect": "同步失败，点击重新连接",
+  "Unsynced changes": "存在未同步更改",
+  "Some changes are still waiting to sync. Refreshing now may interrupt synchronization.": "仍有更改等待同步。现在刷新可能会中断同步。",
+  "Refresh anyway": "仍要刷新"
 }

@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -10,6 +11,10 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import {
+  DIRECTORY_CONTEXTS,
+  DirectoryContext,
+} from '../../directory/directory.types';
 
 export const SEARCH_QUERY_MAX_LENGTH = 256;
 export const SEARCH_MAX_LIMIT = 200;
@@ -65,7 +70,6 @@ export class SearchShareDTO extends SearchDTO {
 export class SearchSuggestionDTO {
   @Transform(({ value }) => trimString(value))
   @IsString()
-  @MinLength(1)
   @MaxLength(SEARCH_QUERY_MAX_LENGTH)
   query: string;
 
@@ -84,6 +88,14 @@ export class SearchSuggestionDTO {
   @IsOptional()
   @IsUUID()
   spaceId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  pageId?: string;
+
+  @IsOptional()
+  @IsIn(DIRECTORY_CONTEXTS)
+  context?: DirectoryContext;
 
   @IsOptional()
   @Type(() => Number)

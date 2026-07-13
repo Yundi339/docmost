@@ -8,6 +8,10 @@ import {
   IsOptional,
   Min,
 } from 'class-validator';
+import {
+  DIRECTORY_VISIBILITIES,
+  DirectoryVisibility,
+} from '../../directory/directory.types';
 
 export class UpdateWorkspaceDto extends PartialType(CreateWorkspaceDto) {
   @IsOptional()
@@ -66,4 +70,8 @@ export class UpdateWorkspaceDto extends PartialType(CreateWorkspaceDto) {
   @IsOptional()
   @IsBoolean()
   allowMemberTemplates: boolean;
+
+  @IsOptional()
+  @IsIn(DIRECTORY_VISIBILITIES)
+  directoryVisibility: DirectoryVisibility;
 }

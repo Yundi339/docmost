@@ -266,6 +266,10 @@ login/callback/LDAP 认证 Controller。owner 是否决定使用 SSO 是业务�
 
 ### 6.3 成员目录隐私
 
+目录隐私与协作同步状态的完整调用面、威胁模型、模块边界、
+兼容策略和实施 Todo 见
+[`directory-privacy-sync-design.md`](./directory-privacy-sync-design.md)。
+
 #### 用户价值和用户规则
 
 在包含不同部门、客户或私密空间的工作区中，普通成员不应因输入 `@` 就看到全员
@@ -288,26 +292,28 @@ login/callback/LDAP 认证 Controller。owner 是否决定使用 SSO 是业务�
 
 - `DirectoryVisibilityPolicy`
 - `DirectoryQueryService`
-- 明确的查询 context：mention、permission-picker、space-member、admin、mcp
+- 明确的查询 context：mention、permission-picker、space-member、verification、database-person
 
-策略建议保存在 workspace settings JSON：
+策略保存在 workspace settings JSON：
 
 - `workspace`：工作区成员可互相发现，兼容当前行为。
-- `shared-spaces`：只显示与操作者存在共同有效访问范围的成员。
+- `context`：普通成员只看到能访问当前目标页面或空间的候选；缺少可验证上下文时只返回本人。
 - `admins-only`：普通成员不浏览通用目录，但页面内提及仍可按页面访问关系工作。
 
 所有搜索、提及、权限选择器、群组成员读取和未来 API 必须调用同一策略服务。不能
-在各 Repo 复制条件。现有工作区默认 `workspace` 保持兼容；新工作区默认值需产品
-决策。
+在各 Repo 复制条件。历史工作区缺少配置时解析为 `workspace`，保持升级兼容；新工作区
+显式写入 `context`，避免新部署默认暴露完整成员目录。
 
 #### 鉴权、审计和性能
 
 - 后端先做 workspace/space/page 权限，再执行目录 SQL。
-- 不通过“开放空间”推导用户一定可被其他成员发现，除非产品明确决定。
+- 不通过“开放空间”或“任意共同空间”推导用户一定可被其他成员发现，按当前页面/空间
+  的有效访问关系计算候选。
 - 策略修改仅 owner 可用，并记录 before/after 审计。
 - 不审计每次搜索，避免写放大；异常批量枚举由限流与安全日志观察。
 - SQL 查询直接限制候选范围和数量，不能先加载全员再在 Node.js 过滤。
-- 为 shared-space 查询用真实数据执行 `EXPLAIN ANALYZE`，确认是否需要成员关系索引。
+- 已用匿名 1 万用户规模执行真实 `EXPLAIN ANALYZE`；集合化 CTE 预热约 18–19ms，
+  现有成员关系和页面权限索引足够，无需迁移。
 
 ### 6.4 代码块标题、换行和下载
 
@@ -577,8 +583,8 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 ## 9. 决策 Todo
 
-- [ ] `DEC-FM-001` 决定新工作区目录默认策略；建议 `shared-spaces`，旧工作区保持 `workspace`。
-- [ ] `DEC-FM-002` 决定开放空间是否构成成员可发现关系；建议否，按实际成员/页面访问计算。
+- [x] `DEC-FM-001` 新工作区目录默认 `context`，旧工作区缺少设置时兼容为 `workspace`。
+- [x] `DEC-FM-002` 开放空间和任意共同空间不单独构成成员可发现关系，按目标页面/空间访问计算。
 - [x] `DEC-FM-003` 代码块 title/wrap 在标准 Markdown 导出时允许降级，不引入私有语法。
 - [ ] `DEC-FM-004` 决定图片 Markdown title 是否映射 caption；建议不自动等同，避免改变既有 title 语义。
 - [x] `DEC-FM-005` 新增 `mcp:destructive`；旧凭据默认不具备，不增加重复的 owner 总开关。
@@ -624,16 +630,16 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 ### 10.4 目录隐私
 
-- [ ] `FM-DIR-001` 盘点 search、mention、comment、permission picker、group、admin 和 MCP 所有目录入口。
-- [ ] `FM-DIR-002` 定义 `DirectoryVisibilityPolicy` 和强类型查询 context。
-- [ ] `FM-DIR-003` 实现 `DirectoryQueryService`，在 SQL 层限制候选身份。
-- [ ] `FM-DIR-004` 普通目录响应移除 email，仅返回最小资料；管理员接口保持现有能力。
-- [ ] `FM-DIR-005` 将页面/评论提及限制为可访问当前页面的身份。
-- [ ] `FM-DIR-006` 将页面权限、空间成员和群组选择器接入统一策略。
-- [ ] `FM-DIR-007` 保持 MCP 成员工具 `Manage Member` 服务端限制并增加越权测试。
-- [ ] `FM-DIR-008` 增加 owner 目录策略设置 UI、审计和全部翻译。
-- [ ] `FM-DIR-009` 完成旧工作区默认值兼容和新工作区策略迁移。
-- [ ] `FM-DIR-010` 用真实规模执行查询计划并补限流/枚举测试。
+- [x] `FM-DIR-001` 盘点 search、mention、comment、permission picker、group、admin 和 MCP 所有目录入口。
+- [x] `FM-DIR-002` 定义 `DirectoryVisibilityPolicy` 和强类型查询 context。
+- [x] `FM-DIR-003` 实现 `DirectoryQueryService`，在 SQL 层限制候选身份。
+- [x] `FM-DIR-004` 普通目录响应移除 email，仅返回最小资料；管理员接口保持现有能力。
+- [x] `FM-DIR-005` 将页面/评论提及限制为可访问当前页面的身份。
+- [x] `FM-DIR-006` 将页面权限、空间成员和群组选择器接入统一策略。
+- [x] `FM-DIR-007` 保持 MCP 成员工具 `Manage Member` 服务端限制并增加越权测试。
+- [x] `FM-DIR-008` 增加 owner 目录策略设置 UI、审计和全部翻译。
+- [x] `FM-DIR-009` 完成旧工作区默认值兼容和新工作区策略迁移。
+- [x] `FM-DIR-010` 用匿名 1 万用户规模执行真实查询计划，消除邮箱匹配侧信道和 JIT 性能退化，并补用户级限流测试。
 
 ### 10.5 代码块
 
@@ -648,13 +654,13 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 
 ### 10.6 同步状态
 
-- [ ] `FM-SYNC-001` 盘点 Hocuspocus/Yjs/provider 现有连接和同步事件。
-- [ ] `FM-SYNC-002` 建立页面级同步状态 atom，区分已同步、离线、待同步和错误。
-- [ ] `FM-SYNC-003` 在标题区域实现安静状态图标、tooltip 和重新连接命令。
-- [ ] `FM-SYNC-004` 将 Ctrl/Cmd+S 映射为状态提示/重试，不增加直接数据库保存。
-- [ ] `FM-SYNC-005` 与服务器版本更新提示联动，本地待同步时阻止无提示刷新。
-- [ ] `FM-SYNC-006` 增加断网恢复、切页、刷新、双标签页和代理重连测试。
-- [ ] `FM-SYNC-007` 同步全部 locale，验证移动端不遮挡标题工具。
+- [x] `FM-SYNC-001` 盘点 Hocuspocus/Yjs/provider 现有连接和同步事件。
+- [x] `FM-SYNC-002` 建立页面级同步状态 atom，区分已同步、离线、待同步和错误。
+- [x] `FM-SYNC-003` 在标题区域实现安静状态图标、tooltip 和重新连接命令。
+- [x] `FM-SYNC-004` 将 Ctrl/Cmd+S 映射为状态提示/重试，不增加直接数据库保存。
+- [x] `FM-SYNC-005` 与服务器版本更新提示联动，本地待同步时阻止无提示刷新。
+- [x] `FM-SYNC-006` 增加真实双客户端断网恢复、切页、刷新、双 store、token 过期和可取消重连测试。
+- [x] `FM-SYNC-007` 同步 12 个 locale，并验证桌面与 390px 断网页头不遮挡标题工具。
 
 ### 10.7 分享密码
 
@@ -906,6 +912,33 @@ JSON/HTML/Yjs 无损；标准 Markdown 是否把 image title 映射为 caption �
 - 遗留风险和下一步：邮件队列不可用时 request 会失败并清理对应申请；旧邮箱安全通知
   入队失败不会回滚已经完成的身份字段修改，只记录不含邮箱地址的服务端错误。公开
   confirm/cancel 不在本次范围，重复申请用于撤销旧链接。
+
+### 2026-07-13：成员目录隐私与协作同步状态（未提交）
+
+- 完成 Todo：`DEC-FM-001`、`DEC-FM-002`、`FM-DIR-001` 至 `FM-DIR-010`、
+  `FM-SYNC-001` 至 `FM-SYNC-007`，以及实施中发现的目录和同步缺陷。
+- 用户可见变化：owner 可设置成员目录可见范围；普通建议不再返回邮箱。编辑页可区分
+  连接中、已同步、本地待同步、离线和错误，支持点击及 `Ctrl/Cmd+S` 重连；服务器版本
+  刷新会在存在待同步内容时确认。
+- 前端实现与兼容：沿用 React、Mantine、Jotai、TanStack Query、i18next 和现有
+  Hocuspocus provider；所有选择器携带明确 context。页头在桌面和 390px 移动布局中均
+  不发生操作遮挡，17 个新增文案覆盖全部 12 个 locale。
+- 后端鉴权与资源边界：独立 `DirectoryModule` 在 SQL 层按 workspace、目标页面/空间和
+  页面祖先权限限制候选；策略修改要求 Session 和 owner。API key、OAuth 与 MCP 不会绕过
+  所绑定用户的权限，MCP 成员管理仍要求 `Manage Member`。
+- 审计与敏感数据：仅目录策略修改记录 before/after；普通搜索和瞬时同步状态不写审计，
+  避免高频写放大。普通目录 DTO、Query cache 和日志不包含邮箱或协作 token。
+- 数据库迁移与回滚：策略继续保存在 workspace settings，无 schema migration。历史工作区
+  缺省为 `workspace`，新工作区默认 `context`；回滚只需移除新设置和目录模块接线。
+- 测试和人工验证：server 76 个 suite、408 项，client 24 个文件、143 项全量通过；双端
+  TypeScript、ESLint 和 production build 通过。真实双客户端覆盖在线复制、离线编辑、
+  重连补发、token 过期恢复、切页和双 store 隔离。
+- 性能/部署验证：匿名 1 万用户、200 群组、2000 页面和 20 层祖先数据中，集合化查询首次
+  约 33ms、预热约 18–19ms；复用现有索引，不增加迁移、服务或容器。
+- 新发现 BUG Todo：邮箱子串命中侧信道、逐用户 SQL JIT、重连旧握手状态、卸载后定时器、
+  token 就绪顺序、移动页头和 Fast Refresh 模块边界均已登记、修复并回归。
+- 遗留风险和下一步：OIDC 未包含在本轮，不应因目录/同步完成而视为可用；是否实施需先完成
+  issuer 网络策略和 verified email 绑定决策。
 
 ### 复盘模板
 

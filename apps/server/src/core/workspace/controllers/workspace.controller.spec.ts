@@ -82,6 +82,30 @@ describe('WorkspaceController', () => {
     expect(workspaceService.update).not.toHaveBeenCalled();
   });
 
+  it('blocks admins from changing directory visibility', async () => {
+    await expect(
+      controller.updateWorkspace(
+        response(),
+        dto({ directoryVisibility: 'admins-only' }),
+        user(UserRole.ADMIN),
+        workspace(),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(workspaceService.update).not.toHaveBeenCalled();
+  });
+
+  it('allows owners to change directory visibility', async () => {
+    await controller.updateWorkspace(
+      response(),
+      dto({ directoryVisibility: 'context' }),
+      user(UserRole.OWNER),
+      workspace(),
+    );
+    expect(workspaceService.update).toHaveBeenCalledWith('workspace-id', {
+      directoryVisibility: 'context',
+    });
+  });
+
   it.each([{ enforceSso: true }, { emailDomains: ['example.com'] }])(
     'blocks admins from changing SSO settings: %j',
     async (settings) => {

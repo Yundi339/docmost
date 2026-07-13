@@ -1589,5 +1589,22 @@
   "Focus page": "Сфокусироваться на странице",
   "Failed to export relationship graph": "Не удалось экспортировать граф связей",
   "Search pages": "Поиск страниц",
-  "Exported space relationship graph": "Экспортирован граф связей пространства"
+  "Exported space relationship graph": "Экспортирован граф связей пространства",
+  "Member directory updated": "Каталог участников обновлён",
+  "Failed to update member directory": "Не удалось обновить каталог участников",
+  "Member directory visibility": "Видимость каталога участников",
+  "Workspace members": "Участники рабочего пространства",
+  "Current page or space": "Текущая страница или пространство",
+  "Administrators only": "Только администраторы",
+  "All changes are synced": "Все изменения синхронизированы",
+  "Changes are saved on this device and waiting to sync": "Изменения сохранены на этом устройстве и ожидают синхронизации",
+  "Changes are waiting to sync": "Изменения ожидают синхронизации",
+  "You are offline": "Вы не в сети",
+  "Sync failed. Try reconnecting": "Синхронизация не удалась. Попробуйте подключиться снова",
+  "Connecting to the collaboration server": "Подключение к серверу совместной работы",
+  "You are offline. Select to reconnect": "Вы не в сети. Выберите для повторного подключения",
+  "Sync failed. Select to reconnect": "Синхронизация не удалась. Выберите для повторного подключения",
+  "Unsynced changes": "Несинхронизированные изменения",
+  "Some changes are still waiting to sync. Refreshing now may interrupt synchronization.": "Некоторые изменения ещё ожидают синхронизации. Обновление сейчас может её прервать.",
+  "Refresh anyway": "Всё равно обновить"
 }

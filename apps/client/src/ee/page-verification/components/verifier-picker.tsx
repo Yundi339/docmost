@@ -10,6 +10,7 @@ import {
 } from "./user-option";
 
 type VerifierPickerProps = {
+  pageId: string;
   excludeIds: string[];
   disabled?: boolean;
   onSelect: (user: UserOptionItem) => void;
@@ -17,6 +18,7 @@ type VerifierPickerProps = {
 };
 
 export function VerifierPicker({
+  pageId,
   excludeIds,
   disabled,
   onSelect,
@@ -30,6 +32,8 @@ export function VerifierPicker({
     query: debouncedQuery,
     includeUsers: true,
     includeGroups: false,
+    context: "verification",
+    pageId,
     preload: true,
   });
 

@@ -15,6 +15,7 @@ import {
   HocuspocusProviderWebsocket,
   onSyncedParameters,
   onStatelessParameters,
+  onUnsyncedChangesParameters,
 } from "@hocuspocus/provider";
 import {
   Editor,
@@ -33,7 +34,6 @@ import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
 import {
   currentPageEditModeAtom,
   pageEditorAtom,
-  yjsConnectionStatusAtom,
 } from "@/features/editor/atoms/editor-atoms";
 import { asideStateAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom";
 import {
@@ -68,7 +68,6 @@ import { useParams } from "react-router-dom";
 import { extractPageSlugId, platformModifierKey } from "@/lib";
 import { FIVE_MINUTES } from "@/lib/constants.ts";
 import { PageEditMode } from "@/features/user/types/user.types.ts";
-import { jwtDecode } from "jwt-decode";
 import { searchSpotlight } from "@/features/search/constants.ts";
 import { useEditorScroll } from "./hooks/use-editor-scroll";
 import { EditorAiMenu } from "@/ee/ai/components/editor/ai-menu/ai-menu";
@@ -76,6 +75,12 @@ import { EditorLinkMenu } from "@/features/editor/components/link/link-menu";
 import ColumnsMenu from "@/features/editor/components/columns/columns-menu.tsx";
 import { useTableFullscreenControls } from "@/features/editor/components/table/use-table-fullscreen-controls.tsx";
 import { useTranslation } from "react-i18next";
+import { useCollaborationSync } from "@/features/editor/collaboration/use-collaboration-sync";
+import {
+  createReconnectController,
+  patchForConnectionStatus,
+} from "@/features/editor/collaboration/collaboration-provider-lifecycle";
+import { isCollaborationTokenExpired } from "@/features/editor/collaboration/collaboration-token";
 
 interface PageEditorProps {
   pageId: string;
@@ -97,6 +102,9 @@ export default function PageEditor({
 
   useEffect(() => {
     isComponentMounted.current = true;
+    return () => {
+      isComponentMounted.current = false;
+    };
   }, []);
 
   const [currentUser] = useAtom(currentUserAtom);
@@ -107,9 +115,11 @@ export default function PageEditor({
   const [showReadOnlyCommentPopup] = useAtom(showReadOnlyCommentPopupAtom);
   const [isLocalSynced, setIsLocalSynced] = useState(false);
   const [isRemoteSynced, setIsRemoteSynced] = useState(false);
-  const [yjsConnectionStatus, setYjsConnectionStatus] = useAtom(
-    yjsConnectionStatusAtom,
+  const [connectionStatus, setConnectionStatus] = useState<WebSocketStatus>(
+    WebSocketStatus.Connecting,
   );
+  const { report: reportSync, handleSaveShortcut } =
+    useCollaborationSync(pageId);
   const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const setMenuContainerRef = useCallback((node: HTMLDivElement | null) => {
@@ -117,7 +127,11 @@ export default function PageEditor({
     setMenuContainer(node);
   }, []);
   useTableFullscreenControls(menuContainer);
-  const { data: collabQuery, refetch: refetchCollabToken } = useCollabToken();
+  const {
+    data: collabQuery,
+    isError: collabTokenError,
+    refetch: refetchCollabToken,
+  } = useCollabToken();
   const { isIdle, resetIdle } = useIdle(FIVE_MINUTES, { initialState: false });
   const documentState = useDocumentVisibility();
   const { pageSlug } = useParams();
@@ -130,7 +144,7 @@ export default function PageEditor({
     [isComponentMounted],
   );
   const { handleScrollTo } = useEditorScroll({ canScroll });
-  // Providers only created once per pageId
+  // Providers follow the active page and collaboration token lifecycle.
   const providersRef = useRef<{
     local: IndexeddbPersistence;
     remote: HocuspocusProvider;
@@ -139,81 +153,115 @@ export default function PageEditor({
   const [providersReady, setProvidersReady] = useState(false);
 
   useEffect(() => {
-    if (!providersRef.current) {
-      const documentName = `page.${pageId}`;
-      const ydoc = new Y.Doc();
-      const local = new IndexeddbPersistence(documentName, ydoc);
-      const socket = new HocuspocusProviderWebsocket({
-        url: collaborationURL,
-      });
-      const onLocalSyncedHandler = () => {
-        setIsLocalSynced(true);
-      };
-      const onStatusHandler = (event: onStatusParameters) => {
-        setYjsConnectionStatus(event.status);
-      };
-      const onSyncedHandler = (event: onSyncedParameters) => {
-        setIsRemoteSynced(event.state);
-      };
-      const onStatelessHandler = ({ payload }: onStatelessParameters) => {
-        try {
-          const message = JSON.parse(payload);
-          if (message?.type !== "page.updated" || !message.updatedAt) return;
-          const pageData = queryClient.getQueryData<IPage>(["pages", slugId]);
-          if (pageData) {
-            queryClient.setQueryData(["pages", slugId], {
-              ...pageData,
-              updatedAt: message.updatedAt,
-              ...(message.lastUpdatedBy && {
-                lastUpdatedBy: message.lastUpdatedBy,
-              }),
-            });
-          }
-        } catch {
-          // ignore unrelated stateless messages
-        }
-      };
-      const onAuthenticationFailedHandler = () => {
-        const payload = jwtDecode(collabQuery?.token);
-        const now = Date.now().valueOf() / 1000;
-        const isTokenExpired = now >= payload.exp;
-        if (isTokenExpired) {
-          refetchCollabToken().then((result) => {
-            if (result.data?.token) {
-              socket.disconnect();
-              setTimeout(() => {
-                remote.configuration.token = result.data.token;
-                socket.connect();
-              }, 100);
-            }
+    setProvidersReady(false);
+    setIsLocalSynced(false);
+    setIsRemoteSynced(false);
+    setConnectionStatus(WebSocketStatus.Connecting);
+    reportSync({
+      connectionStatus: WebSocketStatus.Connecting,
+      localReady: false,
+      remoteReady: false,
+      errorCode: collabTokenError ? "connection" : undefined,
+    });
+
+    if (!collabQuery?.token) return;
+
+    const documentName = `page.${pageId}`;
+    const ydoc = new Y.Doc();
+    const local = new IndexeddbPersistence(documentName, ydoc);
+    const socket = new HocuspocusProviderWebsocket({
+      url: collaborationURL,
+    });
+    const onLocalSyncedHandler = () => {
+      if (!isComponentMounted.current) return;
+      setIsLocalSynced(true);
+      reportSync({ localReady: true });
+    };
+    const onStatusHandler = (event: onStatusParameters) => {
+      if (!isComponentMounted.current) return;
+      setConnectionStatus(event.status);
+      reportSync(patchForConnectionStatus(event.status));
+    };
+    const onSyncedHandler = (event: onSyncedParameters) => {
+      if (!isComponentMounted.current) return;
+      setIsRemoteSynced(event.state);
+      reportSync({ remoteReady: event.state });
+    };
+    const onUnsyncedChangesHandler = (event: onUnsyncedChangesParameters) => {
+      if (!isComponentMounted.current) return;
+      reportSync({ unsyncedChanges: event.number });
+    };
+    const onStatelessHandler = ({ payload }: onStatelessParameters) => {
+      try {
+        const message = JSON.parse(payload);
+        if (message?.type !== "page.updated" || !message.updatedAt) return;
+        const pageData = queryClient.getQueryData<IPage>(["pages", slugId]);
+        if (pageData) {
+          queryClient.setQueryData(["pages", slugId], {
+            ...pageData,
+            updatedAt: message.updatedAt,
+            ...(message.lastUpdatedBy && {
+              lastUpdatedBy: message.lastUpdatedBy,
+            }),
           });
         }
-      };
-      const remote = new HocuspocusProvider({
-        websocketProvider: socket,
-        name: documentName,
-        document: ydoc,
-        token: collabQuery?.token,
-        onAuthenticationFailed: onAuthenticationFailedHandler,
-        onStatus: onStatusHandler,
-        onSynced: onSyncedHandler,
-        onStateless: onStatelessHandler,
-      });
+      } catch {
+        // ignore unrelated stateless messages
+      }
+    };
+    const onAuthenticationFailedHandler = () => {
+      if (!isComponentMounted.current) return;
+      reportSync({ errorCode: "authentication", remoteReady: false });
+      if (!isCollaborationTokenExpired(collabQuery.token)) return;
 
-      local.on("synced", onLocalSyncedHandler);
-      providersRef.current = { socket, local, remote };
-      setProvidersReady(true);
-    } else {
-      setProvidersReady(true);
-    }
-    // Only destroy on final unmount
+      void refetchCollabToken().then((result) => {
+        if (!isComponentMounted.current || !result.data?.token) return;
+        remote.configuration.token = result.data.token;
+        reconnectController.retry();
+      });
+    };
+    const remote = new HocuspocusProvider({
+      websocketProvider: socket,
+      name: documentName,
+      document: ydoc,
+      token: collabQuery?.token,
+      onAuthenticationFailed: onAuthenticationFailedHandler,
+      onStatus: onStatusHandler,
+      onSynced: onSyncedHandler,
+      onUnsyncedChanges: onUnsyncedChangesHandler,
+      onStateless: onStatelessHandler,
+    });
+    const reconnectController = createReconnectController({
+      socket,
+      provider: remote,
+      report: reportSync,
+    });
+
+    reportSync({
+      retry: reconnectController.retry,
+    });
+
+    local.on("synced", onLocalSyncedHandler);
+    providersRef.current = { socket, local, remote };
+    setProvidersReady(true);
+
     return () => {
+      local.off("synced", onLocalSyncedHandler);
+      reconnectController.dispose();
       providersRef.current?.socket.destroy();
       providersRef.current?.remote.destroy();
       providersRef.current?.local.destroy();
       providersRef.current = null;
     };
-  }, [pageId]);
+  }, [
+    collaborationURL,
+    collabQuery?.token,
+    collabTokenError,
+    pageId,
+    refetchCollabToken,
+    reportSync,
+    slugId,
+  ]);
 
   // Only connect/disconnect on tab/idle, not destroy
   useEffect(() => {
@@ -223,19 +271,19 @@ export default function PageEditor({
     if (
       isIdle &&
       documentState === "hidden" &&
-      yjsConnectionStatus === WebSocketStatus.Connected
+      connectionStatus === WebSocketStatus.Connected
     ) {
       socket.disconnect();
       return;
     }
     if (
       documentState === "visible" &&
-      yjsConnectionStatus === WebSocketStatus.Disconnected
+      connectionStatus === WebSocketStatus.Disconnected
     ) {
       resetIdle();
       socket.connect();
     }
-  }, [isIdle, documentState, providersReady, resetIdle]);
+  }, [isIdle, documentState, providersReady, resetIdle, connectionStatus]);
 
   // Attach here, to make sure the connection gets properly established
   providersRef.current?.remote.attach();
@@ -269,6 +317,7 @@ export default function PageEditor({
           keydown: (_view, event) => {
             if (platformModifierKey(event) && event.code === "KeyS") {
               event.preventDefault();
+              handleSaveShortcut();
               return true;
             }
             if (event.key === "Tab") {
@@ -344,7 +393,7 @@ export default function PageEditor({
         debouncedUpdateContent(editorJson);
       },
     },
-    [pageId, editable, extensions],
+    [pageId, editable, extensions, handleSaveShortcut],
   );
 
   const editorIsEditable = useEditorState({
@@ -402,15 +451,6 @@ export default function PageEditor({
   const isSynced = isLocalSynced && isRemoteSynced;
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (yjsConnectionStatus === WebSocketStatus.Connecting || !isSynced) {
-        setYjsConnectionStatus(WebSocketStatus.Disconnected);
-      }
-    }, 7500);
-
-    return () => clearTimeout(timeout);
-  }, [yjsConnectionStatus, isSynced]);
-  useEffect(() => {
     if (!editor) return;
     editor.setEditable(editable && currentPageEditMode === PageEditMode.Edit);
   }, [currentPageEditMode, editor, editable]);
@@ -421,13 +461,13 @@ export default function PageEditor({
   useEffect(() => {
     if (
       !hasConnectedOnceRef.current &&
-      yjsConnectionStatus === WebSocketStatus.Connected &&
+      connectionStatus === WebSocketStatus.Connected &&
       isSynced
     ) {
       hasConnectedOnceRef.current = true;
       setShowStatic(false);
     }
-  }, [yjsConnectionStatus, isSynced]);
+  }, [connectionStatus, isSynced]);
 
   if (showStatic) {
     return (

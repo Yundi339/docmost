@@ -8,6 +8,8 @@ describe("getSearchSuggestionsQueryKey", () => {
     includeGroups: false,
     includePages: false,
     spaceId: "space-a",
+    pageId: "page-a",
+    context: "mention" as const,
     limit: 10,
   };
 
@@ -16,6 +18,8 @@ describe("getSearchSuggestionsQueryKey", () => {
     ["group context", { includeGroups: true }],
     ["page context", { includePages: true }],
     ["space context", { spaceId: "space-b" }],
+    ["page context id", { pageId: "page-b" }],
+    ["directory context", { context: "permission-picker" as const }],
     ["result limit", { limit: 20 }],
   ])("separates the %s", (_label, override) => {
     expect(getSearchSuggestionsQueryKey(base)).not.toEqual(

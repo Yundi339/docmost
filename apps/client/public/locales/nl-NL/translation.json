@@ -1589,5 +1589,22 @@
   "Focus page": "Pagina focussen",
   "Failed to export relationship graph": "Relatiegrafiek kon niet worden geëxporteerd",
   "Search pages": "Pagina’s zoeken",
-  "Exported space relationship graph": "Relatiegrafiek van de ruimte geëxporteerd"
+  "Exported space relationship graph": "Relatiegrafiek van de ruimte geëxporteerd",
+  "Member directory updated": "Ledenlijst bijgewerkt",
+  "Failed to update member directory": "Ledenlijst kon niet worden bijgewerkt",
+  "Member directory visibility": "Zichtbaarheid van ledenlijst",
+  "Workspace members": "Werkruimteleden",
+  "Current page or space": "Huidige pagina of ruimte",
+  "Administrators only": "Alleen beheerders",
+  "All changes are synced": "Alle wijzigingen zijn gesynchroniseerd",
+  "Changes are saved on this device and waiting to sync": "Wijzigingen zijn op dit apparaat opgeslagen en wachten op synchronisatie",
+  "Changes are waiting to sync": "Wijzigingen wachten op synchronisatie",
+  "You are offline": "Je bent offline",
+  "Sync failed. Try reconnecting": "Synchronisatie mislukt. Probeer opnieuw te verbinden",
+  "Connecting to the collaboration server": "Verbinden met de samenwerkingsserver",
+  "You are offline. Select to reconnect": "Je bent offline. Selecteer om opnieuw te verbinden",
+  "Sync failed. Select to reconnect": "Synchronisatie mislukt. Selecteer om opnieuw te verbinden",
+  "Unsynced changes": "Niet-gesynchroniseerde wijzigingen",
+  "Some changes are still waiting to sync. Refreshing now may interrupt synchronization.": "Sommige wijzigingen wachten nog op synchronisatie. Nu vernieuwen kan de synchronisatie onderbreken.",
+  "Refresh anyway": "Toch vernieuwen"
 }

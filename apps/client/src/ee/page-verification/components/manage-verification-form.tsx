@@ -232,6 +232,7 @@ function ExpiringManageContent({ pageId, info, onClose }: ManageContentProps) {
               info.verifiers.length < MAX_VERIFIERS && (
                 <div style={{ marginTop: "var(--mantine-spacing-xs)" }}>
                   <VerifierPicker
+                    pageId={pageId}
                     excludeIds={existingVerifierIds}
                     onSelect={(user) => handleAddVerifier(user.value)}
                   />
@@ -502,6 +503,7 @@ function QmsManageContent({ pageId, info, onClose }: ManageContentProps) {
             {canManageVerifiers && info.verifiers.length < MAX_VERIFIERS && (
               <div style={{ marginTop: "var(--mantine-spacing-xs)" }}>
                 <VerifierPicker
+                  pageId={pageId}
                   excludeIds={existingVerifierIds}
                   onSelect={(user) => handleAddVerifier(user.value)}
                 />

@@ -5,7 +5,6 @@ import {
   Menu,
   Slider,
   Text,
-  ThemeIcon,
   Tooltip,
 } from "@mantine/core";
 import {
@@ -31,14 +30,12 @@ import {
   IconStar,
   IconStarFilled,
   IconTrash,
-  IconWifiOff,
 } from "@tabler/icons-react";
-import React, { useEffect, useRef, useState } from "react";
 import { useAsideTriggerProps } from "@/hooks/use-toggle-aside.tsx";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom } from "jotai";
 import { historyAtoms } from "@/features/page-history/atoms/history-atoms.ts";
 import { visitorsModalAtom } from "@/features/page-visitors/atoms/visitors-atoms.ts";
-import { useDisclosure, useHotkeys } from "@mantine/hooks";
+import { useDisclosure, useHotkeys, useMediaQuery } from "@mantine/hooks";
 import { useClipboard } from "@/hooks/use-clipboard";
 import { useParams } from "react-router-dom";
 import { usePageQuery } from "@/features/page/queries/page-query.ts";
@@ -62,10 +59,7 @@ import {
 import { Trans, useTranslation } from "react-i18next";
 import ExportModal from "@/components/common/export-modal";
 import { htmlToMarkdown } from "@docmost/editor-ext";
-import {
-  pageEditorAtom,
-  yjsConnectionStatusAtom,
-} from "@/features/editor/atoms/editor-atoms.ts";
+import { pageEditorAtom } from "@/features/editor/atoms/editor-atoms.ts";
 import { formattedDate } from "@/lib/time.ts";
 import { PageEditModeToggle } from "@/features/user/components/page-state-pref.tsx";
 import MovePageModal from "@/features/page/components/move-page-modal.tsx";
@@ -87,6 +81,7 @@ import {
   useUnwatchPageMutation,
 } from "@/features/page/queries/watcher-query";
 import useUserRole from "@/hooks/use-user-role";
+import { SyncStatusIndicator } from "@/features/editor/collaboration/sync-status-indicator";
 
 interface PageHeaderMenuProps {
   readOnly?: boolean;
@@ -96,6 +91,7 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
   const commentsTriggerProps = useAsideTriggerProps("comments");
   const tocTriggerProps = useAsideTriggerProps("toc");
   const [pageAlign, setPageAlign] = useAtom(pageAlignAtom);
+  const isMobile = useMediaQuery("(max-width: 48em)");
   const { pageSlug } = useParams();
   const { data: page } = usePageQuery({
     pageId: extractPageSlugId(pageSlug),
@@ -129,11 +125,11 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
 
   return (
     <>
-      <ConnectionWarning />
+      <SyncStatusIndicator pageId={page?.id} />
 
-      {!readOnly && <PageEditModeToggle size="xs" />}
+      {!readOnly && <PageEditModeToggle size="xs" compact={isMobile} />}
 
-      <PageShareModal readOnly={readOnly} />
+      <PageShareModal readOnly={readOnly} compact={isMobile} />
 
       <Tooltip label={t("Comments")} openDelay={250} withArrow>
         <ActionIcon
@@ -146,36 +142,40 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
         </ActionIcon>
       </Tooltip>
 
-      <Tooltip label={t("Table of contents")} openDelay={250} withArrow>
-        <ActionIcon
-          variant="subtle"
-          color="dark"
-          aria-label={t("Table of contents")}
-          {...tocTriggerProps}
-        >
-          <IconList size={20} stroke={2} />
-        </ActionIcon>
-      </Tooltip>
+      <Box visibleFrom="sm">
+        <Tooltip label={t("Table of contents")} openDelay={250} withArrow>
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            aria-label={t("Table of contents")}
+            {...tocTriggerProps}
+          >
+            <IconList size={20} stroke={2} />
+          </ActionIcon>
+        </Tooltip>
+      </Box>
 
-      <Tooltip
-        label={pageAlign === "left" ? t("Center page") : t("Align page left")}
-        openDelay={250}
-        withArrow
-      >
-        <ActionIcon
-          variant="subtle"
-          color="dark"
-          onClick={() =>
-            setPageAlign(pageAlign === "left" ? "center" : "left")
-          }
+      <Box visibleFrom="sm">
+        <Tooltip
+          label={pageAlign === "left" ? t("Center page") : t("Align page left")}
+          openDelay={250}
+          withArrow
         >
-          {pageAlign === "left" ? (
-            <IconAlignCenter size={20} stroke={2} />
-          ) : (
-            <IconAlignLeft size={20} stroke={2} />
-          )}
-        </ActionIcon>
-      </Tooltip>
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            onClick={() =>
+              setPageAlign(pageAlign === "left" ? "center" : "left")
+            }
+          >
+            {pageAlign === "left" ? (
+              <IconAlignCenter size={20} stroke={2} />
+            ) : (
+              <IconAlignLeft size={20} stroke={2} />
+            )}
+          </ActionIcon>
+        </Tooltip>
+      </Box>
 
       <PageActionMenu readOnly={readOnly} />
     </>
@@ -546,59 +546,5 @@ function VisitorRecordsMenuItem({ onClick }: VisitorRecordsMenuItemProps) {
     <Menu.Item leftSection={<IconUsers size={16} />} onClick={onClick}>
       {t("Visitor records")}
     </Menu.Item>
-  );
-}
-
-function ConnectionWarning() {
-  const { t } = useTranslation();
-  const yjsConnectionStatus = useAtomValue(yjsConnectionStatusAtom);
-  const [showWarning, setShowWarning] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const isDisconnected = ["disconnected", "connecting"].includes(
-      yjsConnectionStatus,
-    );
-
-    if (isDisconnected) {
-      if (!timeoutRef.current) {
-        timeoutRef.current = setTimeout(() => setShowWarning(true), 5000);
-      }
-    } else {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      setShowWarning(false);
-    }
-  }, [yjsConnectionStatus]);
-
-  // Cleanup only on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-
-  if (!showWarning) return null;
-
-  return (
-    <Tooltip
-      label={t("Real-time editor connection lost. Retrying...")}
-      openDelay={250}
-      withArrow
-    >
-      <ThemeIcon
-        variant="default"
-        c="red"
-        role="status"
-        aria-label={t("Real-time editor connection lost. Retrying...")}
-        style={{ border: "none" }}
-      >
-        <IconWifiOff size={20} stroke={2} />
-      </ThemeIcon>
-    </Tooltip>
   );
 }

@@ -1,11 +1,22 @@
-import { Text, MantineSize, SegmentedControl } from "@mantine/core";
+import {
+  Text,
+  MantineSize,
+  SegmentedControl,
+  Tooltip,
+  VisuallyHidden,
+} from "@mantine/core";
+import { IconEye, IconPencil } from "@tabler/icons-react";
 import { useAtom } from "jotai";
 import { userAtom } from "@/features/user/atoms/current-user-atom.ts";
 import { updateUser } from "@/features/user/services/user-service.ts";
 import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PageEditMode } from "@/features/user/types/user.types.ts";
-import { ResponsiveSettingsRow, ResponsiveSettingsContent, ResponsiveSettingsControl } from "@/components/ui/responsive-settings-row";
+import {
+  ResponsiveSettingsRow,
+  ResponsiveSettingsContent,
+  ResponsiveSettingsControl,
+} from "@/components/ui/responsive-settings-row";
 import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms.ts";
 
 export default function PageStatePref() {
@@ -75,7 +86,13 @@ export function PageStateSegmentedControl({
 
 // Header variant: updates the current page's mode locally without persisting
 // the preference to the server.
-export function PageEditModeToggle({ size }: { size?: MantineSize }) {
+export function PageEditModeToggle({
+  size,
+  compact = false,
+}: {
+  size?: MantineSize;
+  compact?: boolean;
+}) {
   const { t } = useTranslation();
   const [currentPageEditMode, setCurrentPageEditMode] = useAtom(
     currentPageEditModeAtom,
@@ -87,8 +104,32 @@ export function PageEditModeToggle({ size }: { size?: MantineSize }) {
       value={currentPageEditMode}
       onChange={(v) => setCurrentPageEditMode(v as PageEditMode)}
       data={[
-        { label: t("Edit"), value: PageEditMode.Edit },
-        { label: t("Read"), value: PageEditMode.Read },
+        {
+          label: compact ? (
+            <Tooltip label={t("Edit")} withArrow>
+              <span>
+                <IconPencil size={16} />
+                <VisuallyHidden>{t("Edit")}</VisuallyHidden>
+              </span>
+            </Tooltip>
+          ) : (
+            t("Edit")
+          ),
+          value: PageEditMode.Edit,
+        },
+        {
+          label: compact ? (
+            <Tooltip label={t("Read")} withArrow>
+              <span>
+                <IconEye size={16} />
+                <VisuallyHidden>{t("Read")}</VisuallyHidden>
+              </span>
+            </Tooltip>
+          ) : (
+            t("Read")
+          ),
+          value: PageEditMode.Read,
+        },
       ]}
     />
   );

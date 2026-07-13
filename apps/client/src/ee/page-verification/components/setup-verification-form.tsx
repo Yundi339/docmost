@@ -278,6 +278,7 @@ export function SetupVerificationForm({
         )}
         {canAddMore && (
           <VerifierPicker
+            pageId={pageId}
             excludeIds={selectedVerifiers.map((v) => v.value)}
             onSelect={handleAddVerifier}
           />

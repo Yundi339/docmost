@@ -7,9 +7,12 @@ import { Helmet } from "react-helmet-async";
 import ManageHostname from "@/ee/components/manage-hostname.tsx";
 import { Divider } from "@mantine/core";
 import AllowMemberTemplates from "@/ee/security/components/allow-member-templates.tsx";
+import DirectoryVisibilitySettings from "@/features/workspace/components/settings/components/directory-visibility-settings";
+import { useUserRole } from "@/hooks/use-user-role";
 
 export default function WorkspaceSettings() {
   const { t } = useTranslation();
+  const { isOwner } = useUserRole();
   return (
     <>
       <Helmet>
@@ -18,6 +21,13 @@ export default function WorkspaceSettings() {
       <SettingsTitle title={t("General")} />
       <WorkspaceIcon />
       <WorkspaceNameForm />
+
+      {isOwner && (
+        <>
+          <Divider my="md" />
+          <DirectoryVisibilitySettings />
+        </>
+      )}
 
       <Divider my="md" />
       <AllowMemberTemplates />

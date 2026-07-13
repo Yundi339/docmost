@@ -154,7 +154,12 @@ export function PagePermissionTab({
           {canManage && (
             <Group gap="xs" align="flex-end">
               <Box style={{ flex: 1 }}>
-                <MultiMemberSelect value={memberIds} onChange={setMemberIds} />
+                <MultiMemberSelect
+                  value={memberIds}
+                  context="permission-picker"
+                  pageId={pageId}
+                  onChange={setMemberIds}
+                />
               </Box>
               <Select
                 data={pagePermissionRoleData.map((r) => ({

@@ -153,7 +153,9 @@ export class WorkspaceService {
         let status = undefined;
         let plan = undefined;
         let billingEmail = undefined;
-        let settings = undefined;
+        const settings: Record<string, any> = {
+          directory: { visibility: 'context' },
+        };
 
         if (this.environmentService.isCloud()) {
           // generate unique hostname
@@ -167,7 +169,7 @@ export class WorkspaceService {
           status = WorkspaceStatus.Active;
           plan = 'standard';
           billingEmail = user.email;
-          settings = { ai: { generative: true, chat: true } };
+          settings.ai = { generative: true, chat: true };
         }
 
         // create workspace
@@ -558,6 +560,20 @@ export class WorkspaceService {
         );
       }
 
+      if (typeof updateWorkspaceDto.directoryVisibility !== 'undefined') {
+        const prev = settingsBefore?.directory?.visibility ?? 'workspace';
+        if (prev !== updateWorkspaceDto.directoryVisibility) {
+          before.directoryVisibility = prev;
+          after.directoryVisibility = updateWorkspaceDto.directoryVisibility;
+        }
+        await this.workspaceRepo.updateDirectorySettings(
+          workspaceId,
+          'visibility',
+          updateWorkspaceDto.directoryVisibility,
+          trx,
+        );
+      }
+
       delete updateWorkspaceDto.restrictApiToAdmins;
       delete updateWorkspaceDto.allowMemberApiManagement;
       delete updateWorkspaceDto.aiSearch;
@@ -568,6 +584,7 @@ export class WorkspaceService {
       delete updateWorkspaceDto.mcpMode;
       delete updateWorkspaceDto.allowMemberTemplates;
       delete updateWorkspaceDto.aiChat;
+      delete updateWorkspaceDto.directoryVisibility;
 
       await this.workspaceRepo.updateWorkspace(
         updateWorkspaceDto,

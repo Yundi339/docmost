@@ -33,13 +33,17 @@ export interface IWorkspace {
   allowMemberApiManagement?: boolean;
   allowMemberAiSettings?: boolean;
   allowMemberTemplates?: boolean;
+  directoryVisibility?: DirectoryVisibility;
 }
+
+export type DirectoryVisibility = "workspace" | "context" | "admins-only";
 
 export interface IWorkspaceSettings {
   ai?: IWorkspaceAiSettings;
   sharing?: IWorkspaceSharingSettings;
   api?: IWorkspaceApiSettings;
   templates?: IWorkspaceTemplateSettings;
+  directory?: IWorkspaceDirectorySettings;
 }
 
 export interface IWorkspaceApiSettings {
@@ -62,6 +66,10 @@ export interface IWorkspaceSharingSettings {
 
 export interface IWorkspaceTemplateSettings {
   allowMemberTemplates?: boolean;
+}
+
+export interface IWorkspaceDirectorySettings {
+  visibility?: DirectoryVisibility;
 }
 
 export interface ICreateInvite {

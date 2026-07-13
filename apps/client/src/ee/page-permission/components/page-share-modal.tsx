@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Button,
+  ActionIcon,
   Indicator,
   Loader,
   Modal,
@@ -8,9 +9,10 @@ import {
   Tabs,
   Text,
   Center,
+  Tooltip,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconWorld, IconLock } from "@tabler/icons-react";
+import { IconWorld, IconLock, IconShare3 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { extractPageSlugId } from "@/lib";
@@ -29,9 +31,15 @@ type PageShareModalProps = {
   readOnly?: boolean;
   pageId?: string;
   spaceSlug?: string;
+  compact?: boolean;
 };
 
-export function PageShareModal({ readOnly, pageId: pageIdProp, spaceSlug: spaceSlugProp }: PageShareModalProps) {
+export function PageShareModal({
+  readOnly,
+  pageId: pageIdProp,
+  spaceSlug: spaceSlugProp,
+  compact = false,
+}: PageShareModalProps) {
   const { t } = useTranslation();
   const { pageSlug, spaceSlug } = useParams();
   const pageSlugId = pageIdProp ?? extractPageSlugId(pageSlug);
@@ -56,30 +64,49 @@ export function PageShareModal({ readOnly, pageId: pageIdProp, spaceSlug: spaceS
   const { data: restrictionInfo, isLoading: restrictionLoading } =
     usePageRestrictionInfoQuery(opened && hasPagePermissions ? pageId : undefined);
 
+  const triggerIcon = isRestricted ? (
+    <Indicator color="red" offset={5} withBorder>
+      <IconLock size={20} stroke={1.5} />
+    </Indicator>
+  ) : isPubliclyShared ? (
+    <Indicator color="green" offset={5} withBorder>
+      <IconWorld size={20} stroke={1.5} />
+    </Indicator>
+  ) : (
+    <IconShare3 size={20} stroke={1.5} />
+  );
+
+  const openShareModal = () => {
+    setActiveTab(
+      isPubliclyShared ? "publish" : hasPagePermissions ? "access" : "publish",
+    );
+    open();
+  };
+
   return (
     <>
-      <Button
-        style={{ border: "none" }}
-        size="compact-sm"
-        leftSection={
-          isRestricted ? (
-            <Indicator color="red" offset={5} withBorder>
-              <IconLock size={20} stroke={1.5} />
-            </Indicator>
-          ) : isPubliclyShared ? (
-            <Indicator color="green" offset={5} withBorder>
-              <IconWorld size={20} stroke={1.5} />
-            </Indicator>
-          ) : null
-        }
-        variant="default"
-        onClick={() => {
-          setActiveTab(isPubliclyShared ? "publish" : hasPagePermissions ? "access" : "publish");
-          open();
-        }}
-      >
-        {t("Share")}
-      </Button>
+      {compact ? (
+        <Tooltip label={t("Share")} withArrow>
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            onClick={openShareModal}
+            aria-label={t("Share")}
+          >
+            {triggerIcon}
+          </ActionIcon>
+        </Tooltip>
+      ) : (
+        <Button
+          style={{ border: "none" }}
+          size="compact-sm"
+          leftSection={isRestricted || isPubliclyShared ? triggerIcon : null}
+          variant="default"
+          onClick={openShareModal}
+        >
+          {t("Share")}
+        </Button>
+      )}
 
       <Modal
         opened={opened}

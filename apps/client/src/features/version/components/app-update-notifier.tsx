@@ -1,8 +1,14 @@
 import { Button, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconRefresh } from "@tabler/icons-react";
-import { useCallback, useEffect } from "react";
+import { useAtomValue } from "jotai";
+import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { hasUnsyncedChangesAtom } from "@/features/editor/collaboration/collaboration-sync-state";
+import {
+  isConfirmedUnsyncedReloadAllowed,
+  refreshWithSyncProtection,
+} from "./app-update-refresh";
 
 const UPDATE_NOTIFICATION_ID = "app-update-available";
 const PRELOAD_ERROR_EVENT = "docmost:preload-error";
@@ -44,6 +50,13 @@ async function getRuntimeVersion(): Promise<string | null> {
 
 export function AppUpdateNotifier() {
   const { t } = useTranslation();
+  const hasUnsyncedChanges = useAtomValue(hasUnsyncedChangesAtom);
+  const hasUnsyncedChangesRef = useRef(hasUnsyncedChanges);
+  hasUnsyncedChangesRef.current = hasUnsyncedChanges;
+
+  const handleRefresh = useCallback(() => {
+    refreshWithSyncProtection(hasUnsyncedChangesRef.current, t);
+  }, [t]);
 
   const showUpdateNotification = useCallback(() => {
     notifications.show({
@@ -58,7 +71,7 @@ export function AppUpdateNotifier() {
           <Button
             size="xs"
             leftSection={<IconRefresh size={16} />}
-            onClick={() => window.location.reload()}
+            onClick={handleRefresh}
           >
             {t("Refresh now")}
           </Button>
@@ -67,7 +80,7 @@ export function AppUpdateNotifier() {
       autoClose: false,
       withCloseButton: false,
     });
-  }, [t]);
+  }, [handleRefresh, t]);
 
   const checkVersion = useCallback(async () => {
     if (import.meta.env.DEV || !APP_VERSION) {
@@ -110,6 +123,18 @@ export function AppUpdateNotifier() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [checkVersion, showUpdateNotification]);
+
+  useEffect(() => {
+    if (!hasUnsyncedChanges) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (isConfirmedUnsyncedReloadAllowed()) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsyncedChanges]);
 
   return null;
 }

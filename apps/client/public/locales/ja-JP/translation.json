@@ -1589,5 +1589,22 @@
   "Focus page": "ページにフォーカス",
   "Failed to export relationship graph": "関係図をエクスポートできませんでした",
   "Search pages": "ページを検索",
-  "Exported space relationship graph": "スペースの関係図をエクスポート"
+  "Exported space relationship graph": "スペースの関係図をエクスポート",
+  "Member directory updated": "メンバーディレクトリを更新しました",
+  "Failed to update member directory": "メンバーディレクトリの更新に失敗しました",
+  "Member directory visibility": "メンバーディレクトリの表示範囲",
+  "Workspace members": "ワークスペースのメンバー",
+  "Current page or space": "現在のページまたはスペース",
+  "Administrators only": "管理者のみ",
+  "All changes are synced": "すべての変更が同期されました",
+  "Changes are saved on this device and waiting to sync": "変更はこのデバイスに保存され、同期を待っています",
+  "Changes are waiting to sync": "変更は同期を待っています",
+  "You are offline": "オフラインです",
+  "Sync failed. Try reconnecting": "同期に失敗しました。再接続してください",
+  "Connecting to the collaboration server": "コラボレーションサーバーに接続中",
+  "You are offline. Select to reconnect": "オフラインです。選択して再接続",
+  "Sync failed. Select to reconnect": "同期に失敗しました。選択して再接続",
+  "Unsynced changes": "未同期の変更",
+  "Some changes are still waiting to sync. Refreshing now may interrupt synchronization.": "まだ同期待ちの変更があります。今更新すると同期が中断される可能性があります。",
+  "Refresh anyway": "それでも更新"
 }

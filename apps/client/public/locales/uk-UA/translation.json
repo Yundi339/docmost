@@ -1589,5 +1589,22 @@
   "Focus page": "Сфокусувати сторінку",
   "Failed to export relationship graph": "Не вдалося експортувати граф зв’язків",
   "Search pages": "Пошук сторінок",
-  "Exported space relationship graph": "Експортовано граф зв’язків простору"
+  "Exported space relationship graph": "Експортовано граф зв’язків простору",
+  "Member directory updated": "Каталог учасників оновлено",
+  "Failed to update member directory": "Не вдалося оновити каталог учасників",
+  "Member directory visibility": "Видимість каталогу учасників",
+  "Workspace members": "Учасники робочого простору",
+  "Current page or space": "Поточна сторінка або простір",
+  "Administrators only": "Лише адміністратори",
+  "All changes are synced": "Усі зміни синхронізовано",
+  "Changes are saved on this device and waiting to sync": "Зміни збережено на цьому пристрої та вони очікують синхронізації",
+  "Changes are waiting to sync": "Зміни очікують синхронізації",
+  "You are offline": "Ви не в мережі",
+  "Sync failed. Try reconnecting": "Синхронізація не вдалася. Спробуйте підключитися знову",
+  "Connecting to the collaboration server": "Підключення до сервера співпраці",
+  "You are offline. Select to reconnect": "Ви не в мережі. Виберіть, щоб підключитися знову",
+  "Sync failed. Select to reconnect": "Синхронізація не вдалася. Виберіть, щоб підключитися знову",
+  "Unsynced changes": "Несинхронізовані зміни",
+  "Some changes are still waiting to sync. Refreshing now may interrupt synchronization.": "Деякі зміни ще очікують синхронізації. Оновлення зараз може її перервати.",
+  "Refresh anyway": "Усе одно оновити"
 }

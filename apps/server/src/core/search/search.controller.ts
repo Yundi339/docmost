@@ -30,6 +30,9 @@ import { Public } from 'src/common/decorators/public.decorator';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { ModuleRef } from '@nestjs/core';
 import { ShareAccessGuard } from '../share/share-access.guard';
+import { Throttle } from '@nestjs/throttler';
+import { UserThrottlerGuard } from '../../integrations/throttle/user-throttler.guard';
+import { DIRECTORY_THROTTLER } from '../../integrations/throttle/throttler-names';
 
 @UseGuards(JwtAuthGuard)
 @Controller('search')
@@ -80,12 +83,14 @@ export class SearchController {
   @HttpCode(HttpStatus.OK)
   @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('suggest')
+  @UseGuards(UserThrottlerGuard)
+  @Throttle({ [DIRECTORY_THROTTLER]: { ttl: 60_000, limit: 120 } })
   async searchSuggestions(
     @Body() dto: SearchSuggestionDTO,
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.searchService.searchSuggestions(dto, user.id, workspace.id);
+    return this.searchService.searchSuggestions(dto, user, workspace);
   }
 
   @Public()

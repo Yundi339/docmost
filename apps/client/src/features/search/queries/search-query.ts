@@ -32,14 +32,14 @@ export function usePageSearchQuery(
 }
 
 export function useSearchSuggestionsQuery(
-  params: SearchSuggestionParams & { preload?: boolean },
+  params: SearchSuggestionParams & { preload?: boolean; enabled?: boolean },
 ): UseQueryResult<ISuggestionResult, Error> {
-  const { preload, ...queryParams } = params;
+  const { preload, enabled = true, ...queryParams } = params;
   return useQuery({
     queryKey: getSearchSuggestionsQueryKey(queryParams),
     staleTime: 60 * 1000, // 1min
     queryFn: () => searchSuggestions(queryParams),
-    enabled: preload || !!params.query,
+    enabled: enabled && (preload || !!params.query),
     placeholderData: keepPreviousData,
   });
 }

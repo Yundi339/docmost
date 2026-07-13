@@ -65,8 +65,11 @@ const MentionList = forwardRef<any, MentionListProps>((props, ref) => {
     includeUsers: true,
     includePages: true,
     spaceId: space?.id,
+    pageId: page?.id,
+    context: "mention",
     limit: props.query ? 10 : 5,
     preload: true,
+    enabled: Boolean(page?.id),
   });
 
   const createPageItem = (label: string): MentionSuggestionItem => {
@@ -91,7 +94,6 @@ const MentionList = forwardRef<any, MentionListProps>((props, ref) => {
           suggestion.users.map((user) => ({
             id: uuid7(),
             label: user.name,
-            email: user.email,
             entityType: "user",
             entityId: user.id,
             avatarUrl: user.avatarUrl,

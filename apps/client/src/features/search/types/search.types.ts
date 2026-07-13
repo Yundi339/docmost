@@ -1,7 +1,24 @@
-import { IUser } from "@/features/user/types/user.types.ts";
-import { IGroup } from "@/features/group/types/group.types.ts";
 import { ISpace } from "@/features/space/types/space.types.ts";
 import { IPage } from "@/features/page/types/page.types.ts";
+
+export type DirectoryContext =
+  | "generic"
+  | "mention"
+  | "permission-picker"
+  | "space-member"
+  | "verification"
+  | "database-person";
+
+export interface IDirectoryUser {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+}
+
+export interface IDirectoryGroup {
+  id: string;
+  name: string;
+}
 
 export interface IPageSearch {
   id: string;
@@ -23,12 +40,14 @@ export interface SearchSuggestionParams {
   includeGroups?: boolean;
   includePages?: boolean;
   spaceId?: string;
+  pageId?: string;
+  context?: DirectoryContext;
   limit?: number;
 }
 
 export interface ISuggestionResult {
-  users?: Partial<IUser[]>;
-  groups?: Partial<IGroup[]>;
+  users?: IDirectoryUser[];
+  groups?: IDirectoryGroup[];
   pages?: Partial<IPage[]>;
 }
 

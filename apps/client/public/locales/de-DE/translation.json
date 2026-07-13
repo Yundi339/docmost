@@ -1589,5 +1589,22 @@
   "Focus page": "Seite fokussieren",
   "Failed to export relationship graph": "Beziehungsgraph konnte nicht exportiert werden",
   "Search pages": "Seiten durchsuchen",
-  "Exported space relationship graph": "Beziehungsgraph des Bereichs exportiert"
+  "Exported space relationship graph": "Beziehungsgraph des Bereichs exportiert",
+  "Member directory updated": "Mitgliederverzeichnis aktualisiert",
+  "Failed to update member directory": "Mitgliederverzeichnis konnte nicht aktualisiert werden",
+  "Member directory visibility": "Sichtbarkeit des Mitgliederverzeichnisses",
+  "Workspace members": "Arbeitsbereichsmitglieder",
+  "Current page or space": "Aktuelle Seite oder Bereich",
+  "Administrators only": "Nur Administratoren",
+  "All changes are synced": "Alle Änderungen sind synchronisiert",
+  "Changes are saved on this device and waiting to sync": "Änderungen sind auf diesem Gerät gespeichert und warten auf die Synchronisierung",
+  "Changes are waiting to sync": "Änderungen warten auf die Synchronisierung",
+  "You are offline": "Sie sind offline",
+  "Sync failed. Try reconnecting": "Synchronisierung fehlgeschlagen. Erneut verbinden",
+  "Connecting to the collaboration server": "Verbindung zum Kollaborationsserver wird hergestellt",
+  "You are offline. Select to reconnect": "Sie sind offline. Zum erneuten Verbinden auswählen",
+  "Sync failed. Select to reconnect": "Synchronisierung fehlgeschlagen. Zum erneuten Verbinden auswählen",
+  "Unsynced changes": "Nicht synchronisierte Änderungen",
+  "Some changes are still waiting to sync. Refreshing now may interrupt synchronization.": "Einige Änderungen warten noch auf die Synchronisierung. Eine Aktualisierung kann die Synchronisierung unterbrechen.",
+  "Refresh anyway": "Trotzdem aktualisieren"
 }

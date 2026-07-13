@@ -383,6 +383,7 @@ const OWNER_ONLY_WORKSPACE_SETTING_FIELDS = new Set([
   'aiChat',
   'mcpEnabled',
   'mcpMode',
+  'directoryVisibility',
 ]);
 
 function hasOwnerOnlyWorkspaceSettings(dto: UpdateWorkspaceDto) {

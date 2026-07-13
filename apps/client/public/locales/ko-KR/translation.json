@@ -1589,5 +1589,22 @@
   "Focus page": "페이지에 포커스",
   "Failed to export relationship graph": "관계 그래프를 내보내지 못했습니다",
   "Search pages": "페이지 검색",
-  "Exported space relationship graph": "스페이스 관계 그래프 내보냄"
+  "Exported space relationship graph": "스페이스 관계 그래프 내보냄",
+  "Member directory updated": "멤버 디렉터리가 업데이트됨",
+  "Failed to update member directory": "멤버 디렉터리를 업데이트하지 못했습니다",
+  "Member directory visibility": "멤버 디렉터리 표시 범위",
+  "Workspace members": "워크스페이스 멤버",
+  "Current page or space": "현재 페이지 또는 스페이스",
+  "Administrators only": "관리자만",
+  "All changes are synced": "모든 변경 사항이 동기화됨",
+  "Changes are saved on this device and waiting to sync": "변경 사항이 이 기기에 저장되었으며 동기화를 기다리고 있습니다",
+  "Changes are waiting to sync": "변경 사항이 동기화를 기다리고 있습니다",
+  "You are offline": "오프라인 상태입니다",
+  "Sync failed. Try reconnecting": "동기화에 실패했습니다. 다시 연결해 보세요",
+  "Connecting to the collaboration server": "협업 서버에 연결 중",
+  "You are offline. Select to reconnect": "오프라인 상태입니다. 선택하여 다시 연결",
+  "Sync failed. Select to reconnect": "동기화에 실패했습니다. 선택하여 다시 연결",
+  "Unsynced changes": "동기화되지 않은 변경 사항",
+  "Some changes are still waiting to sync. Refreshing now may interrupt synchronization.": "일부 변경 사항이 아직 동기화를 기다리고 있습니다. 지금 새로 고치면 동기화가 중단될 수 있습니다.",
+  "Refresh anyway": "그래도 새로 고침"
 }

@@ -25,3 +25,12 @@
     padding-inline: 0 !important;
   }
 }
+
+.actions {
+  flex-shrink: 0;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    gap: 2px !important;
+    padding-inline: 0 !important;
+  }
+}

@@ -7,6 +7,7 @@ import {
   HocuspocusProviderWebsocket,
   onStatusParameters,
   onSyncedParameters,
+  onUnsyncedChangesParameters,
   WebSocketStatus,
 } from "@hocuspocus/provider";
 import {
@@ -16,15 +17,11 @@ import {
   useEditor,
   useEditorState,
 } from "@tiptap/react";
-import { jwtDecode } from "jwt-decode";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtomValue } from "jotai";
 import { useDebouncedCallback, useDocumentVisibility } from "@mantine/hooks";
 import { collabExtensions, mainExtensions } from "@/features/editor/extensions/extensions";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
-import {
-  currentPageEditModeAtom,
-  yjsConnectionStatusAtom,
-} from "@/features/editor/atoms/editor-atoms";
+import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms";
 import useCollaborationUrl from "@/features/editor/hooks/use-collaboration-url";
 import {
   handleFileDrop,
@@ -55,6 +52,12 @@ import ExcalidrawMenu from "@/features/editor/components/excalidraw/excalidraw-m
 import DrawioMenu from "@/features/editor/components/drawio/drawio-menu";
 import ColumnsMenu from "@/features/editor/components/columns/columns-menu";
 import { useTableFullscreenControls } from "@/features/editor/components/table/use-table-fullscreen-controls";
+import { useCollaborationSync } from "@/features/editor/collaboration/use-collaboration-sync";
+import {
+  createReconnectController,
+  patchForConnectionStatus,
+} from "@/features/editor/collaboration/collaboration-provider-lifecycle";
+import { isCollaborationTokenExpired } from "@/features/editor/collaboration/collaboration-token";
 
 interface EmbeddedRecordPageEditorProps {
   pageId: string;
@@ -78,7 +81,8 @@ export function EmbeddedRecordPageEditor({
   const editorRef = useRef<Editor | null>(null);
   const currentUser = useAtomValue(currentUserAtom);
   const currentPageEditMode = useAtomValue(currentPageEditModeAtom);
-  const [, setYjsConnectionStatus] = useAtom(yjsConnectionStatusAtom);
+  const { report: reportSync, handleSaveShortcut } =
+    useCollaborationSync(pageId);
   const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const setMenuContainerRef = useCallback((node: HTMLDivElement | null) => {
@@ -87,7 +91,11 @@ export function EmbeddedRecordPageEditor({
   }, []);
   useTableFullscreenControls(menuContainer);
 
-  const { data: collabQuery, refetch: refetchCollabToken } = useCollabToken();
+  const {
+    data: collabQuery,
+    isError: collabTokenError,
+    refetch: refetchCollabToken,
+  } = useCollabToken();
   const { isIdle, resetIdle } = useIdle(FIVE_MINUTES, { initialState: false });
   const documentState = useDocumentVisibility();
   const userSpellcheckPref =
@@ -117,6 +125,14 @@ export function EmbeddedRecordPageEditor({
     setIsLocalSynced(false);
     setIsRemoteSynced(false);
     setConnectionStatus(WebSocketStatus.Connecting);
+    reportSync({
+      connectionStatus: WebSocketStatus.Connecting,
+      localReady: false,
+      remoteReady: false,
+      errorCode: collabTokenError ? "connection" : undefined,
+    });
+
+    if (!collabQuery?.token) return;
 
     const documentName = `page.${pageId}`;
     const ydoc = new Y.Doc();
@@ -126,29 +142,33 @@ export function EmbeddedRecordPageEditor({
     });
 
     const onLocalSyncedHandler = () => {
-      if (isComponentMounted.current) setIsLocalSynced(true);
+      if (!isComponentMounted.current) return;
+      setIsLocalSynced(true);
+      reportSync({ localReady: true });
     };
     const onStatusHandler = (event: onStatusParameters) => {
       if (!isComponentMounted.current) return;
       setConnectionStatus(event.status);
-      setYjsConnectionStatus(event.status);
+      reportSync(patchForConnectionStatus(event.status));
     };
     const onSyncedHandler = (event: onSyncedParameters) => {
-      if (isComponentMounted.current) setIsRemoteSynced(event.state);
+      if (!isComponentMounted.current) return;
+      setIsRemoteSynced(event.state);
+      reportSync({ remoteReady: event.state });
+    };
+    const onUnsyncedChangesHandler = (event: onUnsyncedChangesParameters) => {
+      if (!isComponentMounted.current) return;
+      reportSync({ unsyncedChanges: event.number });
     };
     const onAuthenticationFailedHandler = () => {
-      if (!collabQuery?.token) return;
-      const payload = jwtDecode<{ exp: number }>(collabQuery.token);
-      const now = Date.now().valueOf() / 1000;
-      if (now < payload.exp) return;
+      if (!isComponentMounted.current) return;
+      reportSync({ errorCode: "authentication", remoteReady: false });
+      if (!isCollaborationTokenExpired(collabQuery.token)) return;
 
-      refetchCollabToken().then((result) => {
-        if (!result.data?.token) return;
-        socket.disconnect();
-        setTimeout(() => {
-          remote.configuration.token = result.data.token;
-          socket.connect();
-        }, 100);
+      void refetchCollabToken().then((result) => {
+        if (!isComponentMounted.current || !result.data?.token) return;
+        remote.configuration.token = result.data.token;
+        reconnectController.retry();
       });
     };
 
@@ -160,6 +180,16 @@ export function EmbeddedRecordPageEditor({
       onAuthenticationFailed: onAuthenticationFailedHandler,
       onStatus: onStatusHandler,
       onSynced: onSyncedHandler,
+      onUnsyncedChanges: onUnsyncedChangesHandler,
+    });
+    const reconnectController = createReconnectController({
+      socket,
+      provider: remote,
+      report: reportSync,
+    });
+
+    reportSync({
+      retry: reconnectController.retry,
     });
 
     local.on("synced", onLocalSyncedHandler);
@@ -169,6 +199,7 @@ export function EmbeddedRecordPageEditor({
 
     return () => {
       onEditorReady?.(null);
+      reconnectController.dispose();
       local.off("synced", onLocalSyncedHandler);
       socket.destroy();
       remote.destroy();
@@ -176,7 +207,15 @@ export function EmbeddedRecordPageEditor({
       providersRef.current = null;
       editorRef.current = null;
     };
-  }, [collaborationURL, collabQuery?.token, onEditorReady, pageId, refetchCollabToken, setYjsConnectionStatus]);
+  }, [
+    collaborationURL,
+    collabQuery?.token,
+    collabTokenError,
+    onEditorReady,
+    pageId,
+    refetchCollabToken,
+    reportSync,
+  ]);
 
   useEffect(() => {
     if (!providersReady || !providersRef.current) return;
@@ -255,6 +294,7 @@ export function EmbeddedRecordPageEditor({
           keydown: (_view, event) => {
             if (platformModifierKey(event) && event.code === "KeyS") {
               event.preventDefault();
+              handleSaveShortcut();
               return true;
             }
             if (event.key === "Tab") {
@@ -316,7 +356,7 @@ export function EmbeddedRecordPageEditor({
         debouncedUpdateContent(editor.getJSON());
       },
     },
-    [pageId, editable, extensions, onEditorReady],
+    [pageId, editable, extensions, onEditorReady, handleSaveShortcut],
   );
 
   const editorIsEditable = useEditorState({
@@ -351,17 +391,6 @@ export function EmbeddedRecordPageEditor({
 
     return () => clearTimeout(timeout);
   }, [currentUser?.user, pageId, providersReady, showStatic]);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (connectionStatus === WebSocketStatus.Connecting || !isSynced) {
-        setConnectionStatus(WebSocketStatus.Disconnected);
-        setYjsConnectionStatus(WebSocketStatus.Disconnected);
-      }
-    }, 7500);
-
-    return () => clearTimeout(timeout);
-  }, [connectionStatus, isSynced, setYjsConnectionStatus]);
 
   if (showStatic) {
     return (

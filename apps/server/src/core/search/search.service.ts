@@ -13,6 +13,8 @@ import { PageRepo } from '@docmost/db/repos/page/page.repo';
 import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { ShareRepo } from '@docmost/db/repos/share/share.repo';
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
+import { User, Workspace } from '@docmost/db/types/entity.types';
+import { DirectoryQueryService } from '../directory/directory-query.service';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const tsquery = require('pg-tsquery')();
@@ -27,6 +29,7 @@ export class SearchService {
     private shareRepo: ShareRepo,
     private spaceMemberRepo: SpaceMemberRepo,
     private pagePermissionRepo: PagePermissionRepo,
+    private directoryQuery: DirectoryQueryService,
   ) {}
 
   async searchPage(
@@ -227,8 +230,8 @@ export class SearchService {
 
   async searchSuggestions(
     suggestion: SearchSuggestionDTO,
-    userId: string,
-    workspaceId: string,
+    user: User,
+    workspace: Workspace,
   ) {
     let users = [];
     let groups = [];
@@ -237,41 +240,22 @@ export class SearchService {
     const limit = suggestion?.limit || 10;
     const query = suggestion.query.toLowerCase().trim();
 
-    if (suggestion.includeUsers) {
-      const userQuery = this.db
-        .selectFrom('users')
-        .select(['id', 'name', 'email', 'avatarUrl'])
-        .where('workspaceId', '=', workspaceId)
-        .where('deletedAt', 'is', null)
-        .where((eb) =>
-          eb.or([
-            eb(
-              sql`LOWER(f_unaccent(users.name))`,
-              'like',
-              sql`LOWER(f_unaccent(${`%${query}%`}))`,
-            ),
-            eb(sql`users.email`, 'ilike', sql`f_unaccent(${`%${query}%`})`),
-          ]),
-        )
-        .limit(limit);
-
-      users = await userQuery.execute();
-    }
-
-    if (suggestion.includeGroups) {
-      groups = await this.db
-        .selectFrom('groups')
-        .select(['id', 'name', 'description'])
-        .where((eb) =>
-          eb(
-            sql`LOWER(f_unaccent(groups.name))`,
-            'like',
-            sql`LOWER(f_unaccent(${`%${query}%`}))`,
-          ),
-        )
-        .where('workspaceId', '=', workspaceId)
-        .limit(limit)
-        .execute();
+    if (suggestion.includeUsers || suggestion.includeGroups) {
+      const directory = await this.directoryQuery.search(
+        {
+          query,
+          limit,
+          includeUsers: suggestion.includeUsers ?? false,
+          includeGroups: suggestion.includeGroups ?? false,
+          context: suggestion.context ?? 'generic',
+          pageId: suggestion.pageId,
+          spaceId: suggestion.spaceId,
+        },
+        user,
+        workspace,
+      );
+      users = directory.users;
+      groups = directory.groups;
     }
 
     if (suggestion.includePages) {
@@ -287,11 +271,11 @@ export class SearchService {
           ),
         )
         .where('deletedAt', 'is', null)
-        .where('workspaceId', '=', workspaceId)
+        .where('workspaceId', '=', workspace.id)
         .limit(limit);
 
       // search all spaces the user has access to, prioritizing the current space
-      const userSpaceIds = await this.spaceMemberRepo.getUserSpaceIds(userId);
+      const userSpaceIds = await this.spaceMemberRepo.getUserSpaceIds(user.id);
 
       if (userSpaceIds?.length > 0) {
         pageSearch = pageSearch.where('spaceId', 'in', userSpaceIds);
@@ -312,7 +296,7 @@ export class SearchService {
         const accessibleIds =
           await this.pagePermissionRepo.filterAccessiblePageIds({
             pageIds,
-            userId,
+            userId: user.id,
           });
         const accessibleSet = new Set(accessibleIds);
         pages = pages.filter((p) => accessibleSet.has(p.id));

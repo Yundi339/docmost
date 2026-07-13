@@ -572,6 +572,24 @@ describe('McpService access control', () => {
     expect(pageService.duplicatePage).not.toHaveBeenCalled();
   });
 
+  it('keeps workspace member listing behind Manage Member', async () => {
+    const workspaceService = { getWorkspaceUsers: jest.fn() };
+    const { handlers } = registerMcpTools({
+      auditService,
+      workspaceService,
+      workspaceAbility: {
+        createForUser: jest.fn(() => ({
+          cannot: jest.fn().mockReturnValue(true),
+        })),
+      },
+    });
+
+    await expect(
+      handlers.list_workspace_members({ limit: 10 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(workspaceService.getWorkspaceUsers).not.toHaveBeenCalled();
+  });
+
   it('rejects session owner mismatch', async () => {
     const end = jest.fn();
     const res = {

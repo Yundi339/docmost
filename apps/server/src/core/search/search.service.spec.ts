@@ -14,6 +14,7 @@ describe('SearchService', () => {
       {} as any,
       {} as any,
       pagePermissionRepo as any,
+      {} as any,
     );
   });
 
