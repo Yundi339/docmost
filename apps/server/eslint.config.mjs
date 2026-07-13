@@ -31,4 +31,42 @@ export default [
       'no-useless-escape': 'off',
     },
   },
+  {
+    files: [
+      'src/core/**/*.ts',
+      'src/common/**/*.ts',
+      'src/integrations/**/*.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/ee/**'],
+              message:
+                'Core, common, and integration modules must not depend on enterprise implementations.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/ee/oauth/providers/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/mcp/**', '**/oauth.controller'],
+              message:
+                'OAuth provider adapters may define client-specific policy only.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];

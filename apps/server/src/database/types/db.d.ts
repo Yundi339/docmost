@@ -171,6 +171,7 @@ export interface PasskeyChallenges {
 }
 
 export interface OauthAuthorizations {
+  authorizationKey: string;
   clientId: string;
   clientName: string;
   clientUri: string | null;
@@ -186,6 +187,21 @@ export interface OauthAuthorizations {
   updatedAt: Generated<Timestamp>;
   userId: string;
   workspaceId: string;
+}
+
+export interface OauthRegisteredClients {
+  clientId: string;
+  clientName: string;
+  clientUri: string | null;
+  createdAt: Generated<Timestamp>;
+  grantTypes: string[];
+  id: Generated<string>;
+  oauthClientId: string;
+  redirectUris: string[];
+  responseTypes: string[];
+  scopes: string[];
+  tokenEndpointAuthMethod: Generated<string>;
+  updatedAt: Generated<Timestamp>;
 }
 
 export interface OauthAuthorizationCodes {
@@ -771,6 +787,7 @@ export interface DB {
   oauthAuthorizationCodes: OauthAuthorizationCodes;
   oauthAuthorizations: OauthAuthorizations;
   oauthClients: OauthClients;
+  oauthRegisteredClients: OauthRegisteredClients;
   oauthRefreshTokens: OauthRefreshTokens;
   passkeyAccounts: PasskeyAccounts;
   passkeyChallenges: PasskeyChallenges;

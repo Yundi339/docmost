@@ -33,6 +33,7 @@ import {
   OauthAuthorizationCodes,
   OauthAuthorizations,
   OauthClients,
+  OauthRegisteredClients,
   OauthRefreshTokens,
   PasskeyAccounts,
   PasskeyChallenges,
@@ -165,6 +166,12 @@ export type InsertableAuthLoginCounter = Insertable<AuthLoginCounters>;
 export type OauthClient = Selectable<OauthClients>;
 export type InsertableOauthClient = Insertable<OauthClients>;
 export type UpdatableOauthClient = Updateable<Omit<OauthClients, 'id'>>;
+export type OauthRegisteredClient = Selectable<OauthRegisteredClients>;
+export type InsertableOauthRegisteredClient =
+  Insertable<OauthRegisteredClients>;
+export type UpdatableOauthRegisteredClient = Updateable<
+  Omit<OauthRegisteredClients, 'id'>
+>;
 export type OauthAuthorization = Selectable<OauthAuthorizations>;
 export type InsertableOauthAuthorization = Insertable<OauthAuthorizations>;
 export type UpdatableOauthAuthorization = Updateable<

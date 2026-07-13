@@ -36,8 +36,9 @@ import {
   useRevokeOAuthAuthorizationMutation,
   useUpdateOAuthClientMutation,
 } from "@/ee/oauth/queries/oauth-query";
-import { IOAuthAuthorization, OAuthScope } from "@/ee/oauth";
+import { IOAuthAuthorization, IOAuthClient, OAuthScope } from "@/ee/oauth";
 import { OAuthAuthorizationTable } from "@/ee/oauth/components/oauth-authorization-table";
+import { getOAuthProviderDescriptor } from "@/ee/oauth/oauth-provider-registry";
 
 export default function WorkspaceOAuthManagement() {
   const { t } = useTranslation();
@@ -57,40 +58,7 @@ export default function WorkspaceOAuthManagement() {
     return null;
   }
 
-  const chatgptClient = clients.find((client) => client.provider === "chatgpt");
   const mcpMode = resolveMcpMode(workspace?.settings?.ai);
-  const scopeMode = chatgptClient?.allowedScopes.includes("mcp:write")
-    ? "read-write"
-    : "read-only";
-  const destructiveEnabled = Boolean(
-    chatgptClient?.allowedScopes.includes("mcp:destructive"),
-  );
-
-  const updateScopes = (value: string) => {
-    if (!chatgptClient) return;
-    const allowedScopes: OAuthScope[] =
-      value === "read-write"
-        ? [
-            "mcp:read",
-            "mcp:write",
-            ...(destructiveEnabled ? (["mcp:destructive"] as const) : []),
-          ]
-        : ["mcp:read"];
-    updateClientMutation.mutate({
-      clientId: chatgptClient.id,
-      allowedScopes,
-    });
-  };
-
-  const updateDestructiveScope = (enabled: boolean) => {
-    if (!chatgptClient || scopeMode !== "read-write") return;
-    updateClientMutation.mutate({
-      clientId: chatgptClient.id,
-      allowedScopes: enabled
-        ? ["mcp:read", "mcp:write", "mcp:destructive"]
-        : ["mcp:read", "mcp:write"],
-    });
-  };
 
   const revokeAuthorization = (authorization: IOAuthAuthorization) => {
     modals.openConfirmModal({
@@ -144,81 +112,17 @@ export default function WorkspaceOAuthManagement() {
         <Group justify="center" py="xl">
           <Loader size="sm" />
         </Group>
-      ) : chatgptClient ? (
-        <Paper withBorder radius="sm" p="md">
-          <Group justify="space-between" align="flex-start" mb="md">
-            <div>
-              <Group gap="xs">
-                <Text fw={600}>{chatgptClient.name}</Text>
-                <Badge variant="light">GPT</Badge>
-              </Group>
-              <Text size="sm" c="dimmed">
-                {t("ChatGPT OAuth provider for Docmost MCP.")}
-              </Text>
-            </div>
-            <Switch
-              checked={chatgptClient.isEnabled}
-              disabled={updateClientMutation.isPending}
-              label={chatgptClient.isEnabled ? t("Enabled") : t("Disabled")}
-              onChange={(event) =>
-                updateClientMutation.mutate({
-                  clientId: chatgptClient.id,
-                  isEnabled: event.currentTarget.checked,
-                })
-              }
+      ) : clients.length ? (
+        <Stack gap="sm">
+          {clients.map((client) => (
+            <OAuthClientManagementCard
+              key={client.id}
+              client={client}
+              isPending={updateClientMutation.isPending}
+              onUpdate={(input) => updateClientMutation.mutate(input)}
             />
-          </Group>
-
-          <Stack gap="sm">
-            <div>
-              <Text size="sm" fw={500} mb={6}>
-                {t("Allowed access")}
-              </Text>
-              <SegmentedControl
-                value={scopeMode}
-                onChange={updateScopes}
-                disabled={updateClientMutation.isPending}
-                data={[
-                  { label: t("Read only"), value: "read-only" },
-                  { label: t("Read and write"), value: "read-write" },
-                ]}
-              />
-            </div>
-
-            <Switch
-              checked={destructiveEnabled}
-              disabled={
-                scopeMode !== "read-write" || updateClientMutation.isPending
-              }
-              label={t("Destructive MCP tools")}
-              description={t(
-                "Allow explicitly confirmed page trash operations through MCP.",
-              )}
-              onChange={(event) =>
-                updateDestructiveScope(event.currentTarget.checked)
-              }
-            />
-
-            <Divider />
-
-            <CopyRow
-              label={t("MCP server URL")}
-              value={chatgptClient.mcpServerUrl}
-            />
-            <CopyRow
-              label={t("Protected resource metadata")}
-              value={chatgptClient.resourceMetadataUrl}
-            />
-            <CopyRow
-              label={t("Authorization server metadata")}
-              value={chatgptClient.authorizationServerMetadataUrl}
-            />
-            <CopyRow
-              label={t("Dynamic client registration")}
-              value={chatgptClient.registrationEndpoint}
-            />
-          </Stack>
-        </Paper>
+          ))}
+        </Stack>
       ) : (
         <Alert variant="light" color="yellow" p="sm" icon={<IconInfoCircle />}>
           {t("No OAuth providers are configured.")}
@@ -236,6 +140,118 @@ export default function WorkspaceOAuthManagement() {
         onRevoke={revokeAuthorization}
       />
     </>
+  );
+}
+
+function OAuthClientManagementCard({
+  client,
+  isPending,
+  onUpdate,
+}: {
+  client: IOAuthClient;
+  isPending: boolean;
+  onUpdate: (input: {
+    clientId: string;
+    isEnabled?: boolean;
+    allowedScopes?: OAuthScope[];
+  }) => void;
+}) {
+  const { t } = useTranslation();
+  const descriptor = getOAuthProviderDescriptor(client.provider, client.name);
+  const scopeMode = client.allowedScopes.includes("mcp:write")
+    ? "read-write"
+    : "read-only";
+  const destructiveEnabled = client.allowedScopes.includes("mcp:destructive");
+
+  const updateScopes = (value: string) => {
+    const allowedScopes: OAuthScope[] =
+      value === "read-write"
+        ? [
+            "mcp:read",
+            "mcp:write",
+            ...(destructiveEnabled ? (["mcp:destructive"] as const) : []),
+          ]
+        : ["mcp:read"];
+    onUpdate({ clientId: client.id, allowedScopes });
+  };
+
+  return (
+    <Paper withBorder radius="sm" p="md">
+      <Group justify="space-between" align="flex-start" mb="md">
+        <div>
+          <Group gap="xs">
+            <Text fw={600}>{client.name}</Text>
+            <Badge variant="light">{descriptor.badge}</Badge>
+          </Group>
+          {descriptor.description && (
+            <Text size="sm" c="dimmed">
+              {t(descriptor.description)}
+            </Text>
+          )}
+        </div>
+        <Switch
+          checked={client.isEnabled}
+          disabled={isPending}
+          label={client.isEnabled ? t("Enabled") : t("Disabled")}
+          onChange={(event) =>
+            onUpdate({
+              clientId: client.id,
+              isEnabled: event.currentTarget.checked,
+            })
+          }
+        />
+      </Group>
+
+      <Stack gap="sm">
+        <div>
+          <Text size="sm" fw={500} mb={6}>
+            {t("Allowed access")}
+          </Text>
+          <SegmentedControl
+            value={scopeMode}
+            onChange={updateScopes}
+            disabled={isPending}
+            data={[
+              { label: t("Read only"), value: "read-only" },
+              { label: t("Read and write"), value: "read-write" },
+            ]}
+          />
+        </div>
+
+        <Switch
+          checked={destructiveEnabled}
+          disabled={scopeMode !== "read-write" || isPending}
+          label={t("Destructive MCP tools")}
+          description={t(
+            "Allow explicitly confirmed page trash operations through MCP.",
+          )}
+          onChange={(event) =>
+            onUpdate({
+              clientId: client.id,
+              allowedScopes: event.currentTarget.checked
+                ? ["mcp:read", "mcp:write", "mcp:destructive"]
+                : ["mcp:read", "mcp:write"],
+            })
+          }
+        />
+
+        <Divider />
+
+        <CopyRow label={t("MCP server URL")} value={client.mcpServerUrl} />
+        <CopyRow
+          label={t("Protected resource metadata")}
+          value={client.resourceMetadataUrl}
+        />
+        <CopyRow
+          label={t("Authorization server metadata")}
+          value={client.authorizationServerMetadataUrl}
+        />
+        <CopyRow
+          label={t("Dynamic client registration")}
+          value={client.registrationEndpoint}
+        />
+      </Stack>
+    </Paper>
   );
 }
 

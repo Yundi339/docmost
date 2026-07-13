@@ -1,6 +1,6 @@
 # CI 与模块化治理设计
 
-> 状态：实施中  
+> 状态：实施中（功能实现完成，等待最终门禁与推送）
 > 范围：CI 发布门禁、MCP OAuth 模块化与数据一致性、协同编辑连接生命周期、模块边界约束  
 > 原则：先证明有必要，再修改；每项实现与本文 Todo、测试和复盘同步提交。
 
@@ -95,8 +95,7 @@ Provider adapter 只能定义外部客户端特有规则，不能自行绕过 wo
 | 字段                             | 约束                                                  |
 | -------------------------------- | ----------------------------------------------------- |
 | `id`                             | UUID 主键                                             |
-| `workspace_id`                   | workspace FK，级联删除                                |
-| `oauth_client_id`                | `oauth_clients` FK，级联删除                          |
+| `oauth_client_id`                | `oauth_clients` FK，级联删除；由父记录唯一确定工作区  |
 | `client_id`                      | 全局唯一、不记录 secret                               |
 | `client_name` / `client_uri`     | 展示 metadata                                         |
 | `redirect_uris`                  | `text[]`，最多 10 个，应用层限制单项长度              |
@@ -105,7 +104,7 @@ Provider adapter 只能定义外部客户端特有规则，不能自行绕过 wo
 | `scopes`                         | `text[]`，仍受 workspace mode 和 owner allowlist 限制 |
 | `created_at` / `updated_at`      | 审计时间                                              |
 
-迁移从 `oauth_clients.settings.dcrClients` 回填。运行时注册在事务内锁定所属 `oauth_clients` 行，按 redirect URI 集合复用现有客户端，避免并发重复和 JSON 丢失更新。表中最多保留 50 条，达到上限时拒绝新注册而不是静默删除仍可能在使用的客户端。
+迁移从 `oauth_clients.settings.dcrClients` 回填。注册表不重复保存 `workspace_id`，避免子记录与父 OAuth 客户端出现工作区不一致；运行时通过 `oauth_client_id` 外键和父记录确定工作区。注册在事务内锁定所属 `oauth_clients` 行，按 redirect URI 集合复用现有客户端，避免并发重复和 JSON 丢失更新。表中最多保留 50 条，达到上限时拒绝新注册而不是静默删除仍可能在使用的客户端。
 
 旧 JSON 数据在迁移后保留一个版本，便于旧镜像回滚读取；新代码不再把 JSON 作为权威来源。down migration 将表数据重新写回 JSON 后再删表。
 
@@ -205,29 +204,37 @@ Todo ID 创建后不改含义。实现中发现问题必须先新增 `BUG-GOV-NN
 
 ### 10.3 OAuth 数据与模块
 
-- [ ] `GOV-OAUTH-001` 为 token exchange、PKCE、refresh rotation/replay、失效检查补 characterization tests。
-- [ ] `GOV-OAUTH-002` 提取协议纯函数、Provider adapter 和 registry，ChatGPT 行为保持不变。
-- [ ] `GOV-OAUTH-003` 拆分 metadata、client、authorization、token service，保留兼容 Facade。
-- [ ] `GOV-OAUTH-004` 新增注册客户端表、旧 JSON 回填、事务注册和 down migration。
-- [ ] `GOV-OAUTH-005` 去重历史活动授权、撤销关联 token、增加唯一索引和原子 upsert。
-- [ ] `GOV-OAUTH-006` 对授权 `lastUsedAt` 写入做 5 分钟节流并测试。
-- [ ] `GOV-OAUTH-007` 前端增加 Provider descriptor registry，Owner/账户页不再散落 ChatGPT 查找逻辑。
-- [ ] `GOV-OAUTH-008` 复核权限、scope、审计脱敏、迁移和 OAuth/MCP 回归。
+- [x] `GOV-OAUTH-001` 为 token exchange、PKCE、refresh rotation/replay、失效检查补 characterization tests。
+- [x] `GOV-OAUTH-002` 提取协议纯函数、Provider adapter 和 registry，ChatGPT 行为保持不变。
+- [x] `GOV-OAUTH-003` 拆分 metadata、client、authorization、token service，保留兼容 Facade。
+- [x] `GOV-OAUTH-004` 新增注册客户端表、旧 JSON 回填、事务注册和 down migration。
+- [x] `GOV-OAUTH-005` 去重历史活动授权、撤销关联 token、增加唯一索引和原子 upsert。
+- [x] `GOV-OAUTH-006` 对授权 `lastUsedAt` 写入做 5 分钟节流并测试。
+- [x] `GOV-OAUTH-007` 前端增加 Provider descriptor registry，Owner/账户页不再散落 ChatGPT 查找逻辑。
+- [x] `GOV-OAUTH-008` 复核权限、scope、审计脱敏、迁移和 OAuth/MCP 回归。
 
 ### 10.4 协同编辑与边界
 
-- [ ] `GOV-COLLAB-001` 实现统一 `useCollaborationProvider()` Hook。
-- [ ] `GOV-COLLAB-002` 普通页和嵌入页迁移到 Hook，移除 render 阶段 attach 和重复生命周期。
-- [ ] `GOV-COLLAB-003` 增加 attach、切页清理、token 刷新、idle 重连和 stateless 差异测试。
-- [ ] `GOV-BOUNDARY-001` 增加可落地的服务端 EE 依赖方向 ESLint 约束。
-- [ ] `GOV-BOUNDARY-002` 阻止编辑器重新直接创建协同底层 Provider，并验证没有历史误伤。
+- [x] `GOV-COLLAB-001` 实现统一 `useCollaborationProvider()` Hook。
+- [x] `GOV-COLLAB-002` 普通页和嵌入页迁移到 Hook，移除 render 阶段 attach 和重复生命周期。
+- [x] `GOV-COLLAB-003` 增加 attach、切页清理、token 刷新、idle 重连和 stateless 差异测试。
+- [x] `GOV-BOUNDARY-001` 增加可落地的服务端 EE 依赖方向 ESLint 约束。
+- [x] `GOV-BOUNDARY-002` 阻止编辑器重新直接创建协同底层 Provider，并验证没有历史误伤。
 
 ### 10.5 收尾
 
-- [ ] `GOV-VERIFY-001` 运行全量 lint、Jest、Vitest 和 build。
-- [ ] `GOV-VERIFY-002` 使用 PostgreSQL 验证 migration up/down 和并发不变量。
-- [ ] `GOV-VERIFY-003` 扫描敏感信息、审查 staged diff、确认不包含部署和个人信息。
+- [x] `GOV-VERIFY-001` 运行全量 lint、Jest、Vitest 和 build。
+- [x] `GOV-VERIFY-002` 使用 PostgreSQL 验证 migration up/down 和并发不变量。
+- [x] `GOV-VERIFY-003` 扫描敏感信息、审查 staged diff、确认不包含部署和个人信息。
 - [ ] `GOV-VERIFY-004` 更新复盘与 Todo，创建有边界的 commits，并在全部完成后 push。
+
+### 10.6 实施缺陷
+
+- [x] `BUG-GOV-001` 修复 OAuth partial unique index 迁移构造器无法引用谓词列的编译错误，使用 Kysely `sql.ref()` 表达数据库列。
+- [x] `BUG-GOV-002` 页面编辑器复用组件切换 `pageId` 时重置静态回退和首次连接标记，避免沿用上一页连接展示状态。
+- [x] `BUG-GOV-003` 修复独立数据库迁移 CLI 的 `postgres` CommonJS 导入错误，确保构建产物可以执行迁移命令。
+- [x] `BUG-GOV-004` 修复 OAuth 数据迁移 UPDATE 别名使用 PostgreSQL 保留关键字导致的 SQL 解析失败。
+- [x] `BUG-GOV-005` 校验 access token、授权码和 Refresh Token 关联的 workspace、用户及 OAuth 客户端身份一致，避免只依赖上游签名或写入逻辑维持跨表绑定。
 
 ## 11. 实施复盘
 
@@ -246,3 +253,31 @@ Todo ID 创建后不改含义。实现中发现问题必须先新增 `BUG-GOV-NN
 - 验证：三个 workflow 通过 `actionlint 1.7.12`；手动 Release 的 `source_ref` 同时传给 verify 和 build，避免验证与构建提交不一致。
 - 用户变化：无。失败的 lint、测试或 build 会在镜像发布前阻断流水线。
 - 新发现 BUG：暂无。
+
+### 2026-07-13：OAuth 数据一致性与模块化
+
+- 完成：`GOV-OAUTH-001` 至 `GOV-OAUTH-008`。
+- 实现：将原 OAuth Service 拆为 metadata、client、authorization、token 和协议工具，原 Service 保留为 Controller 与 MCP Guard 的兼容 Facade；Provider registry 当前只注册 ChatGPT adapter，未知 Provider 默认拒绝。
+- 数据：动态注册客户端迁入独立关系表并由父 OAuth 客户端确定工作区；父行锁、50 条硬上限和全局 `client_id` 唯一约束消除 JSON 并发覆盖。活动授权迁移去重、撤销关联 Refresh Token，并由 partial unique index 与原子 upsert 维持唯一性。
+- 前端：Owner 与账户页改用同一 Provider descriptor registry，用户可见入口、scope 和 ChatGPT 行为不变。
+- 安全：canonical issuer 不采用请求 Host；redirect、scope、PKCE、resource、client/授权/用户状态校验保持在共享服务；审计测试确认不写入 token、authorization code 或 verifier。
+- 验证：6 个 OAuth 测试套件共 38 项通过；临时 PostgreSQL 完成全量 migration up/down、旧 JSON 回填、重复授权去重、唯一约束和 down 回写验证。
+- 新发现并修复：`BUG-GOV-001`、`BUG-GOV-003`、`BUG-GOV-004`、`BUG-GOV-005`。
+
+### 2026-07-13：协同 Provider 生命周期与边界
+
+- 完成：`GOV-COLLAB-001` 至 `GOV-COLLAB-003`、`GOV-BOUNDARY-001`、`GOV-BOUNDARY-002`。
+- 实现：普通页面和数据库记录页共用 `useCollaborationProvider()`；Hook 统一创建、attach、token 刷新、同步状态、空闲断开、重连与销毁，页面继续保留各自的 stateless cache 和 REST 保存职责。
+- 边界：服务端核心目录禁止反向导入 EE，OAuth adapter 禁止导入 MCP/Controller；两个编辑器禁止直接导入 Hocuspocus 实例、Yjs 和 IndexedDB persistence。
+- 验证：协同 Hook 与既有生命周期测试共 8 项通过；客户端 Provider registry 测试 2 项通过；全量 lint 未产生新增 error。
+- 新发现并修复：`BUG-GOV-002`。使用已连接 `pageId` 表达静态回退状态，切页首帧不会沿用上一页连接结果。
+
+### 2026-07-13：本地完成门禁
+
+- 完成：`GOV-VERIFY-001`、`GOV-VERIFY-002`。
+- 自动化：全量 ESLint 通过；服务端 81 个 Jest 套件、435 项测试和 1 个 snapshot 通过；客户端 26 个 Vitest 文件、150 项测试通过。
+- 构建：editor extension、server 和 client 的生产构建通过，客户端共转换 11,687 个模块。
+- 数据库：临时 PostgreSQL 使用 tmpfs，验证全量 up、新迁移数据不变量、down 回写和再次 up；测试容器已删除，未连接现有实例或读取用户数据。
+- 隐私：扫描暂存内容和全部待推送提交，真实域名/服务器标识、凭据特征、私钥和服务器绝对路径均无命中；字面邮箱与 IP 仅为保留测试值和回环地址。
+- 提交边界：只暂存本文计划涉及的 33 个文件，明确排除工作区原有的系统状态服务修改。
+- 待完成：创建有边界的提交、最终 push 和线上 CI 结果确认。

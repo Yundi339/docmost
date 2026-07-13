@@ -24,13 +24,14 @@ import {
 } from "@/ee/oauth/queries/oauth-query";
 import { IOAuthAuthorization } from "@/ee/oauth";
 import { OAuthAuthorizationTable } from "@/ee/oauth/components/oauth-authorization-table";
+import { getOAuthProviderDescriptor } from "@/ee/oauth/oauth-provider-registry";
 
 export default function UserOAuthSettings() {
   const { t } = useTranslation();
   const { data: clients = [] } = useAvailableOAuthClientsQuery();
   const { data: authorizations = [] } = useOAuthAuthorizationsQuery();
   const revokeMutation = useRevokeOAuthAuthorizationMutation();
-  const chatgptClient = clients.find((client) => client.provider === "chatgpt");
+  const metadataClient = clients[0];
 
   const revokeAuthorization = (authorization: IOAuthAuthorization) => {
     modals.openConfirmModal({
@@ -61,20 +62,30 @@ export default function UserOAuthSettings() {
         {t("Manage OAuth applications connected to your Docmost account.")}
       </Text>
 
-      {chatgptClient ? (
-        <Paper withBorder radius="sm" p="md" mb="md">
-          <Stack gap="sm">
-            <Text fw={600}>{t("ChatGPT OAuth")}</Text>
-            <CopyRow
-              label={t("MCP server URL")}
-              value={chatgptClient.mcpServerUrl}
-            />
-            <CopyRow
-              label={t("Protected resource metadata")}
-              value={chatgptClient.resourceMetadataUrl}
-            />
-          </Stack>
-        </Paper>
+      {clients.length ? (
+        <Stack gap="sm" mb="md">
+          {clients.map((client) => {
+            const descriptor = getOAuthProviderDescriptor(
+              client.provider,
+              client.name,
+            );
+            return (
+              <Paper key={client.id} withBorder radius="sm" p="md">
+                <Stack gap="sm">
+                  <Text fw={600}>{t(descriptor.label)}</Text>
+                  <CopyRow
+                    label={t("MCP server URL")}
+                    value={client.mcpServerUrl}
+                  />
+                  <CopyRow
+                    label={t("Protected resource metadata")}
+                    value={client.resourceMetadataUrl}
+                  />
+                </Stack>
+              </Paper>
+            );
+          })}
+        </Stack>
       ) : (
         <Alert
           variant="light"
@@ -93,9 +104,9 @@ export default function UserOAuthSettings() {
 
       <Group justify="space-between" mb="sm">
         <Text fw={600}>{t("Authorized applications")}</Text>
-        {chatgptClient?.resourceMetadataUrl && (
+        {metadataClient?.resourceMetadataUrl && (
           <Anchor
-            href={chatgptClient.resourceMetadataUrl}
+            href={metadataClient.resourceMetadataUrl}
             target="_blank"
             size="sm"
           >

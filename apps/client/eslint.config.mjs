@@ -41,4 +41,38 @@ export default tseslint.config(
       "react-hooks/static-components": "off",
     },
   },
+  {
+    files: [
+      "src/features/editor/page-editor.tsx",
+      "src/features/database/components/embedded-record-page-editor.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@hocuspocus/provider",
+              importNames: [
+                "HocuspocusProvider",
+                "HocuspocusProviderWebsocket",
+              ],
+              message:
+                "Use useCollaborationProvider() for provider lifecycle management.",
+            },
+            {
+              name: "y-indexeddb",
+              message:
+                "Use useCollaborationProvider() for local collaboration persistence.",
+            },
+            {
+              name: "yjs",
+              message:
+                "Use useCollaborationProvider() for collaboration documents.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

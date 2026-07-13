@@ -1,15 +1,12 @@
 import "@/features/editor/styles/index.css";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { IndexeddbPersistence } from "y-indexeddb";
-import * as Y from "yjs";
-import {
-  HocuspocusProvider,
-  HocuspocusProviderWebsocket,
-  onStatusParameters,
-  onSyncedParameters,
-  onUnsyncedChangesParameters,
-  WebSocketStatus,
-} from "@hocuspocus/provider";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { WebSocketStatus } from "@hocuspocus/provider";
 import {
   Editor,
   EditorContent,
@@ -18,21 +15,20 @@ import {
   useEditorState,
 } from "@tiptap/react";
 import { useAtomValue } from "jotai";
-import { useDebouncedCallback, useDocumentVisibility } from "@mantine/hooks";
-import { collabExtensions, mainExtensions } from "@/features/editor/extensions/extensions";
+import { useDebouncedCallback } from "@mantine/hooks";
+import {
+  collabExtensions,
+  mainExtensions,
+} from "@/features/editor/extensions/extensions";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
 import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms";
-import useCollaborationUrl from "@/features/editor/hooks/use-collaboration-url";
 import {
   handleFileDrop,
   handlePaste,
 } from "@/features/editor/components/common/editor-paste-handler";
-import { useCollabToken } from "@/features/auth/queries/auth-query";
 import { queryClient } from "@/main";
 import { IPage } from "@/features/page/types/page.types";
 import { updatePage } from "@/features/page/services/page-service";
-import { FIVE_MINUTES } from "@/lib/constants";
-import { useIdle } from "@/hooks/use-idle";
 import { platformModifierKey } from "@/lib";
 import { searchSpotlight } from "@/features/search/constants";
 import { PageEditMode } from "@/features/user/types/user.types";
@@ -52,12 +48,7 @@ import ExcalidrawMenu from "@/features/editor/components/excalidraw/excalidraw-m
 import DrawioMenu from "@/features/editor/components/drawio/drawio-menu";
 import ColumnsMenu from "@/features/editor/components/columns/columns-menu";
 import { useTableFullscreenControls } from "@/features/editor/components/table/use-table-fullscreen-controls";
-import { useCollaborationSync } from "@/features/editor/collaboration/use-collaboration-sync";
-import {
-  createReconnectController,
-  patchForConnectionStatus,
-} from "@/features/editor/collaboration/collaboration-provider-lifecycle";
-import { isCollaborationTokenExpired } from "@/features/editor/collaboration/collaboration-token";
+import { useCollaborationProvider } from "@/features/editor/collaboration/use-collaboration-provider";
 
 interface EmbeddedRecordPageEditorProps {
   pageId: string;
@@ -76,14 +67,19 @@ export function EmbeddedRecordPageEditor({
   canComment,
   onEditorReady,
 }: EmbeddedRecordPageEditorProps) {
-  const collaborationURL = useCollaborationUrl();
-  const isComponentMounted = useRef(false);
   const editorRef = useRef<Editor | null>(null);
   const currentUser = useAtomValue(currentUserAtom);
   const currentPageEditMode = useAtomValue(currentPageEditModeAtom);
-  const { report: reportSync, handleSaveShortcut } =
-    useCollaborationSync(pageId);
-  const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
+  const {
+    remoteProvider,
+    providersReady,
+    isSynced,
+    connectionStatus,
+    handleSaveShortcut,
+  } = useCollaborationProvider({ pageId });
+  const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(
+    null,
+  );
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const setMenuContainerRef = useCallback((node: HTMLDivElement | null) => {
     menuContainerRef.current = node;
@@ -91,164 +87,27 @@ export function EmbeddedRecordPageEditor({
   }, []);
   useTableFullscreenControls(menuContainer);
 
-  const {
-    data: collabQuery,
-    isError: collabTokenError,
-    refetch: refetchCollabToken,
-  } = useCollabToken();
-  const { isIdle, resetIdle } = useIdle(FIVE_MINUTES, { initialState: false });
-  const documentState = useDocumentVisibility();
   const userSpellcheckPref =
     currentUser?.user?.settings?.preferences?.spellcheck ?? true;
 
-  const providersRef = useRef<{
-    local: IndexeddbPersistence;
-    remote: HocuspocusProvider;
-    socket: HocuspocusProviderWebsocket;
-  } | null>(null);
-  const [providersReady, setProvidersReady] = useState(false);
-  const [isLocalSynced, setIsLocalSynced] = useState(false);
-  const [isRemoteSynced, setIsRemoteSynced] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<WebSocketStatus>(
-    WebSocketStatus.Connecting,
+  useEffect(
+    () => () => {
+      onEditorReady?.(null);
+      editorRef.current = null;
+    },
+    [onEditorReady],
   );
 
-  useEffect(() => {
-    isComponentMounted.current = true;
-    return () => {
-      isComponentMounted.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    setProvidersReady(false);
-    setIsLocalSynced(false);
-    setIsRemoteSynced(false);
-    setConnectionStatus(WebSocketStatus.Connecting);
-    reportSync({
-      connectionStatus: WebSocketStatus.Connecting,
-      localReady: false,
-      remoteReady: false,
-      errorCode: collabTokenError ? "connection" : undefined,
-    });
-
-    if (!collabQuery?.token) return;
-
-    const documentName = `page.${pageId}`;
-    const ydoc = new Y.Doc();
-    const local = new IndexeddbPersistence(documentName, ydoc);
-    const socket = new HocuspocusProviderWebsocket({
-      url: collaborationURL,
-    });
-
-    const onLocalSyncedHandler = () => {
-      if (!isComponentMounted.current) return;
-      setIsLocalSynced(true);
-      reportSync({ localReady: true });
-    };
-    const onStatusHandler = (event: onStatusParameters) => {
-      if (!isComponentMounted.current) return;
-      setConnectionStatus(event.status);
-      reportSync(patchForConnectionStatus(event.status));
-    };
-    const onSyncedHandler = (event: onSyncedParameters) => {
-      if (!isComponentMounted.current) return;
-      setIsRemoteSynced(event.state);
-      reportSync({ remoteReady: event.state });
-    };
-    const onUnsyncedChangesHandler = (event: onUnsyncedChangesParameters) => {
-      if (!isComponentMounted.current) return;
-      reportSync({ unsyncedChanges: event.number });
-    };
-    const onAuthenticationFailedHandler = () => {
-      if (!isComponentMounted.current) return;
-      reportSync({ errorCode: "authentication", remoteReady: false });
-      if (!isCollaborationTokenExpired(collabQuery.token)) return;
-
-      void refetchCollabToken().then((result) => {
-        if (!isComponentMounted.current || !result.data?.token) return;
-        remote.configuration.token = result.data.token;
-        reconnectController.retry();
-      });
-    };
-
-    const remote = new HocuspocusProvider({
-      websocketProvider: socket,
-      name: documentName,
-      document: ydoc,
-      token: collabQuery?.token,
-      onAuthenticationFailed: onAuthenticationFailedHandler,
-      onStatus: onStatusHandler,
-      onSynced: onSyncedHandler,
-      onUnsyncedChanges: onUnsyncedChangesHandler,
-    });
-    const reconnectController = createReconnectController({
-      socket,
-      provider: remote,
-      report: reportSync,
-    });
-
-    reportSync({
-      retry: reconnectController.retry,
-    });
-
-    local.on("synced", onLocalSyncedHandler);
-    providersRef.current = { socket, local, remote };
-    remote.attach();
-    setProvidersReady(true);
-
-    return () => {
-      onEditorReady?.(null);
-      reconnectController.dispose();
-      local.off("synced", onLocalSyncedHandler);
-      socket.destroy();
-      remote.destroy();
-      local.destroy();
-      providersRef.current = null;
-      editorRef.current = null;
-    };
-  }, [
-    collaborationURL,
-    collabQuery?.token,
-    collabTokenError,
-    onEditorReady,
-    pageId,
-    refetchCollabToken,
-    reportSync,
-  ]);
-
-  useEffect(() => {
-    if (!providersReady || !providersRef.current) return;
-    const socket = providersRef.current.socket;
-
-    if (
-      isIdle &&
-      documentState === "hidden" &&
-      connectionStatus === WebSocketStatus.Connected
-    ) {
-      socket.disconnect();
-      return;
-    }
-
-    if (
-      documentState === "visible" &&
-      connectionStatus === WebSocketStatus.Disconnected
-    ) {
-      resetIdle();
-      socket.connect();
-    }
-  }, [connectionStatus, documentState, isIdle, providersReady, resetIdle]);
-
   const extensions = useMemo(() => {
-    if (!providersReady || !providersRef.current || !currentUser?.user) {
+    if (!providersReady || !remoteProvider || !currentUser?.user) {
       return mainExtensions;
     }
 
     return [
       ...mainExtensions,
-      ...collabExtensions(providersRef.current.remote, currentUser.user),
+      ...collabExtensions(remoteProvider, currentUser.user),
     ];
-  }, [providersReady, currentUser?.user]);
+  }, [currentUser?.user, providersReady, remoteProvider]);
 
   const debouncedUpdateContent = useDebouncedCallback((newContent: unknown) => {
     const pageById = queryClient.getQueryData<IPage>(["pages", pageId]);
@@ -314,9 +173,13 @@ export function EmbeddedRecordPageEditor({
               if (slashCommand) return true;
             }
             if (
-              ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"].includes(
-                event.key,
-              )
+              [
+                "ArrowUp",
+                "ArrowDown",
+                "ArrowLeft",
+                "ArrowRight",
+                "Enter",
+              ].includes(event.key)
             ) {
               const emojiCommand = document.querySelector("#emoji-command");
               if (emojiCommand) return true;
@@ -369,24 +232,20 @@ export function EmbeddedRecordPageEditor({
     editor.setEditable(editable && currentPageEditMode === PageEditMode.Edit);
   }, [currentPageEditMode, editor, editable]);
 
-  const isSynced = isLocalSynced && isRemoteSynced;
-  const [showStatic, setShowStatic] = useState(true);
-
-  useEffect(() => {
-    setShowStatic(true);
-  }, [pageId]);
+  const [connectedPageId, setConnectedPageId] = useState<string | null>(null);
+  const showStatic = connectedPageId !== pageId;
 
   useEffect(() => {
     if (connectionStatus === WebSocketStatus.Connected && isSynced) {
-      setShowStatic(false);
+      setConnectedPageId(pageId);
     }
-  }, [connectionStatus, isSynced]);
+  }, [connectionStatus, isSynced, pageId]);
 
   useEffect(() => {
     if (!showStatic || !providersReady || !currentUser?.user) return;
 
     const timeout = setTimeout(() => {
-      setShowStatic(false);
+      setConnectedPageId(pageId);
     }, 1500);
 
     return () => clearTimeout(timeout);
@@ -406,9 +265,15 @@ export function EmbeddedRecordPageEditor({
   return (
     <div className="editor-container" style={{ position: "relative" }}>
       <div ref={setMenuContainerRef}>
-        <EditorContent editor={editor} translate="yes" spellCheck={userSpellcheckPref} />
+        <EditorContent
+          editor={editor}
+          translate="yes"
+          spellCheck={userSpellcheckPref}
+        />
 
-        {editor && <SearchAndReplaceDialog editor={editor} editable={editable} />}
+        {editor && (
+          <SearchAndReplaceDialog editor={editor} editable={editable} />
+        )}
 
         {editor && editorIsEditable && (
           <div>
@@ -428,9 +293,10 @@ export function EmbeddedRecordPageEditor({
           </div>
         )}
 
-        {editor && !editorIsEditable && (editable || canComment) && providersRef.current && (
-          <ReadonlyBubbleMenu editor={editor} />
-        )}
+        {editor &&
+          !editorIsEditable &&
+          (editable || canComment) &&
+          remoteProvider && <ReadonlyBubbleMenu editor={editor} />}
       </div>
       <div
         onClick={() => editor?.commands.focus("end")}
