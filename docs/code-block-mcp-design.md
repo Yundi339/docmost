@@ -3,6 +3,8 @@
 > 状态：已在 `feat/native-database-fusion` 分支的 `efba9a38` 提交中实现并验证。
 > 稳定的待办清单和实现复盘保留在
 > [`forkmost-integration.md`](./forkmost-integration.md) 中。
+> 编辑/读取模式动态切换的补充设计、Todo 和复盘见
+> [`code-block-read-mode-design.md`](./code-block-read-mode-design.md)。
 
 ## 1. 目标
 
@@ -54,6 +56,7 @@ RFC 5737 地址和通用路径。
 
 - 编辑模式：提供标题输入、语言选择、自动换行开关；Mermaid 还提供源码切换；同时提供复制和下载操作；
 - 只读或分享模式：显示可选标题，并提供复制和下载操作；
+- 模式切换通过 Tiptap `update` 事件同步到已挂载 NodeView，读取模式不得残留标题输入、语言选择或源码编辑状态；
 - 标题保持单行并在过长时省略，避免长标题改变代码块尺寸；
 - 自动换行只改变显示方式，绝不修改源码文本；
 - Mermaid 预览与源码切换、双击行为保持不变；
@@ -236,6 +239,7 @@ MCP annotation 使用 `destructiveHint=true`。结果只包含页面 ID、标题
 | ----------------------- | ------------------------------------------------------------------------------ |
 | 代码块 schema           | `packages/editor-ext/src/lib/custom-code-block/custom-code-block.ts`           |
 | 代码块界面              | `apps/client/src/features/editor/components/code-block/code-block-view.tsx`    |
+| 可编辑状态同步          | `apps/client/src/features/editor/hooks/use-editor-editable.ts`                 |
 | 安全的源码下载          | `apps/client/src/features/editor/components/code-block/code-block-download.ts` |
 | MCP 会话传输            | `apps/server/src/ee/mcp/mcp.service.ts`                                        |
 | 工具注册                | `apps/server/src/ee/mcp/mcp-tool-registry.service.ts`                          |

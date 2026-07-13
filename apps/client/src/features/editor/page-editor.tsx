@@ -12,12 +12,12 @@ import {
   EditorContent,
   EditorProvider,
   useEditor,
-  useEditorState,
 } from "@tiptap/react";
 import {
   collabExtensions,
   mainExtensions,
 } from "@/features/editor/extensions/extensions";
+import { useEditorEditable } from "@/features/editor/hooks/use-editor-editable";
 import { useAtom, useAtomValue } from "jotai";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
 import {
@@ -246,12 +246,7 @@ export default function PageEditor({
     [pageId, editable, extensions, handleSaveShortcut],
   );
 
-  const editorIsEditable = useEditorState({
-    editor,
-    selector: (ctx) => {
-      return ctx.editor?.isEditable ?? false;
-    },
-  });
+  const editorIsEditable = useEditorEditable(editor);
 
   const debouncedUpdateContent = useDebouncedCallback((newContent: any) => {
     const pageData = queryClient.getQueryData<IPage>(["pages", slugId]);

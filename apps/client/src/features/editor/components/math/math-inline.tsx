@@ -7,6 +7,7 @@ import { Popover, Textarea } from "@mantine/core";
 import classes from "./math.module.css";
 import { v4 } from "uuid";
 import { useTranslation } from "react-i18next";
+import { useEditorEditable } from "@/features/editor/hooks/use-editor-editable";
 
 export default function MathInlineView(props: NodeViewProps) {
   const { t } = useTranslation();
@@ -17,6 +18,7 @@ export default function MathInlineView(props: NodeViewProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const isEditable = useEditorEditable(editor);
 
   const renderMath = (
     katexString: string,
@@ -48,7 +50,8 @@ export default function MathInlineView(props: NodeViewProps) {
   useEffect(() => {
     const pos = getPos();
     const { from, to } = editor.state.selection;
-    const nodeSelected = props.selected && from === pos && to === pos + node.nodeSize;
+    const nodeSelected =
+      props.selected && from === pos && to === pos + node.nodeSize;
     setIsEditing(nodeSelected);
     if (nodeSelected) setPreview(node.attrs.text);
   }, [props.selected]);
@@ -56,7 +59,7 @@ export default function MathInlineView(props: NodeViewProps) {
   return (
     <>
       <Popover
-        opened={isEditing && editor.isEditable}
+        opened={isEditing && isEditable}
         trapFocus
         position="top"
         shadow="md"

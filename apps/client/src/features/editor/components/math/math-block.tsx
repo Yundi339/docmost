@@ -9,6 +9,7 @@ import { v4 } from "uuid";
 import { IconTrashX } from "@tabler/icons-react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useTranslation } from "react-i18next";
+import { useEditorEditable } from "@/features/editor/hooks/use-editor-editable";
 
 export default function MathBlockView(props: NodeViewProps) {
   const { t } = useTranslation();
@@ -20,6 +21,7 @@ export default function MathBlockView(props: NodeViewProps) {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [debouncedPreview] = useDebouncedValue(preview, 500);
+  const isEditable = useEditorEditable(editor);
 
   const renderMath = (
     katexString: string,
@@ -58,14 +60,15 @@ export default function MathBlockView(props: NodeViewProps) {
   useEffect(() => {
     const pos = getPos();
     const { from, to } = editor.state.selection;
-    const nodeSelected = props.selected && from === pos && to === pos + node.nodeSize;
+    const nodeSelected =
+      props.selected && from === pos && to === pos + node.nodeSize;
     setIsEditing(nodeSelected);
     if (nodeSelected) setPreview(node.attrs.text);
   }, [props.selected]);
 
   return (
     <Popover
-      opened={isEditing && editor.isEditable}
+      opened={isEditing && isEditable}
       trapFocus
       position="top"
       shadow="md"

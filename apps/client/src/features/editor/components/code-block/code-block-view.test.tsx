@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { forwardRef } from "react";
 import CodeBlockView from "./code-block-view";
@@ -52,6 +52,27 @@ vi.mock("./code-block-download", async (importOriginal) => {
   return { ...actual, downloadCodeBlock: vi.fn() };
 });
 
+function createEditor(initialEditable: boolean) {
+  let editable = initialEditable;
+  const listeners = new Set<() => void>();
+
+  return {
+    get isEditable() {
+      return editable;
+    },
+    on(event: string, listener: () => void) {
+      if (event === "update") listeners.add(listener);
+    },
+    off(event: string, listener: () => void) {
+      if (event === "update") listeners.delete(listener);
+    },
+    setEditable(nextEditable: boolean) {
+      editable = nextEditable;
+      listeners.forEach((listener) => listener());
+    },
+  };
+}
+
 function renderView(
   attrs: Record<string, unknown> = {
     language: "typescript",
@@ -61,6 +82,7 @@ function renderView(
   editable = true,
 ) {
   const updateAttributes = vi.fn();
+  const editor = createEditor(editable);
   render(
     <MantineProvider>
       <CodeBlockView
@@ -72,12 +94,12 @@ function renderView(
               lowlight: { listLanguages: () => ["typescript", "mermaid"] },
             },
           },
-          editor: { isEditable: editable },
+          editor,
         } as any)}
       />
     </MantineProvider>,
   );
-  return { updateAttributes };
+  return { editor, updateAttributes };
 }
 
 describe("CodeBlockView", () => {
@@ -152,6 +174,54 @@ describe("CodeBlockView", () => {
     expect(
       screen.getByRole("button", { name: "Download code" }),
     ).not.toBeNull();
+    expect(
+      screen.queryByRole("textbox", { name: "Code block title" }),
+    ).toBeNull();
+  });
+
+  it("reacts when the mounted editor switches between edit and read mode", () => {
+    const { editor } = renderView();
+    expect(
+      screen.getByRole("textbox", { name: "Code block title" }),
+    ).not.toBeNull();
+
+    act(() => editor.setEditable(false));
+    expect(
+      screen.queryByRole("textbox", { name: "Code block title" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Download code" }),
+    ).not.toBeNull();
+
+    act(() => editor.setEditable(true));
+    expect(
+      screen.getByRole("textbox", { name: "Code block title" }),
+    ).not.toBeNull();
+  });
+
+  it("collapses Mermaid source when entering read mode", () => {
+    const { editor } = renderView({
+      language: "mermaid",
+      title: null,
+      wrap: false,
+    });
+    const source = document.querySelector("pre");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show source" }));
+    expect(source?.hasAttribute("hidden")).toBe(false);
+
+    act(() => editor.setEditable(false));
+    expect(source?.hasAttribute("hidden")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Show source" })).toBeNull();
+  });
+
+  it("shows a saved title as text instead of an input in read mode", () => {
+    renderView(
+      { language: "typescript", title: "Example title", wrap: false },
+      false,
+    );
+
+    expect(screen.getByText("Example title")).not.toBeNull();
     expect(
       screen.queryByRole("textbox", { name: "Code block title" }),
     ).toBeNull();

@@ -28,6 +28,7 @@ import { usePageQuery } from "@/features/page/queries/page-query.ts";
 import { useSharePageQuery } from "@/features/share/queries/share-query.ts";
 import { buildSharedPageUrl } from "@/features/page/page.utils.ts";
 import { extractPageSlugId } from "@/lib";
+import { useEditorEditable } from "@/features/editor/hooks/use-editor-editable";
 import { sanitizeUrl, copyToClipboard } from "@docmost/editor-ext";
 import { normalizeUrl } from "@/lib/utils";
 import {
@@ -77,7 +78,7 @@ export default function LinkView(props: MarkViewProps) {
   const lastOpenState = useRef<"preview" | "edit">("preview");
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const isEditable = editor.isEditable;
+  const isEditable = useEditorEditable(editor);
   const {
     isInternal,
     slugId,

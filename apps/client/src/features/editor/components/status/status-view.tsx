@@ -6,6 +6,7 @@ import { IconCheck } from "@tabler/icons-react";
 import clsx from "clsx";
 import classes from "./status.module.css";
 import type { StatusColor } from "@docmost/editor-ext";
+import { useEditorEditable } from "@/features/editor/hooks/use-editor-editable";
 
 const STATUS_COLORS: { name: StatusColor; bg: string }[] = [
   { name: "gray", bg: "var(--mantine-color-gray-4)" },
@@ -35,6 +36,7 @@ export default function StatusView(props: NodeViewProps) {
   const [opened, setOpened] = useState(false);
   const [inputValue, setInputValue] = useState(text);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isEditable = useEditorEditable(editor);
 
   useEffect(() => {
     const storage = editor.storage?.status;
@@ -51,6 +53,10 @@ export default function StatusView(props: NodeViewProps) {
     }
   }, [opened]);
 
+  useEffect(() => {
+    if (!isEditable && opened) setOpened(false);
+  }, [isEditable, opened]);
+
   const debouncedUpdateAttributes = useDebouncedCallback(
     (val: string) => updateAttributes({ text: val }),
     100,
@@ -65,12 +71,10 @@ export default function StatusView(props: NodeViewProps) {
     updateAttributes({ color: newColor });
   };
 
-  const isEditable = editor.isEditable;
-
   return (
     <NodeViewWrapper style={{ display: "inline" }} data-drag-handle>
       <Popover
-        opened={opened}
+        opened={opened && isEditable}
         onChange={(open) => {
           if (!open && !text) {
             deleteNode();

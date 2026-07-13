@@ -28,6 +28,7 @@ import {
   normalizeCodeBlockTitle,
 } from "@docmost/editor-ext";
 import { downloadCodeBlock } from "./code-block-download";
+import { useEditorEditable } from "@/features/editor/hooks/use-editor-editable";
 
 function MermaidErrorFallback() {
   const { t } = useTranslation();
@@ -61,6 +62,7 @@ export default function CodeBlockView(props: NodeViewProps) {
   const [showSource, setShowSource] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const skipTitleCommitRef = useRef(false);
+  const isEditable = useEditorEditable(editor);
 
   const isMermaid = language === "mermaid";
 
@@ -90,6 +92,10 @@ export default function CodeBlockView(props: NodeViewProps) {
     if (!isMermaid && showSource) setShowSource(false);
   }, [isMermaid, showSource]);
 
+  useEffect(() => {
+    if (!isEditable && showSource) setShowSource(false);
+  }, [isEditable, showSource]);
+
   function changeLanguage(language: string) {
     setLanguageValue(language);
     updateAttributes({
@@ -108,7 +114,7 @@ export default function CodeBlockView(props: NodeViewProps) {
   function download() {
     downloadCodeBlock(
       node.textContent,
-      editor.isEditable ? titleValue : title,
+      isEditable ? titleValue : title,
       language,
     );
   }
@@ -119,14 +125,14 @@ export default function CodeBlockView(props: NodeViewProps) {
   // is empty (e.g. just created) we always show the source so the user can
   // start typing.
   const hideMermaidSource =
-    isMermaid && node.textContent.length > 0 && !showSource;
+    isMermaid && node.textContent.length > 0 && (!isEditable || !showSource);
 
   return (
     <NodeViewWrapper
       className={`codeBlock ${classes.wrapper} ${wrap ? classes.wrapped : ""}`}
       ref={wrapperRef}
     >
-      {editor.isEditable && (
+      {isEditable && (
         <Group
           justify="space-between"
           gap="xs"
@@ -248,7 +254,7 @@ export default function CodeBlockView(props: NodeViewProps) {
         </Group>
       )}
 
-      {!editor.isEditable && (
+      {!isEditable && (
         <div
           contentEditable={false}
           className={`${classes.readOnlyHeader} ${!title ? classes.readOnlyHeaderOverlay : ""}`}
@@ -301,7 +307,7 @@ export default function CodeBlockView(props: NodeViewProps) {
           <Suspense fallback={null}>
             <div
               onDoubleClick={
-                editor.isEditable && node.textContent.length > 0
+                isEditable && node.textContent.length > 0
                   ? () => setShowSource((value) => !value)
                   : undefined
               }

@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useComputedColorScheme } from "@mantine/core";
 import DOMPurify from "dompurify";
 import ZoomableSvg from "./zoomable-svg";
+import { useEditorEditable } from "@/features/editor/hooks/use-editor-editable";
 
 interface MermaidViewProps {
   props: NodeViewProps;
@@ -16,6 +17,7 @@ export default function MermaidView({ props }: MermaidViewProps) {
   const { t } = useTranslation();
   const computedColorScheme = useComputedColorScheme();
   const { node } = props;
+  const isEditable = useEditorEditable(props.editor);
   const [preview, setPreview] = useState<string>("");
   const [hasError, setHasError] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -84,7 +86,7 @@ export default function MermaidView({ props }: MermaidViewProps) {
         .catch((err) => {
           hasRenderedOnceRef.current = true;
           setHasError(true);
-          if (props.editor.isEditable) {
+          if (isEditable) {
             setPreview(
               `<div class="${classes.error}">${t("Mermaid diagram error:")} ${DOMPurify.sanitize(err)}</div>`,
             );
@@ -96,7 +98,7 @@ export default function MermaidView({ props }: MermaidViewProps) {
         });
     }, delay);
     return () => clearTimeout(timer);
-  }, [node.textContent, computedColorScheme, isVisible]);
+  }, [node.textContent, computedColorScheme, isVisible, isEditable, t]);
 
   const svgContent = (
     <div
@@ -111,9 +113,5 @@ export default function MermaidView({ props }: MermaidViewProps) {
     return svgContent;
   }
 
-  return (
-    <ZoomableSvg>
-      {svgContent}
-    </ZoomableSvg>
-  );
+  return <ZoomableSvg>{svgContent}</ZoomableSvg>;
 }

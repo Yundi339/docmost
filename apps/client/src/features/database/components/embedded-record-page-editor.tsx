@@ -12,7 +12,6 @@ import {
   EditorContent,
   EditorProvider,
   useEditor,
-  useEditorState,
 } from "@tiptap/react";
 import { useAtomValue } from "jotai";
 import { useDebouncedCallback } from "@mantine/hooks";
@@ -20,6 +19,7 @@ import {
   collabExtensions,
   mainExtensions,
 } from "@/features/editor/extensions/extensions";
+import { useEditorEditable } from "@/features/editor/hooks/use-editor-editable";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
 import { currentPageEditModeAtom } from "@/features/editor/atoms/editor-atoms";
 import {
@@ -222,10 +222,7 @@ export function EmbeddedRecordPageEditor({
     [pageId, editable, extensions, onEditorReady, handleSaveShortcut],
   );
 
-  const editorIsEditable = useEditorState({
-    editor,
-    selector: (ctx) => ctx.editor?.isEditable ?? false,
-  });
+  const editorIsEditable = useEditorEditable(editor);
 
   useEffect(() => {
     if (!editor) return;

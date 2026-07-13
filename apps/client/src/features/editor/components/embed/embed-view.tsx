@@ -25,6 +25,7 @@ import {
 } from "@docmost/editor-ext";
 import { ResizableWrapper } from "../common/resizable-wrapper";
 import classes from "./embed-view.module.css";
+import { useEditorEditable } from "@/features/editor/hooks/use-editor-editable";
 
 const schema = z.object({
   url: z.url({ message: i18n.t("Please enter a valid url") }).trim(),
@@ -34,6 +35,7 @@ export default function EmbedView(props: NodeViewProps) {
   const { t } = useTranslation();
   const { node, selected, updateAttributes, editor } = props;
   const { src, provider, width: nodeWidth, height: nodeHeight } = node.attrs;
+  const isEditable = useEditorEditable(editor);
 
   const embedUrl = useMemo(() => {
     if (src) {
@@ -93,7 +95,7 @@ export default function EmbedView(props: NodeViewProps) {
             minHeight={200}
             maxHeight={1200}
             onResize={handleResize}
-            isEditable={editor.isEditable}
+            isEditable={isEditable}
             selected={selected}
             className={clsx(classes.embedWrapper, {
               "ProseMirror-selectednode": selected,
@@ -116,7 +118,7 @@ export default function EmbedView(props: NodeViewProps) {
           position="bottom"
           withArrow
           shadow="md"
-          disabled={!editor.isEditable}
+          disabled={!isEditable}
         >
           <Popover.Target>
             <Card
