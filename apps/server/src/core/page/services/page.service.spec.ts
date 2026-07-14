@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Page } from '@docmost/db/types/entity.types';
 
 jest.mock('@docmost/editor-ext', () => ({
@@ -62,6 +66,8 @@ function createService() {
     insertPage: jest.fn(),
     removePage: jest.fn().mockResolvedValue(undefined),
     updatePage: jest.fn(),
+    updatePages: jest.fn(),
+    getPageAndDescendants: jest.fn(),
   };
   const generalQueue = {
     add: jest.fn().mockResolvedValue(undefined),
@@ -84,6 +90,10 @@ function createService() {
       execute: jest.fn((callback) => callback(trx)),
     })),
   };
+  const pageOperationPolicy = {
+    assertOperation: jest.fn().mockResolvedValue(undefined),
+    addMetadata: jest.fn().mockImplementation(async (pages) => pages),
+  };
 
   const service = new PageService(
     pageRepo as any,
@@ -98,6 +108,7 @@ function createService() {
     collaborationGateway as any,
     {} as any,
     wsTreeService as any,
+    pageOperationPolicy as any,
   );
 
   jest
@@ -110,6 +121,7 @@ function createService() {
     db,
     generalQueue,
     pageRepo,
+    pageOperationPolicy,
     service,
     trx,
     wsTreeService,
@@ -135,6 +147,45 @@ describe('PageService.create', () => {
         workspaceId: 'workspace-id',
       }),
     );
+  });
+
+  it('applies extension policy before creating a child page', async () => {
+    const { pageOperationPolicy, pageRepo, service } = createService();
+    const parent = page({ id: 'board-page' });
+    pageRepo.findById.mockResolvedValue(parent);
+    pageOperationPolicy.assertOperation.mockRejectedValue(
+      new ConflictException('Create work items from the board'),
+    );
+
+    await expect(
+      service.create('mcp-user', 'workspace-id', {
+        spaceId: parent.spaceId,
+        parentPageId: parent.id,
+        title: 'Bypass attempt',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(pageRepo.insertPage).not.toHaveBeenCalled();
+  });
+
+  it('rejects a parent page from another workspace', async () => {
+    const { pageOperationPolicy, pageRepo, service } = createService();
+    const parent = page({
+      id: 'foreign-parent',
+      workspaceId: 'other-workspace',
+    });
+    pageRepo.findById.mockResolvedValue(parent);
+
+    await expect(
+      service.create('mcp-user', 'workspace-id', {
+        spaceId: parent.spaceId,
+        parentPageId: parent.id,
+        title: 'Cross-workspace child',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(pageOperationPolicy.assertOperation).not.toHaveBeenCalled();
+    expect(pageRepo.insertPage).not.toHaveBeenCalled();
   });
 });
 
@@ -192,6 +243,49 @@ describe('PageService.removePage', () => {
 });
 
 describe('PageService.movePage', () => {
+  it('routes same-space move requests through the parent move path', async () => {
+    const { pageRepo, service } = createService();
+    const movedPage = page({ id: 'moved-page', parentPageId: 'old-parent' });
+    const moveToParent = jest
+      .spyOn(service, 'movePageToParent')
+      .mockResolvedValue(undefined);
+
+    await expect(
+      service.movePageToSpace(movedPage, movedPage.spaceId, 'user-id', null),
+    ).resolves.toEqual({ childPageIds: [] });
+
+    expect(moveToParent).toHaveBeenCalledWith(
+      movedPage,
+      null,
+      'user-id',
+      undefined,
+      true,
+    );
+    expect(pageRepo.updatePage).not.toHaveBeenCalled();
+  });
+
+  it('rejects a cross-space target parent outside the destination space', async () => {
+    const { pageRepo, service } = createService();
+    const movedPage = page({ id: 'moved-page', spaceId: 'source-space' });
+    const wrongParent = page({ id: 'wrong-parent', spaceId: 'source-space' });
+    pageRepo.getPageAndDescendants.mockResolvedValue([movedPage]);
+    pageRepo.findById.mockResolvedValue(wrongParent);
+    jest
+      .spyOn(service as any, 'filterAccessibleTreePages')
+      .mockResolvedValue([movedPage]);
+
+    await expect(
+      service.movePageToSpace(
+        movedPage,
+        'destination-space',
+        'user-id',
+        wrongParent.id,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(pageRepo.updatePage).not.toHaveBeenCalled();
+  });
+
   it('synchronizes server-side reparenting to connected clients', async () => {
     const { pageRepo, service, wsTreeService } = createService();
     const movedPage = page({ id: 'moved-page', parentPageId: 'old-parent' });
@@ -205,7 +299,7 @@ describe('PageService.movePage', () => {
       .mockResolvedValueOnce(relocatedPage);
     jest.spyOn(service as any, 'nextPagePositionIn').mockResolvedValue('b0');
 
-    await service.movePageToParent(movedPage, null);
+    await service.movePageToParent(movedPage, null, 'user-id');
 
     expect(wsTreeService.notifyPageRelocated).toHaveBeenCalledWith(
       movedPage,
@@ -213,6 +307,40 @@ describe('PageService.movePage', () => {
       false,
       { spaceId: movedPage.spaceId, userIds: [] },
     );
+  });
+
+  it('applies extension policy before moving a page', async () => {
+    const { pageOperationPolicy, pageRepo, service } = createService();
+    const movedPage = page({ id: 'managed-work-item' });
+    pageRepo.findById.mockResolvedValueOnce(movedPage);
+    pageOperationPolicy.assertOperation.mockRejectedValue(
+      new ConflictException('Move this work item from the board'),
+    );
+
+    await expect(
+      service.movePageToParent(movedPage, null, 'mcp-user'),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(pageRepo.updatePage).not.toHaveBeenCalled();
+  });
+
+  it('rejects a same-space parent from another workspace', async () => {
+    const { pageOperationPolicy, pageRepo, service } = createService();
+    const movedPage = page({ id: 'moved-page' });
+    const foreignParent = page({
+      id: 'foreign-parent',
+      workspaceId: 'other-workspace',
+    });
+    pageRepo.findById
+      .mockResolvedValueOnce(movedPage)
+      .mockResolvedValueOnce(foreignParent);
+
+    await expect(
+      service.movePageToParent(movedPage, foreignParent.id, 'user-id'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(pageOperationPolicy.assertOperation).not.toHaveBeenCalled();
+    expect(pageRepo.updatePage).not.toHaveBeenCalled();
   });
 
   it('updates only the moved page when changing parent', async () => {
@@ -230,6 +358,7 @@ describe('PageService.movePage', () => {
         position: 'a0',
       },
       movedPage,
+      'user-id',
     );
 
     expect(pageRepo.updatePage).toHaveBeenCalledWith(
@@ -262,9 +391,37 @@ describe('PageService.movePage', () => {
           position: 'a0',
         },
         movedPage,
+        'user-id',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
+    expect(pageRepo.updatePage).not.toHaveBeenCalled();
+  });
+
+  it('rejects drag-and-drop to a same-space parent in another workspace', async () => {
+    const { pageOperationPolicy, pageRepo, service } = createService();
+    const movedPage = page({ id: 'moved-page' });
+    const foreignParent = page({
+      id: 'foreign-parent',
+      workspaceId: 'other-workspace',
+    });
+    pageRepo.findById
+      .mockResolvedValueOnce(movedPage)
+      .mockResolvedValueOnce(foreignParent);
+
+    await expect(
+      service.movePage(
+        {
+          pageId: movedPage.id,
+          parentPageId: foreignParent.id,
+          position: 'a0',
+        },
+        movedPage,
+        'user-id',
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(pageOperationPolicy.assertOperation).not.toHaveBeenCalled();
     expect(pageRepo.updatePage).not.toHaveBeenCalled();
   });
 
@@ -286,6 +443,7 @@ describe('PageService.movePage', () => {
           position: 'a0',
         },
         movedPage,
+        'user-id',
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
 

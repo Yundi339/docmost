@@ -101,6 +101,45 @@ export class PageAccessService {
     return { hasRestriction: hasAnyRestriction };
   }
 
+  async filterViewablePagesWithPermissions(
+    pages: Page[],
+    user: User,
+  ): Promise<Array<{ page: Page; canEdit: boolean }>> {
+    const pagesBySpace = new Map<string, Page[]>();
+    for (const page of pages) {
+      const current = pagesBySpace.get(page.spaceId) ?? [];
+      current.push(page);
+      pagesBySpace.set(page.spaceId, current);
+    }
+
+    const result: Array<{ page: Page; canEdit: boolean }> = [];
+    for (const [spaceId, spacePages] of pagesBySpace) {
+      const ability = await this.spaceAbility.createForUser(user, spaceId);
+      if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) continue;
+
+      const spaceCanEdit = ability.can(
+        SpaceCaslAction.Edit,
+        SpaceCaslSubject.Page,
+      );
+      const permissions =
+        await this.pagePermissionRepo.filterAccessiblePageIdsWithPermissions(
+          spacePages.map((page) => page.id),
+          user.id,
+        );
+      const permissionByPageId = new Map(
+        permissions.map((permission) => [permission.id, permission.canEdit]),
+      );
+
+      for (const page of spacePages) {
+        const canEdit = permissionByPageId.get(page.id);
+        if (canEdit === undefined) continue;
+        result.push({ page, canEdit: spaceCanEdit && canEdit });
+      }
+    }
+
+    return result;
+  }
+
   async validateCanComment(
     page: Page,
     user: User,

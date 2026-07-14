@@ -105,20 +105,32 @@ export class PageRepo {
     return query.executeTakeFirst();
   }
 
+  async findByIds(pageIds: string[]): Promise<Page[]> {
+    if (pageIds.length === 0) return [];
+
+    return this.db
+      .selectFrom('pages')
+      .select(this.baseFields)
+      .where('id', 'in', [...new Set(pageIds)])
+      .execute();
+  }
+
   async updatePage(
     updatablePage: UpdatablePage,
     pageId: string,
     trx?: KyselyTransaction,
+    emitLifecycleEvent = true,
   ) {
-    return this.updatePages(updatablePage, [pageId], trx);
+    return this.updatePages(updatablePage, [pageId], trx, emitLifecycleEvent);
   }
 
   async updatePages(
     updatePageData: UpdatablePage,
     pageIds: string[],
     trx?: KyselyTransaction,
+    emitLifecycleEvent = true,
   ) {
-    const result = await dbOrTx(this.db, trx)
+    const updatedPages = await dbOrTx(this.db, trx)
       .updateTable('pages')
       .set({ ...updatePageData, updatedAt: new Date() })
       .where(
@@ -126,19 +138,33 @@ export class PageRepo {
         'in',
         pageIds,
       )
-      .executeTakeFirst();
+      .returning(['id', 'workspaceId'])
+      .execute();
 
-    this.eventEmitter.emit(EventName.PAGE_UPDATED, {
-      pageIds: pageIds,
-      workspaceId: updatePageData.workspaceId,
-    });
+    if (emitLifecycleEvent) {
+      const pageIdsByWorkspace = new Map<string, string[]>();
+      for (const page of updatedPages) {
+        const workspacePageIds =
+          pageIdsByWorkspace.get(page.workspaceId) ?? [];
+        workspacePageIds.push(page.id);
+        pageIdsByWorkspace.set(page.workspaceId, workspacePageIds);
+      }
 
-    return result;
+      for (const [workspaceId, updatedPageIds] of pageIdsByWorkspace) {
+        this.eventEmitter.emit(EventName.PAGE_UPDATED, {
+          pageIds: updatedPageIds,
+          workspaceId,
+        });
+      }
+    }
+
+    return updatedPages;
   }
 
   async insertPage(
     insertablePage: InsertablePage,
     trx?: KyselyTransaction,
+    emitLifecycleEvent = true,
   ): Promise<Page> {
     const db = dbOrTx(this.db, trx);
     const result = await db
@@ -147,10 +173,12 @@ export class PageRepo {
       .returning(this.baseFields)
       .executeTakeFirst();
 
-    this.eventEmitter.emit(EventName.PAGE_CREATED, {
-      pageIds: [result.id],
-      workspaceId: result.workspaceId,
-    });
+    if (emitLifecycleEvent) {
+      this.eventEmitter.emit(EventName.PAGE_CREATED, {
+        pageIds: [result.id],
+        workspaceId: result.workspaceId,
+      });
+    }
 
     return result;
   }
@@ -192,7 +220,8 @@ export class PageRepo {
     deletedById: string,
     workspaceId: string,
     trx?: KyselyTransaction,
-  ): Promise<void> {
+    emitLifecycleEvent = true,
+  ): Promise<string[]> {
     const currentDate = new Date();
     const db = dbOrTx(this.db, trx);
 
@@ -243,16 +272,27 @@ export class PageRepo {
         trx,
       );
 
-      this.eventEmitter.emit(EventName.PAGE_SOFT_DELETED, {
-        pageIds: pageIds,
-        workspaceId,
-      });
+      if (emitLifecycleEvent) {
+        this.eventEmitter.emit(EventName.PAGE_SOFT_DELETED, {
+          pageIds: pageIds,
+          workspaceId,
+        });
+      }
     }
+
+    return pageIds;
   }
 
-  async restorePage(pageId: string, workspaceId: string): Promise<void> {
+  async restorePage(
+    pageId: string,
+    workspaceId: string,
+    trx?: KyselyTransaction,
+    emitLifecycleEvent = true,
+  ): Promise<string[]> {
+    const db = dbOrTx(this.db, trx);
+
     // First, check if the page being restored has a deleted parent
-    const pageToRestore = await this.db
+    const pageToRestore = await db
       .selectFrom('pages')
       .select(['id', 'parentPageId'])
       .where('id', '=', pageId)
@@ -260,13 +300,13 @@ export class PageRepo {
       .executeTakeFirst();
 
     if (!pageToRestore) {
-      return;
+      return [];
     }
 
     // Check if the parent is also deleted
     let shouldDetachFromParent = false;
     if (pageToRestore.parentPageId) {
-      const parent = await this.db
+      const parent = await db
         .selectFrom('pages')
         .select(['id', 'deletedAt'])
         .where('id', '=', pageToRestore.parentPageId)
@@ -278,7 +318,7 @@ export class PageRepo {
     }
 
     // Find all descendants to restore
-    const pages = await this.db
+    const pages = await db
       .withRecursive('page_descendants', (db) =>
         db
           .selectFrom('pages')
@@ -300,7 +340,7 @@ export class PageRepo {
     const pageIds = pages.map((p) => p.id);
 
     // Restore all pages, but only detach the root page if its parent is deleted
-    await this.db
+    await db
       .updateTable('pages')
       .set({ deletedById: null, deletedAt: null })
       .where('id', 'in', pageIds)
@@ -309,17 +349,21 @@ export class PageRepo {
 
     // If we need to detach the restored page from its deleted parent
     if (shouldDetachFromParent) {
-      await this.db
+      await db
         .updateTable('pages')
         .set({ parentPageId: null })
         .where('id', '=', pageId)
         .where('workspaceId', '=', workspaceId)
         .execute();
     }
-    this.eventEmitter.emit(EventName.PAGE_RESTORED, {
-      pageIds: pageIds,
-      workspaceId: workspaceId,
-    });
+    if (emitLifecycleEvent) {
+      this.eventEmitter.emit(EventName.PAGE_RESTORED, {
+        pageIds,
+        workspaceId,
+      });
+    }
+
+    return pageIds;
   }
 
   async getRecentPagesInSpace(spaceId: string, pagination: PaginationOptions) {

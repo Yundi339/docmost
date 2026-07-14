@@ -19,6 +19,7 @@ import {
 import { useTreeMutation } from "@/features/page/tree/hooks/use-tree-mutation.ts";
 import { SpaceTreeNode } from "@/features/page/tree/types.ts";
 import { treeModel } from "@/features/page/tree/model/tree-model";
+import type { DropOp } from "@/features/page/tree/model/tree-model.types";
 import {
   compactTreeOpenState,
   expandOpenStateForPath,
@@ -30,6 +31,7 @@ import BulkExportModal from "@/components/common/bulk-export-modal";
 import BulkMovePageModal from "@/features/page/components/bulk-move-page-modal.tsx";
 import { DocTree } from "./doc-tree";
 import { SpaceTreeRow } from "./space-tree-row";
+import { canApplyPageTreeDrop } from "@/features/page/tree/utils/page-tree-capabilities";
 
 type SpaceSelectionState = {
   selectionMode: boolean;
@@ -64,7 +66,10 @@ function loadOpenState(spaceId: string): OpenMap {
 function saveOpenState(spaceId: string, openState: OpenMap): void {
   try {
     if (typeof localStorage === "undefined") return;
-    localStorage.setItem(STORAGE_KEY_PREFIX + spaceId, JSON.stringify(openState));
+    localStorage.setItem(
+      STORAGE_KEY_PREFIX + spaceId,
+      JSON.stringify(openState),
+    );
   } catch {
     // localStorage may be unavailable or full.
   }
@@ -173,6 +178,8 @@ export default function SpaceTree({
     () => data.filter((node) => node?.spaceId === spaceId),
     [data, spaceId],
   );
+  const filteredDataRef = useRef(filteredData);
+  filteredDataRef.current = filteredData;
   const selectedIdsSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   const clearSelectionMode = useCallback(() => {
@@ -190,7 +197,9 @@ export default function SpaceTree({
   }, [clearSelectionMode]);
 
   const selectAllVisible = useCallback(() => {
-    const visibleIds = treeModel.visible(filteredData, openIds).map((n) => n.id);
+    const visibleIds = treeModel
+      .visible(filteredData, openIds)
+      .map((n) => n.id);
     setSelectedIds(visibleIds);
     setSelectionMode(true);
     selectionAnchorIdRef.current = visibleIds[0] ?? null;
@@ -296,13 +305,7 @@ export default function SpaceTree({
         clearSelectionMode();
       },
     });
-  }, [
-    clearSelectionMode,
-    openBulkDeleteModal,
-    removePageMutation,
-    setData,
-    t,
-  ]);
+  }, [clearSelectionMode, openBulkDeleteModal, removePageMutation, setData, t]);
 
   const exportSelected = useCallback(() => {
     if (selectedIdsRef.current.length === 0) return;
@@ -310,9 +313,23 @@ export default function SpaceTree({
   }, [openBulkExport]);
 
   const openMoveSelected = useCallback(() => {
-    if (selectedIdsRef.current.length === 0) return;
+    const ids = selectedIdsRef.current;
+    if (ids.length === 0) return;
+    const hasRestrictedPage = ids.some(
+      (id) =>
+        treeModel.find(filteredData, id)?.capabilities?.moveToSpace === false,
+    );
+    if (hasRestrictedPage) {
+      notifications.show({
+        message: t(
+          "Board pages and work items cannot be moved to another space",
+        ),
+        color: "orange",
+      });
+      return;
+    }
     openBulkMove();
-  }, [openBulkMove]);
+  }, [filteredData, openBulkMove, t]);
 
   const selectionCallbacksRef = useRef({
     clearSelectionMode,
@@ -406,7 +423,16 @@ export default function SpaceTree({
     [handleSelectionChange, readOnly, selectedIdsSet, selectionMode],
   );
   const disableDragDrop = useCallback(
+    (n: SpaceTreeNode) => n.canEdit === false || n.capabilities?.move === false,
+    [],
+  );
+  const disableDrop = useCallback(
     (n: SpaceTreeNode) => n.canEdit === false,
+    [],
+  );
+  const canMove = useCallback(
+    (source: SpaceTreeNode, _target: SpaceTreeNode, operation: DropOp) =>
+      canApplyPageTreeDrop(filteredDataRef.current, source.id, operation),
     [],
   );
   const getDragLabel = useCallback(
@@ -431,7 +457,8 @@ export default function SpaceTree({
           onToggle={handleToggle}
           readOnly={readOnly}
           disableDrag={disableDragDrop}
-          disableDrop={disableDragDrop}
+          disableDrop={disableDrop}
+          canMove={canMove}
           getDragLabel={getDragLabel}
           aria-label={t("Pages")}
         />

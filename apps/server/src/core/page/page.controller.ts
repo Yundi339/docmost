@@ -680,7 +680,11 @@ export class PageController {
     await this.pageAccessService.validateCanEdit(movedPage, user);
 
     if (targetSpaceId === movedPage.spaceId) {
-      await this.pageService.movePageToParent(movedPage, targetParentPageId);
+      await this.pageService.movePageToParent(
+        movedPage,
+        targetParentPageId,
+        user.id,
+      );
       return { childPageIds: [] };
     }
 
@@ -729,9 +733,7 @@ export class PageController {
     // If spaceId is provided, it's a copy to different space
     if (dto.spaceId) {
       const ability = await this.spaceAbility.createForUser(user, dto.spaceId);
-      if (
-        ability.cannot(SpaceCaslAction.Create, SpaceCaslSubject.Page)
-      ) {
+      if (ability.cannot(SpaceCaslAction.Create, SpaceCaslSubject.Page)) {
         throw new ForbiddenException();
       }
 
@@ -819,7 +821,7 @@ export class PageController {
       await this.pageAccessService.validateCanEdit(targetParent, user);
     }
 
-    return this.pageService.movePage(dto, movedPage);
+    return this.pageService.movePage(dto, movedPage, user.id);
   }
 
   @HttpCode(HttpStatus.OK)

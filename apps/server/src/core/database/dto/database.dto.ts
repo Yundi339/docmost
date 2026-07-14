@@ -1,5 +1,6 @@
 import {
   IsArray,
+  ArrayMaxSize,
   IsIn,
   IsNotEmpty,
   IsObject,
@@ -126,6 +127,9 @@ export class CreateDatabaseFieldDto extends DatabaseInfoDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
   options?: string[];
 
   @IsOptional()
@@ -155,6 +159,9 @@ export class UpdateDatabaseFieldDto extends DatabaseInfoDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
   options?: string[];
 }
 

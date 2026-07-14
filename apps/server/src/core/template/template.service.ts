@@ -6,10 +6,15 @@ import {
 import { TemplateRepo } from '@docmost/db/repos/template/template.repo';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
 import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
-import { CreateTemplateDto, UpdateTemplateDto, UseTemplateDto } from './dto/template.dto';
+import {
+  CreateTemplateDto,
+  UpdateTemplateDto,
+  UseTemplateDto,
+} from './dto/template.dto';
 import { User } from '@docmost/db/types/entity.types';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { generateSlugId } from '../../common/helpers';
+import { PageOperationPolicyService } from '../page/policies/page-operation-policy.service';
 
 @Injectable()
 export class TemplateService {
@@ -17,6 +22,7 @@ export class TemplateService {
     private readonly templateRepo: TemplateRepo,
     private readonly pageRepo: PageRepo,
     private readonly spaceMemberRepo: SpaceMemberRepo,
+    private readonly pageOperationPolicy: PageOperationPolicyService,
   ) {}
 
   async findTemplates(
@@ -25,8 +31,14 @@ export class TemplateService {
     pagination: PaginationOptions,
     spaceId?: string,
   ) {
-    const accessibleSpaceIds = await this.spaceMemberRepo.getUserSpaceIds(userId);
-    return this.templateRepo.findTemplates(workspaceId, accessibleSpaceIds, pagination, { spaceId });
+    const accessibleSpaceIds =
+      await this.spaceMemberRepo.getUserSpaceIds(userId);
+    return this.templateRepo.findTemplates(
+      workspaceId,
+      accessibleSpaceIds,
+      pagination,
+      { spaceId },
+    );
   }
 
   async findById(templateId: string, workspaceId: string) {
@@ -61,7 +73,10 @@ export class TemplateService {
   }
 
   async update(dto: UpdateTemplateDto, userId: string, workspaceId: string) {
-    const template = await this.templateRepo.findById(dto.templateId, workspaceId);
+    const template = await this.templateRepo.findById(
+      dto.templateId,
+      workspaceId,
+    );
     if (!template) {
       throw new NotFoundException('Template not found');
     }
@@ -97,14 +112,36 @@ export class TemplateService {
   }
 
   async useTemplate(dto: UseTemplateDto, userId: string, workspaceId: string) {
-    const template = await this.templateRepo.findById(dto.templateId, workspaceId, {
-      includeContent: true,
-    });
+    const template = await this.templateRepo.findById(
+      dto.templateId,
+      workspaceId,
+      {
+        includeContent: true,
+      },
+    );
     if (!template) {
       throw new NotFoundException('Template not found');
     }
 
     await this.validateSpaceAccess(userId, dto.spaceId);
+
+    if (dto.parentPageId) {
+      const parentPage = await this.pageRepo.findById(dto.parentPageId);
+      if (
+        !parentPage ||
+        parentPage.deletedAt ||
+        parentPage.workspaceId !== workspaceId ||
+        parentPage.spaceId !== dto.spaceId
+      ) {
+        throw new NotFoundException('Parent page not found');
+      }
+
+      await this.pageOperationPolicy.assertOperation({
+        operation: 'createChild',
+        parentPage,
+        actorId: userId,
+      });
+    }
 
     const slugId = generateSlugId();
 

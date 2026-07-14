@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { SpaceTreeNode } from "@/features/page/tree/types";
 import {
+  buildTree,
   buildTreeWithChildren,
   expandOpenStateForPath,
   setTreeNodeOpenState,
 } from "./utils";
+import type { IPage } from "@/features/page/types/page.types";
 
 function node(
   id: string,
@@ -50,6 +52,41 @@ describe("buildTreeWithChildren", () => {
   });
 });
 
+describe("buildTree", () => {
+  it("preserves runtime extensions and operation capabilities", () => {
+    const tree = buildTree([
+      {
+        id: "work-item",
+        slugId: "work-item",
+        title: "Work item",
+        position: "A",
+        spaceId: "space-1",
+        parentPageId: "board-page",
+        hasChildren: false,
+        extensions: [
+          { provider: "database", role: "record", resourceId: "record-1" },
+        ],
+        capabilities: {
+          reparent: false,
+          moveToSpace: false,
+          duplicate: false,
+        },
+      } as IPage,
+    ]);
+
+    expect(tree[0]).toMatchObject({
+      extensions: [
+        { provider: "database", role: "record", resourceId: "record-1" },
+      ],
+      capabilities: {
+        reparent: false,
+        moveToSpace: false,
+        duplicate: false,
+      },
+    });
+  });
+});
+
 describe("tree open state", () => {
   it("stores only open nodes when toggling", () => {
     expect(
@@ -79,10 +116,7 @@ describe("tree open state", () => {
     };
 
     expect(
-      expandOpenStateForPath(
-        { root: false, unrelated: true },
-        [root, current],
-      ),
+      expandOpenStateForPath({ root: false, unrelated: true }, [root, current]),
     ).toEqual({
       root: true,
       current: true,

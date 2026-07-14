@@ -16,13 +16,16 @@ describe('PageLifecycleService', () => {
   let pageService: any;
   let pageAccessService: any;
   let spaceAbility: any;
+  let pageOperationPolicy: any;
+  let db: any;
+  let eventEmitter: any;
   let auditService: any;
   let service: PageLifecycleService;
 
   beforeEach(() => {
     pageRepo = {
       findById: jest.fn().mockResolvedValue(page),
-      restorePage: jest.fn().mockResolvedValue(undefined),
+      restorePage: jest.fn().mockResolvedValue([page.id]),
     };
     pageService = { removePage: jest.fn().mockResolvedValue(undefined) };
     pageAccessService = {
@@ -33,12 +36,25 @@ describe('PageLifecycleService', () => {
         cannot: jest.fn().mockReturnValue(false),
       }),
     };
+    pageOperationPolicy = {
+      assertOperation: jest.fn().mockResolvedValue(undefined),
+    };
+    const trx = { id: 'trx' };
+    db = {
+      transaction: jest.fn().mockReturnValue({
+        execute: jest.fn((callback) => callback(trx)),
+      }),
+    };
+    eventEmitter = { emit: jest.fn() };
     auditService = { log: jest.fn() };
     service = new PageLifecycleService(
       pageRepo,
       pageService,
       pageAccessService,
       spaceAbility,
+      pageOperationPolicy,
+      db,
+      eventEmitter,
       auditService,
     );
   });
@@ -86,6 +102,7 @@ describe('PageLifecycleService', () => {
     const restored = { ...page, hasChildren: true };
     pageRepo.findById
       .mockResolvedValueOnce(deleted)
+      .mockResolvedValueOnce(deleted)
       .mockResolvedValueOnce(restored);
 
     await expect(service.restorePage(page.id, user, workspace)).resolves.toBe(
@@ -97,7 +114,22 @@ describe('PageLifecycleService', () => {
       deleted,
       user,
     );
-    expect(pageRepo.restorePage).toHaveBeenCalledWith(page.id, workspace.id);
+    expect(pageOperationPolicy.assertOperation).toHaveBeenCalledWith({
+      operation: 'restore',
+      page: deleted,
+      actorId: user.id,
+      trx: { id: 'trx' },
+    });
+    expect(pageRepo.restorePage).toHaveBeenCalledWith(
+      page.id,
+      workspace.id,
+      { id: 'trx' },
+      false,
+    );
+    expect(eventEmitter.emit).toHaveBeenCalledWith('page.restored', {
+      pageIds: [page.id],
+      workspaceId: workspace.id,
+    });
     expect(auditService.log).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'page.restored', resourceId: page.id }),
     );
@@ -121,5 +153,20 @@ describe('PageLifecycleService', () => {
       service.restorePage(page.id, user, workspace),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(pageRepo.restorePage).not.toHaveBeenCalled();
+  });
+
+  it('does not restore when an extension policy rejects the operation', async () => {
+    const deleted = { ...page, deletedAt: new Date() };
+    pageRepo.findById.mockResolvedValue(deleted);
+    pageOperationPolicy.assertOperation.mockRejectedValue(
+      new Error('Restore the board first'),
+    );
+
+    await expect(service.restorePage(page.id, user, workspace)).rejects.toThrow(
+      'Restore the board first',
+    );
+
+    expect(pageRepo.restorePage).not.toHaveBeenCalled();
+    expect(eventEmitter.emit).not.toHaveBeenCalled();
   });
 });

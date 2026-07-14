@@ -57,6 +57,7 @@ import { markdownToHtml } from '@docmost/editor-ext';
 import { WatcherService } from '../../watcher/watcher.service';
 import { sql } from 'kysely';
 import { WsTreeService } from '../../../ws/ws-tree.service';
+import { PageOperationPolicyService } from '../policies/page-operation-policy.service';
 
 @Injectable()
 export class PageService {
@@ -75,6 +76,7 @@ export class PageService {
     private collaborationGateway: CollaborationGateway,
     private readonly watcherService: WatcherService,
     private readonly wsTreeService: WsTreeService,
+    private readonly pageOperationPolicy: PageOperationPolicyService,
   ) {}
 
   async findById(
@@ -96,22 +98,30 @@ export class PageService {
     createPageDto: CreatePageDto,
   ): Promise<Page> {
     let parentPageId = undefined;
+    let parentPage: Page | undefined;
 
     // check if parent page exists
     if (createPageDto.parentPageId) {
-      const parentPage = await this.pageRepo.findById(
-        createPageDto.parentPageId,
-      );
+      parentPage = await this.pageRepo.findById(createPageDto.parentPageId);
 
       if (
         !parentPage ||
         parentPage.deletedAt ||
-        parentPage.spaceId !== createPageDto.spaceId
+        parentPage.spaceId !== createPageDto.spaceId ||
+        parentPage.workspaceId !== workspaceId
       ) {
         throw new NotFoundException('Parent page not found');
       }
 
       parentPageId = parentPage.id;
+    }
+
+    if (parentPage) {
+      await this.pageOperationPolicy.assertOperation({
+        operation: 'createChild',
+        parentPage,
+        actorId: userId,
+      });
     }
 
     let content = undefined;
@@ -390,6 +400,8 @@ export class PageService {
       }
     }
 
+    result.items = await this.pageOperationPolicy.addMetadata(result.items);
+
     return result;
   }
 
@@ -399,7 +411,19 @@ export class PageService {
     userId: string,
     parentPageId: string | null = null,
     existingTrx?: KyselyTransaction,
+    notify = true,
   ) {
+    if (rootPage.spaceId === spaceId) {
+      await this.movePageToParent(
+        rootPage,
+        parentPageId,
+        userId,
+        existingTrx,
+        notify,
+      );
+      return { childPageIds: [] };
+    }
+
     let childPageIds: string[] = [];
 
     const allPages = await this.pageRepo.getPageAndDescendants(rootPage.id, {
@@ -423,14 +447,19 @@ export class PageService {
         accessibleIds.has(p.parentPageId),
     );
     const pagesToSynchronize = [rootPage, ...pagesToOrphan];
-    const pageAudiences = new Map(
-      await Promise.all(
-        pagesToSynchronize.map(async (page) => [
-          page.id,
-          await this.wsTreeService.capturePageAudience(page),
-        ] as const),
-      ),
-    );
+    const pageAudiences = notify
+      ? new Map(
+          await Promise.all(
+            pagesToSynchronize.map(
+              async (page) =>
+                [
+                  page.id,
+                  await this.wsTreeService.capturePageAudience(page),
+                ] as const,
+            ),
+          ),
+        )
+      : new Map();
 
     await executeTx(
       this.db,
@@ -440,6 +469,31 @@ export class PageService {
         ].sort()) {
           await this.lockSpaceTreeForMove(lockedSpaceId, trx);
         }
+
+        if (parentPageId) {
+          const targetParent = await this.pageRepo.findById(parentPageId, {
+            withLock: true,
+            trx,
+          });
+          if (
+            !targetParent ||
+            targetParent.deletedAt ||
+            targetParent.spaceId !== spaceId ||
+            targetParent.workspaceId !== rootPage.workspaceId
+          ) {
+            throw new NotFoundException('Parent page not found');
+          }
+        }
+
+        await this.pageOperationPolicy.assertOperation({
+          operation: 'move',
+          page: rootPage,
+          targetParentPageId: parentPageId,
+          targetSpaceId: spaceId,
+          affectedPageIds: allPages.map((page) => page.id),
+          actorId: userId,
+          trx,
+        });
 
         // Orphan inaccessible child pages (make them root pages in original space)
         for (const page of pagesToOrphan) {
@@ -537,7 +591,7 @@ export class PageService {
       existingTrx,
     );
 
-    for (const page of pagesToSynchronize) {
+    for (const page of notify ? pagesToSynchronize : []) {
       const relocatedPage = await this.pageRepo.findById(page.id, {
         includeHasChildren: true,
       });
@@ -547,7 +601,9 @@ export class PageService {
       await this.wsTreeService.notifyPageRelocated(
         page,
         relocatedPage,
-        Boolean((relocatedPage as Page & { hasChildren?: boolean }).hasChildren),
+        Boolean(
+          (relocatedPage as Page & { hasChildren?: boolean }).hasChildren,
+        ),
         audience,
       );
     }
@@ -558,10 +614,13 @@ export class PageService {
   async movePageToParent(
     movedPage: Page,
     parentPageId: string | null,
+    actorId: string,
     existingTrx?: KyselyTransaction,
+    notify = true,
   ) {
-    const previousAudience =
-      await this.wsTreeService.capturePageAudience(movedPage);
+    const previousAudience = notify
+      ? await this.wsTreeService.capturePageAudience(movedPage)
+      : null;
 
     await executeTx(
       this.db,
@@ -584,7 +643,8 @@ export class PageService {
           if (
             !parentPage ||
             parentPage.deletedAt ||
-            parentPage.spaceId !== currentMovedPage.spaceId
+            parentPage.spaceId !== currentMovedPage.spaceId ||
+            parentPage.workspaceId !== currentMovedPage.workspaceId
           ) {
             throw new NotFoundException('Parent page not found');
           }
@@ -600,6 +660,16 @@ export class PageService {
             );
           }
         }
+
+        await this.pageOperationPolicy.assertOperation({
+          operation: 'move',
+          page: currentMovedPage,
+          targetParentPageId: parentPageId,
+          targetSpaceId: currentMovedPage.spaceId,
+          affectedPageIds: [currentMovedPage.id],
+          actorId,
+          trx,
+        });
 
         const position = await this.nextPagePositionIn(
           trx,
@@ -619,14 +689,18 @@ export class PageService {
       existingTrx,
     );
 
-    const relocatedPage = await this.pageRepo.findById(movedPage.id, {
-      includeHasChildren: true,
-    });
-    if (relocatedPage) {
+    const relocatedPage = notify
+      ? await this.pageRepo.findById(movedPage.id, {
+          includeHasChildren: true,
+        })
+      : null;
+    if (relocatedPage && previousAudience) {
       await this.wsTreeService.notifyPageRelocated(
         movedPage,
         relocatedPage,
-        Boolean((relocatedPage as Page & { hasChildren?: boolean }).hasChildren),
+        Boolean(
+          (relocatedPage as Page & { hasChildren?: boolean }).hasChildren,
+        ),
         previousAudience,
       );
     }
@@ -662,6 +736,15 @@ export class PageService {
       authUser.id,
       rootPage.spaceId,
     );
+
+    await this.pageOperationPolicy.assertOperation({
+      operation: 'duplicate',
+      page: rootPage,
+      targetParentPageId: isDuplicateInSameSpace ? rootPage.parentPageId : null,
+      targetSpaceId: spaceId,
+      affectedPageIds: allPages.map((page) => page.id),
+      actorId: authUser.id,
+    });
 
     const pageMap = new Map<string, CopyPageMapEntry>();
     pages.forEach((page) => {
@@ -887,7 +970,7 @@ export class PageService {
     };
   }
 
-  async movePage(dto: MovePageDto, movedPage: Page) {
+  async movePage(dto: MovePageDto, movedPage: Page, actorId: string) {
     const previousAudience =
       await this.wsTreeService.capturePageAudience(movedPage);
 
@@ -922,7 +1005,8 @@ export class PageService {
           if (
             !parentPage ||
             parentPage.deletedAt ||
-            parentPage.spaceId !== currentMovedPage.spaceId
+            parentPage.spaceId !== currentMovedPage.spaceId ||
+            parentPage.workspaceId !== currentMovedPage.workspaceId
           ) {
             throw new NotFoundException('Parent page not found');
           }
@@ -942,6 +1026,20 @@ export class PageService {
         }
       }
 
+      const targetParentPageId =
+        parentPageId === undefined
+          ? currentMovedPage.parentPageId
+          : parentPageId;
+      await this.pageOperationPolicy.assertOperation({
+        operation: 'move',
+        page: currentMovedPage,
+        targetParentPageId,
+        targetSpaceId: currentMovedPage.spaceId,
+        affectedPageIds: [currentMovedPage.id],
+        actorId,
+        trx,
+      });
+
       await this.pageRepo.updatePage(
         {
           position: dto.position,
@@ -959,7 +1057,9 @@ export class PageService {
       await this.wsTreeService.notifyPageRelocated(
         movedPage,
         relocatedPage,
-        Boolean((relocatedPage as Page & { hasChildren?: boolean }).hasChildren),
+        Boolean(
+          (relocatedPage as Page & { hasChildren?: boolean }).hasChildren,
+        ),
         previousAudience,
       );
     }

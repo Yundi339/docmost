@@ -27,6 +27,8 @@ export function buildTree(pages: IPage[]): SpaceTreeNode[] {
       spaceId: page.spaceId,
       parentPageId: page.parentPageId,
       canEdit: page.canEdit ?? page.permissions?.canEdit,
+      extensions: page.extensions,
+      capabilities: page.capabilities,
       children: [],
     };
   });
@@ -65,9 +67,7 @@ export function treeNodeHasChildren(node: SpaceTreeNode): boolean {
   return node.hasChildren === true || (node.children?.length ?? 0) > 0;
 }
 
-export function compactTreeOpenState(
-  openState: TreeOpenState,
-): TreeOpenState {
+export function compactTreeOpenState(openState: TreeOpenState): TreeOpenState {
   return Object.fromEntries(
     Object.entries(openState).filter(([, isOpen]) => isOpen === true),
   );

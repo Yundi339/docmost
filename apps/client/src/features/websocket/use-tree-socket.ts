@@ -32,6 +32,12 @@ export const useTreeSocket = () => {
 
   useEffect(() => {
     const handleSocketMessage = (event: WebSocketEvent) => {
+      const invalidateTreeMetadata = (spaceId: string) => {
+        void queryClient.invalidateQueries({
+          queryKey: ["sidebar-full-tree", spaceId],
+        });
+      };
+
       switch (event.operation) {
         case "updateOne":
           if (event.entity[0] === "pages") {
@@ -53,6 +59,7 @@ export const useTreeSocket = () => {
           }
           break;
         case "addTreeNode":
+          invalidateTreeMetadata(event.spaceId);
           setTreeData((prev) => {
             if (treeModel.find(prev, event.payload.data.id)) return prev;
             const newParentId = event.payload.parentId as string | null;
@@ -73,6 +80,7 @@ export const useTreeSocket = () => {
           });
           break;
         case "moveTreeNode":
+          invalidateTreeMetadata(event.spaceId);
           setTreeData((prev) => {
             const sourceBefore = treeModel.find(prev, event.payload.id);
             if (!sourceBefore) return prev;
@@ -117,6 +125,7 @@ export const useTreeSocket = () => {
           });
           break;
         case "deleteTreeNode":
+          invalidateTreeMetadata(event.spaceId);
           setTreeData((prev) => {
             if (!treeModel.find(prev, event.payload.node.id)) return prev;
             queryClient.invalidateQueries({

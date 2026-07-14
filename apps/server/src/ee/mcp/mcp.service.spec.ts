@@ -547,6 +547,21 @@ describe('McpService access control', () => {
     expect(pageService.duplicatePage).not.toHaveBeenCalled();
   });
 
+  it('passes the authenticated actor through MCP page moves', async () => {
+    const pageService = {
+      movePageToParent: jest.fn().mockResolvedValue(undefined),
+    };
+    const { handlers } = registerMcpTools({ pageService });
+
+    await handlers.move_page({ pageId });
+
+    expect(pageService.movePageToParent).toHaveBeenCalledWith(
+      expect.objectContaining({ id: pageId }),
+      null,
+      'user-id',
+    );
+  });
+
   it('requires target space create permission for copy_page_to_space', async () => {
     const { handlers, pageService } = registerMcpTools({
       auditService,

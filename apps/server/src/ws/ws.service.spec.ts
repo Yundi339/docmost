@@ -19,9 +19,7 @@ describe('WsService.emitTreeEvent', () => {
         .mockResolvedValue(options?.authorizedUserIds ?? []),
     };
     const cacheManager = {
-      get: jest
-        .fn()
-        .mockResolvedValue(options?.cachedHasRestrictions ?? null),
+      get: jest.fn().mockResolvedValue(options?.cachedHasRestrictions ?? null),
       set: jest.fn().mockResolvedValue(undefined),
       del: jest.fn().mockResolvedValue(undefined),
     };
@@ -103,9 +101,40 @@ describe('WsService.emitTreeEvent', () => {
 
     await service.emitTreeEvent(event);
 
-    expect(
-      pagePermissionRepo.hasRestrictedPagesInSpace,
-    ).toHaveBeenCalledWith('space-id');
+    expect(pagePermissionRepo.hasRestrictedPagesInSpace).toHaveBeenCalledWith(
+      'space-id',
+    );
+    expect(deniedSocket.emit).not.toHaveBeenCalled();
+  });
+
+  it('permission-filters generic page-scoped events', async () => {
+    const { pagePermissionRepo, service, sockets } = createService({
+      hasRestrictions: true,
+      restrictedPage: true,
+      authorizedUserIds: ['allowed-user'],
+    });
+    const allowedSocket = {
+      data: { userId: 'allowed-user' },
+      emit: jest.fn(),
+    };
+    const deniedSocket = {
+      data: { userId: 'denied-user' },
+      emit: jest.fn(),
+    };
+    sockets.push(allowedSocket, deniedSocket);
+    const invalidateEvent = {
+      operation: 'invalidate',
+      spaceId: 'space-id',
+      entity: ['database-records'],
+      id: 'database-id',
+    };
+
+    await service.emitPageEvent('space-id', 'page-id', invalidateEvent);
+
+    expect(pagePermissionRepo.hasRestrictedAncestor).toHaveBeenCalledWith(
+      'page-id',
+    );
+    expect(allowedSocket.emit).toHaveBeenCalledWith('message', invalidateEvent);
     expect(deniedSocket.emit).not.toHaveBeenCalled();
   });
 });

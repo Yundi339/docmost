@@ -33,6 +33,7 @@ import {
   clearDocmostDragPayloads,
   setDocmostPageDragData,
 } from "@/features/database/utils/database-drag";
+import { PageExtensionIndicators } from "@/features/page/tree/extensions/page-extension-indicators";
 
 type SpaceTreeRowProps = RenderRowProps<SpaceTreeNode> & {
   readOnly: boolean;
@@ -72,6 +73,7 @@ export function SpaceTreeRow({
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const canEdit = !readOnly && node.canEdit !== false;
+  const canMove = canEdit && node.capabilities?.move !== false;
   const pageUrl = buildPageUrl(spaceSlug, node.slugId, node.name);
   const isNodeSelected = selectedIds.has(node.id);
 
@@ -122,9 +124,7 @@ export function SpaceTreeRow({
   };
 
   const handleUpdateNodeIcon = (nodeId: string, newIcon: string | null) => {
-    setTreeData((prev) =>
-      updateTreeNodeIcon(prev, nodeId, newIcon),
-    );
+    setTreeData((prev) => updateTreeNodeIcon(prev, nodeId, newIcon));
   };
 
   const handleEmojiIconClick = (e: React.MouseEvent) => {
@@ -151,6 +151,11 @@ export function SpaceTreeRow({
       data-bulk-selected={selectionMode && isNodeSelected ? true : undefined}
       {...treeItemProps}
       onDragStartCapture={(event) => {
+        if (!canMove) {
+          event.preventDefault();
+          clearDocmostDragPayloads();
+          return;
+        }
         setDocmostPageDragData(
           event.dataTransfer,
           {
@@ -163,6 +168,11 @@ export function SpaceTreeRow({
         );
       }}
       onDragStart={(event) => {
+        if (!canMove) {
+          event.preventDefault();
+          clearDocmostDragPayloads();
+          return;
+        }
         setDocmostPageDragData(
           event.dataTransfer,
           {
@@ -182,12 +192,7 @@ export function SpaceTreeRow({
           return;
         }
 
-        if (
-          selectionMode ||
-          event.ctrlKey ||
-          event.metaKey ||
-          event.shiftKey
-        ) {
+        if (selectionMode || event.ctrlKey || event.metaKey || event.shiftKey) {
           event.preventDefault();
           event.stopPropagation();
           onEnterSelectionMode();
@@ -237,11 +242,9 @@ export function SpaceTreeRow({
           once: true,
         });
         const cleanup = () => {
-          document.removeEventListener(
-            "contextmenu",
-            suppressContextMenu,
-            { capture: true } as any,
-          );
+          document.removeEventListener("contextmenu", suppressContextMenu, {
+            capture: true,
+          } as any);
           window.removeEventListener("touchend", cleanup);
           window.removeEventListener("touchcancel", cleanup);
         };
@@ -317,9 +320,7 @@ export function SpaceTreeRow({
       <div onClick={handleEmojiIconClick} style={{ marginRight: "4px" }}>
         <EmojiPicker
           onEmojiSelect={handleEmojiSelect}
-          icon={
-            node.icon ? node.icon : <IconFileDescription size="18" />
-          }
+          icon={node.icon ? node.icon : <IconFileDescription size="18" />}
           readOnly={!canEdit}
           removeEmojiAction={handleRemoveEmoji}
           actionIconProps={{ tabIndex: -1 }}
@@ -327,12 +328,13 @@ export function SpaceTreeRow({
       </div>
 
       <span className={classes.text}>{node.name || t("untitled")}</span>
+      <PageExtensionIndicators extensions={node.extensions} />
 
       {!selectionMode && (
         <div className={classes.actions}>
           <NodeMenu node={node} canEdit={canEdit} />
 
-          {canEdit && (
+          {canEdit && node.capabilities?.createChild !== false && (
             <CreateNode
               node={node}
               isOpen={isOpen}
@@ -405,12 +407,7 @@ interface CreateNodeProps {
   onToggle: () => void;
 }
 
-function CreateNode({
-  node,
-  isOpen,
-  hasChildren,
-  onToggle,
-}: CreateNodeProps) {
+function CreateNode({ node, isOpen, hasChildren, onToggle }: CreateNodeProps) {
   const { t } = useTranslation();
   const { handleCreate } = useTreeMutation(node.spaceId);
 
@@ -428,7 +425,9 @@ function CreateNode({
       variant="subtle"
       color="gray"
       className={classes.actionIcon}
-      aria-label={t("Create subpage of {{name}}", { name: node.name || t("untitled") })}
+      aria-label={t("Create subpage of {{name}}", {
+        name: node.name || t("untitled"),
+      })}
       tabIndex={-1}
       onClick={(e) => {
         e.preventDefault();

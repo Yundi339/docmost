@@ -127,7 +127,9 @@ export function NodeMenu({ node, canEdit }: NodeMenuProps) {
             variant="subtle"
             color="gray"
             className={classes.actionIcon}
-            aria-label={t("Page menu for {{name}}", { name: node.name || t("untitled") })}
+            aria-label={t("Page menu for {{name}}", {
+              name: node.name || t("untitled"),
+            })}
             tabIndex={-1}
             onClick={(e) => {
               e.preventDefault();
@@ -155,7 +157,11 @@ export function NodeMenu({ node, canEdit }: NodeMenuProps) {
 
           <Menu.Item
             leftSection={
-              isFavorited ? <IconStarFilled size={16} /> : <IconStar size={16} />
+              isFavorited ? (
+                <IconStarFilled size={16} />
+              ) : (
+                <IconStar size={16} />
+              )
             }
             onClick={(e) => {
               e.preventDefault();
@@ -183,38 +189,44 @@ export function NodeMenu({ node, canEdit }: NodeMenuProps) {
 
           {canEdit && (
             <>
-              <Menu.Item
-                leftSection={<IconCopy size={16} />}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleDuplicatePage();
-                }}
-              >
-                {t("Duplicate")}
-              </Menu.Item>
+              {node.capabilities?.duplicate !== false && (
+                <Menu.Item
+                  leftSection={<IconCopy size={16} />}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDuplicatePage();
+                  }}
+                >
+                  {t("Duplicate")}
+                </Menu.Item>
+              )}
 
-              <Menu.Item
-                leftSection={<IconArrowRight size={16} />}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  openMovePageModal();
-                }}
-              >
-                {t("Move")}
-              </Menu.Item>
+              {node.capabilities?.moveToSpace !== false && (
+                <Menu.Item
+                  leftSection={<IconArrowRight size={16} />}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openMovePageModal();
+                  }}
+                >
+                  {t("Move")}
+                </Menu.Item>
+              )}
 
-              <Menu.Item
-                leftSection={<IconCopy size={16} />}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  openCopyPageModal();
-                }}
-              >
-                {t("Copy to space")}
-              </Menu.Item>
+              {node.capabilities?.duplicate !== false && (
+                <Menu.Item
+                  leftSection={<IconCopy size={16} />}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openCopyPageModal();
+                  }}
+                >
+                  {t("Copy to space")}
+                </Menu.Item>
+              )}
 
               <Menu.Divider />
               <Menu.Item

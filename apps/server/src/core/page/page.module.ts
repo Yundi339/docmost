@@ -10,6 +10,7 @@ import { CollaborationModule } from '../../collaboration/collaboration.module';
 import { WatcherModule } from '../watcher/watcher.module';
 import { LabelModule } from '../label/label.module';
 import { PageLifecycleService } from './services/page-lifecycle.service';
+import { PageOperationPolicyService } from './policies/page-operation-policy.service';
 
 @Module({
   controllers: [PageController],
@@ -20,12 +21,14 @@ import { PageLifecycleService } from './services/page-lifecycle.service';
     TrashCleanupService,
     BacklinkService,
     PageLifecycleService,
+    PageOperationPolicyService,
   ],
   exports: [
     PageService,
     PageHistoryService,
     PageVisitorService,
     PageLifecycleService,
+    PageOperationPolicyService,
   ],
   imports: [StorageModule, CollaborationModule, WatcherModule, LabelModule],
 })

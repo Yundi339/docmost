@@ -1,59 +1,60 @@
-import { IUser } from '@/features/user/types/user.types';
+import { IUser } from "@/features/user/types/user.types";
 
 export type DatabaseTemplate =
-  | 'database'
-  | 'table'
-  | 'kanban'
-  | 'board'
-  | 'tasks'
-  | 'calendar'
-  | 'gallery'
-  | 'list'
-  | 'timeline'
-  | 'chart'
-  | 'dashboard'
-  | 'feed'
-  | 'map'
-  | 'form';
+  | "database"
+  | "table"
+  | "kanban"
+  | "board"
+  | "tasks"
+  | "calendar"
+  | "gallery"
+  | "list"
+  | "timeline"
+  | "chart"
+  | "dashboard"
+  | "feed"
+  | "map"
+  | "form";
 
 export type DatabaseViewType =
-  | 'table'
-  | 'kanban'
-  | 'calendar'
-  | 'gallery'
-  | 'list'
-  | 'timeline'
-  | 'chart'
-  | 'dashboard'
-  | 'feed'
-  | 'map'
-  | 'form';
+  | "table"
+  | "kanban"
+  | "calendar"
+  | "gallery"
+  | "list"
+  | "timeline"
+  | "chart"
+  | "dashboard"
+  | "feed"
+  | "map"
+  | "form";
 
 export interface DatabaseFieldDefinition {
   name: string;
   type:
-    | 'text'
-    | 'longText'
-    | 'number'
-    | 'select'
-    | 'singleSelect'
-    | 'multiSelect'
-    | 'status'
-    | 'date'
-    | 'user'
-    | 'person'
-    | 'attachment'
-    | 'checkbox'
-    | 'url'
-    | 'email'
-    | 'phone'
-    | 'relation'
-    | 'rollup'
-    | 'formula'
-    | 'button'
-    | 'id'
-    | 'place';
+    | "text"
+    | "longText"
+    | "number"
+    | "select"
+    | "singleSelect"
+    | "multiSelect"
+    | "status"
+    | "date"
+    | "user"
+    | "person"
+    | "attachment"
+    | "checkbox"
+    | "url"
+    | "email"
+    | "phone"
+    | "relation"
+    | "rollup"
+    | "formula"
+    | "button"
+    | "id"
+    | "place";
   options?: string[];
+  isPrimary?: boolean;
 }
 
 export interface DatabaseViewDefinition {
@@ -97,6 +98,7 @@ export interface DatabaseRecord {
   pageTitle?: string | null;
   pageIcon?: string | null;
   sortOrder?: string | null;
+  canEdit?: boolean;
 }
 
 export interface CreateDatabaseInput {
@@ -107,6 +109,6 @@ export interface CreateDatabaseInput {
   viewType?: DatabaseViewType;
 }
 
-export type DatabaseUser = Pick<IUser, 'id' | 'name' | 'avatarUrl'> & {
+export type DatabaseUser = Pick<IUser, "id" | "name" | "avatarUrl"> & {
   email?: string;
 };

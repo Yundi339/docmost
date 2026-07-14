@@ -1,5 +1,19 @@
 import { ISpace } from "@/features/space/types/space.types.ts";
 
+export interface IPageExtension {
+  provider: string;
+  role: string;
+  resourceId: string;
+}
+
+export interface IPageCapabilities {
+  move?: boolean;
+  reparent?: boolean;
+  moveToSpace?: boolean;
+  createChild?: boolean;
+  duplicate?: boolean;
+}
+
 export interface IPage {
   id: string;
   slugId: string;
@@ -29,6 +43,8 @@ export interface IPage {
     canEdit: boolean;
     hasRestriction: boolean;
   };
+  extensions?: IPageExtension[];
+  capabilities?: IPageCapabilities;
 }
 
 export interface IContributor {

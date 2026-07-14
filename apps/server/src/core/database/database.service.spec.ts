@@ -7,6 +7,7 @@ jest.mock('../page/services/page.service', () => ({
 }));
 
 import { DatabaseService } from './database.service';
+import { buildDefaultFieldsForTemplate } from './database.templates';
 import {
   DatabaseBlock,
   DatabaseRecord,
@@ -26,16 +27,21 @@ describe('DatabaseService', () => {
   let databaseRepo: {
     findById: jest.Mock;
     listByWorkspace: jest.Mock;
+    listActiveWorkspaceUserIds: jest.Mock;
     findByPageAndBlock: jest.Mock;
     insertDatabaseBlock: jest.Mock;
     updateViews: jest.Mock;
+    updateFields: jest.Mock;
     updateMetadata: jest.Mock;
     insertDatabaseRecord: jest.Mock;
     insertDatabaseRecords: jest.Mock;
     listDatabaseRecords: jest.Mock;
     findDatabaseRecord: jest.Mock;
     findDatabaseRecordByPage: jest.Mock;
+    listActiveDatabaseRecordsByPage: jest.Mock;
     updateDatabaseRecordFields: jest.Mock;
+    backfillDatabaseRecordField: jest.Mock;
+    renameDatabaseRecordField: jest.Mock;
     updateDatabaseRecordPageId: jest.Mock;
     updateDatabaseRecordSort: jest.Mock;
     detachDatabaseRecord: jest.Mock;
@@ -44,6 +50,7 @@ describe('DatabaseService', () => {
   };
   let pageRepo: {
     findById: jest.Mock;
+    findByIds: jest.Mock;
     insertPage: jest.Mock;
     updatePage: jest.Mock;
     removePage: jest.Mock;
@@ -51,14 +58,14 @@ describe('DatabaseService', () => {
   let pageAccessService: {
     validateCanEdit: jest.Mock;
     validateCanView: jest.Mock;
+    validateCanViewWithPermissions: jest.Mock;
+    filterViewablePagesWithPermissions: jest.Mock;
   };
   let pageService: {
     movePageToParent: jest.Mock;
     movePageToSpace: jest.Mock;
   };
-  let spaceAbility: {
-    createForUser: jest.Mock;
-  };
+  let pageOperationPolicy: { assertOperation: jest.Mock };
   let apitableClient: {
     createDatasheet: jest.Mock;
     listRecords: jest.Mock;
@@ -67,6 +74,14 @@ describe('DatabaseService', () => {
     buildPublicEmbedUrl: jest.Mock;
   };
   let db: { transaction: jest.Mock };
+  let wsTreeService: {
+    capturePageAudience: jest.Mock;
+    notifyPageRelocated: jest.Mock;
+    notifyPageUpdated: jest.Mock;
+    notifyPageQueriesInvalidated: jest.Mock;
+  };
+  let eventEmitter: { emit: jest.Mock };
+  let auditService: { log: jest.Mock };
   let trx: Record<string, never>;
   let service: DatabaseService;
 
@@ -74,16 +89,21 @@ describe('DatabaseService', () => {
     databaseRepo = {
       findById: jest.fn(),
       listByWorkspace: jest.fn(),
+      listActiveWorkspaceUserIds: jest.fn().mockResolvedValue([]),
       findByPageAndBlock: jest.fn(),
       insertDatabaseBlock: jest.fn(),
       updateViews: jest.fn(),
+      updateFields: jest.fn(),
       updateMetadata: jest.fn(),
       insertDatabaseRecord: jest.fn(),
       insertDatabaseRecords: jest.fn(),
       listDatabaseRecords: jest.fn(),
       findDatabaseRecord: jest.fn(),
       findDatabaseRecordByPage: jest.fn(),
+      listActiveDatabaseRecordsByPage: jest.fn().mockResolvedValue([]),
       updateDatabaseRecordFields: jest.fn(),
+      backfillDatabaseRecordField: jest.fn(),
+      renameDatabaseRecordField: jest.fn(),
       updateDatabaseRecordPageId: jest.fn(),
       updateDatabaseRecordSort: jest.fn(),
       detachDatabaseRecord: jest.fn(),
@@ -92,6 +112,7 @@ describe('DatabaseService', () => {
     };
     pageRepo = {
       findById: jest.fn(),
+      findByIds: jest.fn().mockResolvedValue([]),
       insertPage: jest.fn().mockImplementation(async (input) =>
         makePage({
           ...input,
@@ -100,20 +121,22 @@ describe('DatabaseService', () => {
         }),
       ),
       updatePage: jest.fn(),
-      removePage: jest.fn(),
+      removePage: jest.fn().mockResolvedValue(['record_page_1']),
     };
     pageAccessService = {
       validateCanEdit: jest.fn(),
       validateCanView: jest.fn(),
+      validateCanViewWithPermissions: jest
+        .fn()
+        .mockResolvedValue({ canEdit: true, hasRestriction: false }),
+      filterViewablePagesWithPermissions: jest.fn().mockResolvedValue([]),
     };
     pageService = {
       movePageToParent: jest.fn(),
       movePageToSpace: jest.fn(),
     };
-    spaceAbility = {
-      createForUser: jest
-        .fn()
-        .mockResolvedValue({ cannot: jest.fn(() => false) }),
+    pageOperationPolicy = {
+      assertOperation: jest.fn().mockResolvedValue(undefined),
     };
     apitableClient = {
       createDatasheet: jest.fn(),
@@ -129,15 +152,29 @@ describe('DatabaseService', () => {
           callback(trx),
       })),
     };
+    wsTreeService = {
+      capturePageAudience: jest.fn().mockResolvedValue({
+        spaceId: 'space_1',
+        userIds: [],
+      }),
+      notifyPageRelocated: jest.fn().mockResolvedValue(undefined),
+      notifyPageUpdated: jest.fn().mockResolvedValue(undefined),
+      notifyPageQueriesInvalidated: jest.fn().mockResolvedValue(undefined),
+    };
+    eventEmitter = { emit: jest.fn() };
+    auditService = { log: jest.fn() };
 
     service = new DatabaseService(
       databaseRepo as never,
       pageRepo as never,
       pageAccessService as never,
       pageService as never,
-      spaceAbility as never,
+      pageOperationPolicy as never,
       apitableClient as never,
       db as never,
+      wsTreeService as never,
+      eventEmitter as never,
+      auditService as never,
     );
   });
 
@@ -187,6 +224,7 @@ describe('DatabaseService', () => {
           provider: 'docmost-native',
         }),
       }),
+      trx,
     );
     expect(databaseRepo.insertDatabaseRecords).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -198,6 +236,7 @@ describe('DatabaseService', () => {
           }),
         }),
       ]),
+      trx,
     );
     expect(result).toMatchObject({
       id: 'database_1',
@@ -214,6 +253,7 @@ describe('DatabaseService', () => {
     databaseRepo.listDatabaseRecords.mockResolvedValue([
       makeDatabaseRecord({
         id: 'record_1',
+        pageId: 'record_page_1',
         fields: {
           Title: 'Ship APITable fusion',
           Status: 'In progress',
@@ -221,13 +261,25 @@ describe('DatabaseService', () => {
         },
       }),
     ]);
+    const recordPage = makePage({
+      id: 'record_page_1',
+      parentPageId: database.pageId,
+    });
     pageRepo.findById.mockResolvedValue(page);
+    pageRepo.findByIds.mockResolvedValue([recordPage]);
+    pageAccessService.filterViewablePagesWithPermissions.mockResolvedValue([
+      { page: recordPage, canEdit: true },
+    ]);
 
     const result = await service.listRecords(database.id, user);
 
     expect(pageAccessService.validateCanView).toHaveBeenCalledWith(page, user);
     expect(pageAccessService.validateCanEdit).not.toHaveBeenCalled();
     expect(databaseRepo.listDatabaseRecords).toHaveBeenCalledWith(database.id);
+    expect(pageRepo.findByIds).toHaveBeenCalledWith(['record_page_1']);
+    expect(
+      pageAccessService.filterViewablePagesWithPermissions,
+    ).toHaveBeenCalledWith([recordPage], user);
     expect(result.items).toEqual([
       expect.objectContaining({
         id: 'record_1',
@@ -254,9 +306,8 @@ describe('DatabaseService', () => {
         fields: { Title: 'Deleted task', Status: 'Todo' },
       }),
     ]);
-    pageRepo.findById
-      .mockResolvedValueOnce(page)
-      .mockResolvedValueOnce(deletedRecordPage);
+    pageRepo.findById.mockResolvedValue(page);
+    pageRepo.findByIds.mockResolvedValue([deletedRecordPage]);
 
     const result = await service.listRecords(database.id, user);
 
@@ -265,7 +316,175 @@ describe('DatabaseService', () => {
     expect(databaseRepo.updateDatabaseRecordPageId).not.toHaveBeenCalled();
   });
 
-  it('trashes a record page and detaches the database record atomically', async () => {
+  it('creates records with a renamed primary title field', async () => {
+    const database = makeDatabaseBlock({
+      metadata: { provider: 'docmost-native' },
+      fields: [
+        { name: 'Task', type: 'text', isPrimary: true },
+        { name: 'Status', type: 'singleSelect', options: ['Todo', 'Done'] },
+      ],
+    });
+    const recordPage = makePage({
+      id: 'record_page_1',
+      title: 'Renamed title',
+      parentPageId: database.pageId,
+    });
+    databaseRepo.findById.mockResolvedValue(database);
+    databaseRepo.insertDatabaseRecord.mockImplementation(async (input) =>
+      makeDatabaseRecord({
+        ...input,
+        id: 'record_1',
+        pageId: recordPage.id,
+      }),
+    );
+    pageRepo.findById
+      .mockResolvedValueOnce(page)
+      .mockResolvedValueOnce(page)
+      .mockResolvedValueOnce(recordPage);
+    pageRepo.insertPage.mockResolvedValue(recordPage);
+
+    const result = await service.createRecord(
+      {
+        databaseId: database.id,
+        fields: { Task: 'Renamed title' },
+      },
+      user,
+    );
+
+    expect(pageRepo.insertPage).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Renamed title' }),
+      trx,
+      false,
+    );
+    expect(pageOperationPolicy.assertOperation).toHaveBeenCalledWith({
+      operation: 'createChild',
+      parentPage: page,
+      actorId: user.id,
+      trx,
+    });
+    expect(databaseRepo.insertDatabaseRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fields: expect.objectContaining({
+          Task: 'Renamed title',
+          Status: 'Todo',
+        }),
+      }),
+      trx,
+    );
+    expect(result.title).toBe('Renamed title');
+  });
+
+  it('does not create a work item page when another page policy rejects children', async () => {
+    const database = makeDatabaseBlock({
+      metadata: { provider: 'docmost-native' },
+    });
+    const restriction = new Error('Children are restricted');
+    databaseRepo.findById.mockResolvedValue(database);
+    pageRepo.findById.mockResolvedValue(page);
+    pageOperationPolicy.assertOperation.mockRejectedValue(restriction);
+
+    await expect(
+      service.createRecord(
+        { databaseId: database.id, fields: { Title: 'Restricted task' } },
+        user,
+      ),
+    ).rejects.toBe(restriction);
+
+    expect(pageRepo.insertPage).not.toHaveBeenCalled();
+    expect(databaseRepo.insertDatabaseRecord).not.toHaveBeenCalled();
+  });
+
+  it('rejects native record fields that are not defined by the board schema', async () => {
+    const database = makeDatabaseBlock();
+    databaseRepo.findById.mockResolvedValue(database);
+    pageRepo.findById.mockResolvedValue(page);
+
+    await expect(
+      service.createRecord(
+        {
+          databaseId: database.id,
+          fields: { Untrusted: 'value' },
+        },
+        user,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'DATABASE_RECORD_VALIDATION_FAILED',
+        field: 'Untrusted',
+      }),
+    });
+
+    expect(pageRepo.insertPage).not.toHaveBeenCalled();
+    expect(databaseRepo.insertDatabaseRecord).not.toHaveBeenCalled();
+  });
+
+  it('rejects user references outside the active workspace membership', async () => {
+    const database = makeDatabaseBlock();
+    databaseRepo.findById.mockResolvedValue(database);
+    databaseRepo.listActiveWorkspaceUserIds.mockResolvedValue([]);
+    pageRepo.findById.mockResolvedValue(page);
+
+    await expect(
+      service.createRecord(
+        {
+          databaseId: database.id,
+          fields: { Title: 'Task', Assignee: ['other_workspace_user'] },
+        },
+        user,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'DATABASE_RECORD_VALIDATION_FAILED',
+        field: 'Assignee',
+      }),
+    });
+
+    expect(databaseRepo.listActiveWorkspaceUserIds).toHaveBeenCalledWith(
+      database.workspaceId,
+      ['other_workspace_user'],
+    );
+    expect(pageRepo.insertPage).not.toHaveBeenCalled();
+  });
+
+  it('keeps the primary title field as a textual field', async () => {
+    const database = makeDatabaseBlock();
+    databaseRepo.findById.mockResolvedValue(database);
+    pageRepo.findById.mockResolvedValue(page);
+
+    await expect(
+      service.updateField(
+        {
+          databaseId: database.id,
+          fieldName: 'Title',
+          type: 'number',
+        },
+        user,
+      ),
+    ).rejects.toThrow('The primary title field must remain a text field');
+
+    expect(databaseRepo.updateFields).not.toHaveBeenCalled();
+  });
+
+  it('rejects reserved database field names before changing the schema', async () => {
+    const database = makeDatabaseBlock();
+    databaseRepo.findById.mockResolvedValue(database);
+    pageRepo.findById.mockResolvedValue(page);
+
+    await expect(
+      service.createField(
+        {
+          databaseId: database.id,
+          name: '__proto__',
+          type: 'text',
+        },
+        user,
+      ),
+    ).rejects.toThrow('Database field name is reserved');
+
+    expect(databaseRepo.updateFields).not.toHaveBeenCalled();
+  });
+
+  it('trashes a record page while preserving its board membership', async () => {
     const database = makeDatabaseBlock({
       metadata: { provider: 'docmost-native' },
     });
@@ -273,13 +492,12 @@ describe('DatabaseService', () => {
       id: 'record_1',
       pageId: 'record_page_1',
     });
-    const recordPage = makePage({ id: 'record_page_1' });
+    const recordPage = makePage({
+      id: 'record_page_1',
+      parentPageId: database.pageId,
+    });
     databaseRepo.findById.mockResolvedValue(database);
     databaseRepo.findDatabaseRecord.mockResolvedValue(record);
-    databaseRepo.detachDatabaseRecord.mockResolvedValue({
-      ...record,
-      deletedAt: new Date('2026-06-01T00:00:00.000Z'),
-    });
     pageRepo.findById
       .mockResolvedValueOnce(page)
       .mockResolvedValueOnce(recordPage);
@@ -295,17 +513,13 @@ describe('DatabaseService', () => {
       user,
     );
     expect(db.transaction).toHaveBeenCalled();
-    expect(databaseRepo.detachDatabaseRecord).toHaveBeenCalledWith(
-      database.id,
-      record.id,
-      user.id,
-      trx,
-    );
+    expect(databaseRepo.detachDatabaseRecord).not.toHaveBeenCalled();
     expect(pageRepo.removePage).toHaveBeenCalledWith(
       recordPage.id,
       user.id,
       database.workspaceId,
       trx,
+      false,
     );
     expect(result).toEqual({
       recordId: record.id,
@@ -314,7 +528,7 @@ describe('DatabaseService', () => {
     });
   });
 
-  it('moves a record page to a target page and detaches the record in one transaction', async () => {
+  it('rejects detaching a work item from its board', async () => {
     const database = makeDatabaseBlock({
       metadata: { provider: 'docmost-native' },
     });
@@ -322,41 +536,25 @@ describe('DatabaseService', () => {
       id: 'record_1',
       pageId: 'record_page_1',
     });
-    const recordPage = makePage({ id: 'record_page_1' });
-    const targetPage = makePage({ id: 'target_page_1' });
     databaseRepo.findById.mockResolvedValue(database);
-    databaseRepo.findDatabaseRecord.mockResolvedValue(record);
-    databaseRepo.detachDatabaseRecord.mockResolvedValue({
-      ...record,
-      deletedAt: new Date('2026-06-01T00:00:00.000Z'),
+    pageRepo.findById.mockResolvedValueOnce(page);
+
+    await expect(
+      service.detachRecord(
+        {
+          databaseId: database.id,
+          recordId: record.id,
+        },
+        user,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'DATABASE_WORK_ITEM_DETACH_DISABLED',
+      }),
     });
-    pageRepo.findById
-      .mockResolvedValueOnce(page)
-      .mockResolvedValueOnce(recordPage)
-      .mockResolvedValueOnce(targetPage);
 
-    const result = await service.detachRecord(
-      {
-        databaseId: database.id,
-        recordId: record.id,
-        targetPageId: targetPage.id,
-      },
-      user,
-    );
-
-    expect(db.transaction).toHaveBeenCalled();
-    expect(pageService.movePageToParent).toHaveBeenCalledWith(
-      recordPage,
-      targetPage.id,
-      trx,
-    );
-    expect(databaseRepo.detachDatabaseRecord).toHaveBeenCalledWith(
-      database.id,
-      record.id,
-      user.id,
-      trx,
-    );
-    expect(result.targetPageId).toBe(targetPage.id);
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(pageService.movePageToParent).not.toHaveBeenCalled();
   });
 
   it('lists editable native kanban databases as move targets', async () => {
@@ -379,6 +577,7 @@ describe('DatabaseService', () => {
     const apitableTarget = makeDatabaseBlock({
       id: 'database_apitable',
       pageId: 'apitable_page_1',
+      apitableDatasheetId: 'external_datasheet_1',
       metadata: { provider: 'apitable' },
     });
     databaseRepo.listByWorkspace.mockResolvedValue([
@@ -388,21 +587,27 @@ describe('DatabaseService', () => {
       tableOnlyTarget,
       apitableTarget,
     ]);
-    pageRepo.findById
-      .mockResolvedValueOnce(makePage({ id: 'target_page_1' }))
-      .mockResolvedValueOnce(makePage({ id: 'blocked_page_1' }));
-    pageAccessService.validateCanEdit.mockImplementation(async (targetPage) => {
-      if (targetPage.id === 'blocked_page_1') throw new Error('Forbidden');
-    });
+    const editableTargetPage = makePage({ id: 'target_page_1' });
+    const blockedTargetPage = makePage({ id: 'blocked_page_1' });
+    pageRepo.findByIds.mockResolvedValue([
+      editableTargetPage,
+      blockedTargetPage,
+    ]);
+    pageAccessService.filterViewablePagesWithPermissions.mockResolvedValue([
+      { page: editableTargetPage, canEdit: true },
+      { page: blockedTargetPage, canEdit: false },
+    ]);
 
     const result = await service.listTargets(
       { excludeDatabaseId: currentDatabase.id },
       user,
     );
 
-    expect(databaseRepo.listByWorkspace).toHaveBeenCalledWith(
-      user.workspaceId,
-    );
+    expect(databaseRepo.listByWorkspace).toHaveBeenCalledWith(user.workspaceId);
+    expect(pageRepo.findByIds).toHaveBeenCalledWith([
+      editableTarget.pageId,
+      blockedTarget.pageId,
+    ]);
     expect(result.items).toEqual([
       expect.objectContaining({
         id: editableTarget.id,
@@ -412,7 +617,7 @@ describe('DatabaseService', () => {
     ]);
   });
 
-  it('detaches the source record when attaching to a board that already has the page', async () => {
+  it('moves an existing work item to another board atomically', async () => {
     const targetDatabase = makeDatabaseBlock({
       id: 'target_database',
       pageId: 'target_database_page',
@@ -421,8 +626,15 @@ describe('DatabaseService', () => {
       id: 'source_database',
       pageId: 'source_database_page',
     });
-    const movingPage = makePage({ id: 'record_page_1' });
-    const existingTargetRecord = makeDatabaseRecord({
+    const movingPage = makePage({
+      id: 'record_page_1',
+      parentPageId: sourceDatabase.pageId,
+    });
+    const relocatedMovingPage = makePage({
+      ...movingPage,
+      parentPageId: targetDatabase.pageId,
+    });
+    const targetRecord = makeDatabaseRecord({
       id: 'target_record_1',
       databaseId: targetDatabase.id,
       pageId: movingPage.id,
@@ -435,15 +647,17 @@ describe('DatabaseService', () => {
     databaseRepo.findById
       .mockResolvedValueOnce(targetDatabase)
       .mockResolvedValueOnce(sourceDatabase);
-    databaseRepo.findDatabaseRecordByPage.mockResolvedValue(
-      existingTargetRecord,
-    );
     databaseRepo.findDatabaseRecord.mockResolvedValue(sourceRecord);
+    databaseRepo.listActiveDatabaseRecordsByPage.mockResolvedValue([
+      sourceRecord,
+    ]);
+    databaseRepo.insertDatabaseRecord.mockResolvedValue(targetRecord);
     pageRepo.findById
       .mockResolvedValueOnce(makePage({ id: targetDatabase.pageId }))
       .mockResolvedValueOnce(movingPage)
       .mockResolvedValueOnce(makePage({ id: sourceDatabase.pageId }))
-      .mockResolvedValueOnce(movingPage);
+      .mockResolvedValueOnce(relocatedMovingPage)
+      .mockResolvedValueOnce(relocatedMovingPage);
 
     const result = await service.attachPage(
       {
@@ -455,7 +669,13 @@ describe('DatabaseService', () => {
       user,
     );
 
-    expect(databaseRepo.insertDatabaseRecord).not.toHaveBeenCalled();
+    expect(databaseRepo.insertDatabaseRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        databaseId: targetDatabase.id,
+        pageId: movingPage.id,
+      }),
+      trx,
+    );
     expect(db.transaction).toHaveBeenCalled();
     expect(databaseRepo.detachDatabaseRecord).toHaveBeenCalledWith(
       sourceDatabase.id,
@@ -463,12 +683,69 @@ describe('DatabaseService', () => {
       user.id,
       trx,
     );
+    expect(pageService.movePageToParent).toHaveBeenCalledWith(
+      movingPage,
+      targetDatabase.pageId,
+      user.id,
+      trx,
+      false,
+    );
     expect(result).toEqual(
       expect.objectContaining({
-        id: existingTargetRecord.id,
+        id: targetRecord.id,
         pageId: movingPage.id,
       }),
     );
+  });
+
+  it('rejects attaching Docmost pages to an external database provider', async () => {
+    const database = makeDatabaseBlock({
+      apitableDatasheetId: 'external_datasheet_1',
+      metadata: { provider: 'apitable' },
+    });
+    databaseRepo.findById.mockResolvedValue(database);
+    pageRepo.findById.mockResolvedValue(page);
+
+    await expect(
+      service.attachPage(
+        { databaseId: database.id, pageId: 'record_page_1' },
+        user,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'DATABASE_NATIVE_PAGE_RELATION_REQUIRED',
+      }),
+    });
+
+    expect(databaseRepo.insertDatabaseRecord).not.toHaveBeenCalled();
+    expect(pageService.movePageToParent).not.toHaveBeenCalled();
+  });
+
+  it('maps concurrent active-page membership conflicts to a stable response', async () => {
+    const database = makeDatabaseBlock({ pageId: 'database_page_1' });
+    const movingPage = makePage({ id: 'record_page_1' });
+    databaseRepo.findById.mockResolvedValue(database);
+    databaseRepo.listActiveDatabaseRecordsByPage.mockResolvedValue([]);
+    databaseRepo.insertDatabaseRecord.mockRejectedValue({
+      code: '23505',
+      constraint: 'idx_database_records_active_page_unique',
+    });
+    pageRepo.findById
+      .mockResolvedValueOnce(makePage({ id: database.pageId }))
+      .mockResolvedValueOnce(movingPage);
+
+    try {
+      await service.attachPage(
+        { databaseId: database.id, pageId: movingPage.id },
+        user,
+      );
+      throw new Error('Expected attachPage to reject');
+    } catch (error) {
+      expect((error as { getResponse: () => unknown }).getResponse()).toEqual({
+        code: 'DATABASE_PAGE_ALREADY_MANAGED',
+        message: 'The page is already managed by a board',
+      });
+    }
   });
 
   it('keeps compatibility with legacy metadata records', async () => {
@@ -519,7 +796,12 @@ describe('DatabaseService', () => {
       async (_databaseId, _recordId, fields) =>
         makeDatabaseRecord({ ...record, fields }),
     );
-    pageRepo.findById.mockResolvedValue(page);
+    const recordPage = makePage({
+      id: record.pageId,
+      parentPageId: database.pageId,
+      title: 'Build board',
+    });
+    pageRepo.findById.mockResolvedValueOnce(page).mockResolvedValue(recordPage);
 
     const result = await service.updateRecord(
       {
@@ -531,11 +813,16 @@ describe('DatabaseService', () => {
     );
 
     expect(pageAccessService.validateCanEdit).toHaveBeenCalledWith(page, user);
+    expect(pageAccessService.validateCanEdit).toHaveBeenCalledWith(
+      recordPage,
+      user,
+    );
     expect(databaseRepo.updateDatabaseRecordFields).toHaveBeenCalledWith(
       database.id,
       'record_1',
       expect.objectContaining({ Status: 'Done' }),
       user.id,
+      trx,
     );
     expect(result.status).toBe('Done');
   });
@@ -557,7 +844,9 @@ function makeDatabaseBlock(
     activeViewId: 'kanban',
     apitableDatasheetId: 'native_datasheet_1',
     apitableViewId: 'kanban',
-    fields: [],
+    fields: buildDefaultFieldsForTemplate(
+      'tasks',
+    ) as unknown as DatabaseBlock['fields'],
     views: [{ id: 'kanban', name: 'Board', type: 'kanban', groupBy: 'Status' }],
     metadata: { provider: 'docmost-native' },
     createdAt: new Date('2026-05-16T00:00:00.000Z'),

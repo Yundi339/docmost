@@ -41,6 +41,19 @@ export const AuditEvent = {
   MCP_OAUTH_AUTHORIZED: 'mcp.oauth_authorized',
   MCP_OAUTH_REVOKED: 'mcp.oauth_revoked',
 
+  // Database / board
+  DATABASE_CREATED: 'database.created',
+  DATABASE_VIEW_CREATED: 'database.view_created',
+  DATABASE_TITLE_UPDATED: 'database.title_updated',
+  DATABASE_FIELD_CREATED: 'database.field_created',
+  DATABASE_FIELD_UPDATED: 'database.field_updated',
+  DATABASE_RECORD_CREATED: 'database.record_created',
+  DATABASE_RECORD_UPDATED: 'database.record_updated',
+  DATABASE_RECORD_REORDERED: 'database.record_reordered',
+  DATABASE_RECORD_ATTACHED: 'database.record_attached',
+  DATABASE_RECORD_MOVED: 'database.record_moved',
+  DATABASE_RECORD_TRASHED: 'database.record_trashed',
+
   // Space
   SPACE_CREATED: 'space.created',
   SPACE_UPDATED: 'space.updated',

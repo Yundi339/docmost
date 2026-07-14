@@ -1,3 +1,8 @@
+import type {
+  IPageCapabilities,
+  IPageExtension,
+} from "@/features/page/types/page.types";
+
 export type SpaceTreeNode = {
   id: string;
   slugId: string;
@@ -8,5 +13,7 @@ export type SpaceTreeNode = {
   parentPageId: string | null;
   hasChildren: boolean;
   canEdit?: boolean;
+  extensions?: IPageExtension[];
+  capabilities?: IPageCapabilities;
   children: SpaceTreeNode[];
 };

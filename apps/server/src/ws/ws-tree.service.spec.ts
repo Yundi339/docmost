@@ -27,6 +27,7 @@ function createService(currentAudience: string[]) {
   const wsService = {
     emitToUsers: jest.fn().mockResolvedValue(undefined),
     emitTreeEvent: jest.fn().mockResolvedValue(undefined),
+    emitPageEvent: jest.fn().mockResolvedValue(undefined),
     getAuthorizedTreeUserIds: jest.fn().mockResolvedValue(currentAudience),
   };
   const pageRepo = {
@@ -43,7 +44,10 @@ describe('WsTreeService.notifyPageRelocated', () => {
   it('sends delete, move, and add events to the correct users after a permission change', async () => {
     const oldPage = page({ parentPageId: 'old-parent' });
     const currentPage = page({ parentPageId: 'new-parent', position: 'b0' });
-    const { service, wsService } = createService(['retained-user', 'added-user']);
+    const { service, wsService } = createService([
+      'retained-user',
+      'added-user',
+    ]);
 
     await service.notifyPageRelocated(oldPage, currentPage, false, {
       spaceId: oldPage.spaceId,
@@ -80,12 +84,47 @@ describe('WsTreeService.notifyPageRelocated', () => {
     expect(wsService.emitToUsers).toHaveBeenNthCalledWith(
       1,
       ['source-user'],
-      expect.objectContaining({ operation: 'deleteTreeNode', spaceId: 'source-space' }),
+      expect.objectContaining({
+        operation: 'deleteTreeNode',
+        spaceId: 'source-space',
+      }),
     );
     expect(wsService.emitToUsers).toHaveBeenNthCalledWith(
       2,
       ['target-user'],
-      expect.objectContaining({ operation: 'addTreeNode', spaceId: 'target-space' }),
+      expect.objectContaining({
+        operation: 'addTreeNode',
+        spaceId: 'target-space',
+      }),
+    );
+  });
+});
+
+describe('WsTreeService.notifyPageQueriesInvalidated', () => {
+  it('scopes query invalidations to the page permission boundary', async () => {
+    const { service, wsService } = createService([]);
+
+    await service.notifyPageQueriesInvalidated(page(), [
+      { entity: 'database', id: 'database-id' },
+      { entity: 'database-records', id: 'database-id' },
+    ]);
+
+    expect(wsService.emitPageEvent).toHaveBeenNthCalledWith(
+      1,
+      'space-id',
+      'page-id',
+      {
+        operation: 'invalidate',
+        spaceId: 'space-id',
+        entity: ['database'],
+        id: 'database-id',
+      },
+    );
+    expect(wsService.emitPageEvent).toHaveBeenNthCalledWith(
+      2,
+      'space-id',
+      'page-id',
+      expect.objectContaining({ entity: ['database-records'] }),
     );
   });
 });

@@ -36,6 +36,19 @@ const auditFieldLabels: Record<string, string> = {
   pageId: "Page ID",
   commentId: "Comment ID",
   parentPageId: "Parent page ID",
+  databaseId: "Database ID",
+  databasePageId: "Database page ID",
+  recordId: "Record ID",
+  viewId: "View ID",
+  viewType: "View type",
+  fieldName: "Field name",
+  fieldType: "Field type",
+  changedFields: "Changed fields",
+  seededRecordCount: "Seeded record count",
+  sourceDatabaseId: "Source database ID",
+  beforeRecordId: "Previous record ID",
+  afterRecordId: "Next record ID",
+  template: "Template",
   operation: "Operation",
   role: "Role",
   status: "Status",
@@ -99,6 +112,7 @@ const auditValueLabels: Record<string, string> = {
   idle_timeout: "Idle timeout",
   session_replaced: "Session replaced",
   service_shutdown: "Service shutdown",
+  page_title: "Page title",
 };
 
 export function getAuditFieldLabel(key: string): string {

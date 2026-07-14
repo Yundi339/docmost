@@ -28,8 +28,10 @@ import { HelmetProvider } from "react-helmet-async";
 import { AppUpdateNotifier } from "@/features/version/components/app-update-notifier";
 import { captureEmailChangeTokenFromLocation } from "@/features/user/email-change-token";
 import "./i18n";
+import { registerDatabasePageExtension } from "@/features/database/register-page-extension";
 
 captureEmailChangeTokenFromLocation();
+registerDatabasePageExtension();
 
 export const queryClient = new QueryClient({
   defaultOptions: {

@@ -98,7 +98,6 @@ import {
   useDatabaseBoardTargetsQuery,
   useDatabaseInfoQuery,
   useDatabaseRecordsQuery,
-  useDetachDatabaseRecordMutation,
   useReorderDatabaseRecordMutation,
   useTrashDatabaseRecordPageMutation,
   useUpdateDatabaseFieldMutation,
@@ -116,13 +115,10 @@ import {
 import { buildPageUrl } from "@/features/page/page.utils";
 import { PageActionMenu } from "@/features/page/components/header/page-header-menu";
 import {
-  useMovePageUnderMutation,
   usePageQuery,
   useRestorePageMutation,
 } from "@/features/page/queries/page-query";
 import { useSearchSuggestionsQuery } from "@/features/search/queries/search-query";
-import { DestinationPickerModal } from "@/components/ui/destination-picker/destination-picker-modal";
-import type { DestinationSelection } from "@/components/ui/destination-picker/destination-picker.types";
 import { PageShareModal } from "@/ee/page-permission";
 import { notifications } from "@mantine/notifications";
 import { EmbeddedRecordPageEditor } from "./embedded-record-page-editor";
@@ -231,11 +227,6 @@ type UpdateFieldInput = {
   name?: string;
   type?: DatabaseFieldDefinition["type"];
   options?: string[];
-};
-
-type CardDestinationAction = {
-  type: "move-page" | "move-out";
-  record: DatabaseRecord;
 };
 
 function valueAsString(value: unknown): string {
@@ -837,6 +828,10 @@ function isSameDatabaseDrag(
   return Boolean(sourceDatabaseId && sourceDatabaseId === databaseId);
 }
 
+function isRecordEditable(canEdit: boolean, record: DatabaseRecord) {
+  return canEdit && record.canEdit !== false;
+}
+
 function shouldSkipRecordDrag(target: EventTarget | null) {
   return Boolean(
     target instanceof HTMLElement &&
@@ -867,8 +862,6 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const [userSearch, setUserSearch] = useState("");
   const [titleDraft, setTitleDraft] = useState(fallbackTitle);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [destinationAction, setDestinationAction] =
-    useState<CardDestinationAction | null>(null);
   const [boardMoveRecord, setBoardMoveRecord] = useState<DatabaseRecord | null>(
     null,
   );
@@ -890,10 +883,8 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const attachPageMutation = useAttachDatabasePageMutation(databaseId);
   const attachPageToDatabaseMutation =
     useAttachDatabasePageToDatabaseMutation();
-  const detachRecordMutation = useDetachDatabaseRecordMutation(databaseId);
   const trashRecordPageMutation =
     useTrashDatabaseRecordPageMutation(databaseId);
-  const movePageUnderMutation = useMovePageUnderMutation();
   const restorePageMutation = useRestorePageMutation();
   const userSuggestionsQuery = useSearchSuggestionsQuery({
     query: userSearch,
@@ -1122,52 +1113,6 @@ export default function DatabaseBlockView(props: NodeViewProps) {
     });
   };
 
-  const selectDestination = async (selection: DestinationSelection) => {
-    if (!destinationAction) return;
-
-    const { record, type } = destinationAction;
-    if (!record.pageId) return;
-
-    const target =
-      selection.type === "page"
-        ? { targetPageId: selection.pageId }
-        : { targetSpaceId: selection.spaceId };
-
-    try {
-      if (type === "move-page") {
-        await movePageUnderMutation.mutateAsync({
-          pageId: record.pageId,
-          ...target,
-        });
-        notifications.show({ message: t("Page moved successfully") });
-      } else {
-        await detachRecordMutation.mutateAsync({
-          recordId: record.id,
-          ...target,
-        });
-        if (openedRecord?.id === record.id) setOpenedRecord(null);
-        showUndoNotification(t("Moved out of board"), async () => {
-          try {
-            await reattachRecordToCurrentBoard(record);
-            notifications.show({ message: t("Restored to board") });
-          } catch {
-            notifications.show({
-              message: t("Failed to restore to board"),
-              color: "red",
-            });
-          }
-        });
-      }
-
-      setDestinationAction(null);
-    } catch {
-      notifications.show({
-        message: t("Failed to move page"),
-        color: "red",
-      });
-    }
-  };
-
   const moveRecordToBoard = async (target: DatabaseBoardTarget) => {
     const record = boardMoveRecord;
     if (!databaseId || !record?.pageId) return;
@@ -1216,7 +1161,6 @@ export default function DatabaseBlockView(props: NodeViewProps) {
           showUndoNotification(t("Moved to trash"), async () => {
             try {
               await restorePageMutation.mutateAsync(record.pageId!);
-              await reattachRecordToCurrentBoard(record);
               notifications.show({ message: t("Restored to board") });
             } catch {
               notifications.show({
@@ -1228,29 +1172,6 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         },
       },
     );
-  };
-
-  const removeRecordFromBoard = async (record: DatabaseRecord) => {
-    try {
-      await detachRecordMutation.mutateAsync({ recordId: record.id });
-      if (openedRecord?.id === record.id) setOpenedRecord(null);
-      showUndoNotification(t("Removed from board"), async () => {
-        try {
-          await reattachRecordToCurrentBoard(record);
-          notifications.show({ message: t("Restored to board") });
-        } catch {
-          notifications.show({
-            message: t("Failed to restore to board"),
-            color: "red",
-          });
-        }
-      });
-    } catch {
-      notifications.show({
-        message: t("Failed to remove from board"),
-        color: "red",
-      });
-    }
   };
 
   const commitTitle = () => {
@@ -1690,14 +1611,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             onAttachPage={(payload, fields) =>
               attachPageFromPayload(payload, fields)
             }
-            onMovePage={(record) =>
-              setDestinationAction({ type: "move-page", record })
-            }
-            onMoveOut={(record) =>
-              setDestinationAction({ type: "move-out", record })
-            }
             onMoveToBoard={setBoardMoveRecord}
-            onRemoveFromBoard={removeRecordFromBoard}
             onMoveToTrash={moveRecordPageToTrash}
             onMoveRecord={(recordId, status, beforeRecordId) => {
               const record = records.find((item) => item.id === recordId);
@@ -1804,22 +1718,6 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         )}
       </div>
 
-      <DestinationPickerModal
-        opened={Boolean(destinationAction)}
-        onClose={() => setDestinationAction(null)}
-        title={
-          destinationAction?.type === "move-out"
-            ? t("Move out of board to...")
-            : t("Move page to...")
-        }
-        actionLabel={t("Move")}
-        onSelect={selectDestination}
-        loading={
-          movePageUnderMutation.isPending || detachRecordMutation.isPending
-        }
-        excludePageId={destinationAction?.record.pageId ?? undefined}
-      />
-
       <BoardPickerModal
         opened={Boolean(boardMoveRecord)}
         onClose={() => setBoardMoveRecord(null)}
@@ -1836,7 +1734,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         fields={fields}
         statuses={statuses}
         users={userOptions}
-        canEdit={editor.isEditable}
+        canEdit={editor.isEditable && openedRecord?.canEdit !== false}
         onClose={() => setOpenedRecord(null)}
         onOpenFullPage={() => openFullPage(openedRecord)}
         onAssigneeSearch={setUserSearch}
@@ -1951,10 +1849,7 @@ function KanbanView({
   onRenameColumn,
   onDeleteColumn,
   onAttachPage,
-  onMovePage,
-  onMoveOut,
   onMoveToBoard,
-  onRemoveFromBoard,
   onMoveToTrash,
   onMoveRecord,
   onUpdateTitle,
@@ -1975,10 +1870,7 @@ function KanbanView({
     payload: DragPagePayload | null,
     fields?: Record<string, unknown>,
   ) => void;
-  onMovePage: (record: DatabaseRecord) => void;
-  onMoveOut: (record: DatabaseRecord) => void;
   onMoveToBoard: (record: DatabaseRecord) => void;
-  onRemoveFromBoard: (record: DatabaseRecord) => void;
   onMoveToTrash: (record: DatabaseRecord) => void;
   onMoveRecord: (
     recordId: string,
@@ -2251,10 +2143,7 @@ function KanbanView({
                     status={status}
                     databaseId={databaseId}
                     onOpen={onOpen}
-                    onMovePage={onMovePage}
-                    onMoveOut={onMoveOut}
                     onMoveToBoard={onMoveToBoard}
-                    onRemoveFromBoard={onRemoveFromBoard}
                     onMoveToTrash={onMoveToTrash}
                     onUpdateTitle={(title) => onUpdateTitle(record.id, title)}
                     onMoveRecord={onMoveRecord}
@@ -2268,7 +2157,7 @@ function KanbanView({
                       setDropTargetRecordId(null);
                       setDropColumnStatus(null);
                     }}
-                    canEdit={canEdit}
+                    canEdit={canEdit && record.canEdit !== false}
                   />
                 ))}
                 {canEdit && draftStatus === status && (
@@ -2369,10 +2258,7 @@ function TaskCard({
   status,
   databaseId,
   onOpen,
-  onMovePage,
-  onMoveOut,
   onMoveToBoard,
-  onRemoveFromBoard,
   onMoveToTrash,
   onUpdateTitle,
   onMoveRecord,
@@ -2387,10 +2273,7 @@ function TaskCard({
   status: string;
   databaseId?: string;
   onOpen: (record: DatabaseRecord) => void;
-  onMovePage: (record: DatabaseRecord) => void;
-  onMoveOut: (record: DatabaseRecord) => void;
   onMoveToBoard: (record: DatabaseRecord) => void;
-  onRemoveFromBoard: (record: DatabaseRecord) => void;
   onMoveToTrash: (record: DatabaseRecord) => void;
   onUpdateTitle: (title: string) => void;
   onMoveRecord: (
@@ -2514,32 +2397,11 @@ function TaskCard({
             {t("Open page")}
           </Menu.Item>
           <Menu.Item
-            leftSection={<IconFileText size={15} />}
-            disabled={!record.pageId || !canEdit}
-            onClick={() => onMovePage(record)}
-          >
-            {t("Move page to...")}
-          </Menu.Item>
-          <Menu.Item
-            leftSection={<IconArrowBarToRight size={15} />}
-            disabled={!record.pageId || !canEdit}
-            onClick={() => onMoveOut(record)}
-          >
-            {t("Move out of board to...")}
-          </Menu.Item>
-          <Menu.Item
             leftSection={<IconLayoutBoard size={15} />}
             disabled={!record.pageId || !canEdit}
             onClick={() => onMoveToBoard(record)}
           >
             {t("Move to another board...")}
-          </Menu.Item>
-          <Menu.Item
-            leftSection={<IconArrowBarToLeft size={15} />}
-            disabled={!record.pageId || !canEdit}
-            onClick={() => onRemoveFromBoard(record)}
-          >
-            {t("Remove from board")}
           </Menu.Item>
           <Menu.Divider />
           <Menu.Item
@@ -2719,7 +2581,7 @@ function TableView({
             fields={visibleFields}
             statuses={statuses}
             users={users}
-            canEdit={canEdit}
+            canEdit={isRecordEditable(canEdit, record)}
             databaseId={databaseId}
             isDropTarget={dropTargetRecordId === record.id}
             onOpen={onOpen}
@@ -3921,13 +3783,16 @@ function GalleryView({
             role="button"
             tabIndex={0}
             className={classes.galleryCard}
-            draggable={canEdit}
+            draggable={isRecordEditable(canEdit, record)}
             onClick={() => onOpen(record)}
             onKeyDown={(event) => {
               if (event.key === "Enter") onOpen(record);
             }}
             onDragStart={(event) => {
-              if (!canEdit || shouldSkipRecordDrag(event.target)) {
+              if (
+                !isRecordEditable(canEdit, record) ||
+                shouldSkipRecordDrag(event.target)
+              ) {
                 event.preventDefault();
                 return;
               }
@@ -4073,11 +3938,14 @@ function CalendarView({
                 key={record.id}
                 type="button"
                 className={classes.calendarRecord}
-                draggable={canEdit}
+                draggable={isRecordEditable(canEdit, record)}
                 data-tone={optionTone(record.status, index)}
                 onClick={() => onOpen(record)}
                 onDragStart={(event) => {
-                  if (!canEdit || shouldSkipRecordDrag(event.target)) {
+                  if (
+                    !isRecordEditable(canEdit, record) ||
+                    shouldSkipRecordDrag(event.target)
+                  ) {
                     event.preventDefault();
                     return;
                   }
@@ -4147,9 +4015,12 @@ function ListView({
         <div
           key={record.id}
           className={classes.listItem}
-          draggable={canEdit}
+          draggable={isRecordEditable(canEdit, record)}
           onDragStart={(event) => {
-            if (!canEdit || shouldSkipRecordDrag(event.target)) {
+            if (
+              !isRecordEditable(canEdit, record) ||
+              shouldSkipRecordDrag(event.target)
+            ) {
               event.preventDefault();
               return;
             }
@@ -4346,13 +4217,16 @@ function TimelineView({
               role="button"
               tabIndex={0}
               className={classes.timelineRow}
-              draggable={canEdit}
+              draggable={isRecordEditable(canEdit, record)}
               onClick={() => onOpen(record)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") onOpen(record);
               }}
               onDragStart={(event) => {
-                if (!canEdit || shouldSkipRecordDrag(event.target)) {
+                if (
+                  !isRecordEditable(canEdit, record) ||
+                  shouldSkipRecordDrag(event.target)
+                ) {
                   event.preventDefault();
                   return;
                 }
@@ -4573,13 +4447,16 @@ function SecondaryView({
           role="button"
           tabIndex={0}
           className={classes.feedItem}
-          draggable={canEdit}
+          draggable={isRecordEditable(canEdit, record)}
           onClick={() => onOpen(record)}
           onKeyDown={(event) => {
             if (event.key === "Enter") onOpen(record);
           }}
           onDragStart={(event) => {
-            if (!canEdit || shouldSkipRecordDrag(event.target)) {
+            if (
+              !isRecordEditable(canEdit, record) ||
+              shouldSkipRecordDrag(event.target)
+            ) {
               event.preventDefault();
               return;
             }

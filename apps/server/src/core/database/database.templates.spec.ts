@@ -1,7 +1,9 @@
 import {
   buildDefaultFieldsForTemplate,
   getDefaultViewsForTemplate,
+  getPrimaryDatabaseFieldName,
   normalizeApitableRecord,
+  normalizeDatabaseFields,
 } from './database.templates';
 
 describe('database templates', () => {
@@ -24,6 +26,7 @@ describe('database templates', () => {
     expect(fields.find((field) => field.name === 'Assignee')).toMatchObject({
       type: 'user',
     });
+    expect(fields[0]).toMatchObject({ name: 'Title', isPrimary: true });
   });
 
   it('creates table and kanban views for the generic database template', () => {
@@ -71,5 +74,32 @@ describe('database templates', () => {
         Description: 'Prepare rollout notes',
       },
     });
+  });
+
+  it('keeps title semantics when the primary field is renamed', () => {
+    const fields = normalizeDatabaseFields([
+      { name: 'Task', type: 'text', isPrimary: true },
+      { name: 'Status', type: 'singleSelect' },
+    ]);
+
+    expect(getPrimaryDatabaseFieldName(fields)).toBe('Task');
+    expect(
+      normalizeApitableRecord(
+        { id: 'record_1', fields: { Task: 'Renamed title' } },
+        'Task',
+      ).title,
+    ).toBe('Renamed title');
+  });
+
+  it('infers a primary field for legacy schemas', () => {
+    expect(
+      normalizeDatabaseFields([
+        { name: 'Status', type: 'singleSelect' },
+        { name: 'Title', type: 'text' },
+      ]),
+    ).toEqual([
+      { name: 'Status', type: 'singleSelect' },
+      { name: 'Title', type: 'text', isPrimary: true },
+    ]);
   });
 });

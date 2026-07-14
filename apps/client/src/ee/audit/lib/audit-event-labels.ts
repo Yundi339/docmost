@@ -50,6 +50,18 @@ export const auditEventLabels: Record<string, string> = {
   "mcp.oauth_authorized": "Authorized MCP OAuth connection",
   "mcp.oauth_revoked": "Revoked MCP OAuth connection",
 
+  "database.created": "Created database",
+  "database.view_created": "Created database view",
+  "database.title_updated": "Updated database title",
+  "database.field_created": "Created database field",
+  "database.field_updated": "Updated database field",
+  "database.record_created": "Created database work item",
+  "database.record_updated": "Updated database work item",
+  "database.record_reordered": "Reordered database work item",
+  "database.record_attached": "Added page to database",
+  "database.record_moved": "Moved work item between databases",
+  "database.record_trashed": "Trashed database work item",
+
   "space.created": "Created space",
   "space.updated": "Updated space",
   "space.deleted": "Deleted space",
@@ -187,6 +199,52 @@ export const eventFilterOptions: EventGroup[] = [
       {
         value: "mcp.oauth_revoked",
         label: "Revoked MCP OAuth connection",
+      },
+    ],
+  },
+  {
+    group: "Database",
+    items: [
+      { value: "database.created", label: "Created database" },
+      {
+        value: "database.view_created",
+        label: "Created database view",
+      },
+      {
+        value: "database.title_updated",
+        label: "Updated database title",
+      },
+      {
+        value: "database.field_created",
+        label: "Created database field",
+      },
+      {
+        value: "database.field_updated",
+        label: "Updated database field",
+      },
+      {
+        value: "database.record_created",
+        label: "Created database work item",
+      },
+      {
+        value: "database.record_updated",
+        label: "Updated database work item",
+      },
+      {
+        value: "database.record_reordered",
+        label: "Reordered database work item",
+      },
+      {
+        value: "database.record_attached",
+        label: "Added page to database",
+      },
+      {
+        value: "database.record_moved",
+        label: "Moved work item between databases",
+      },
+      {
+        value: "database.record_trashed",
+        label: "Trashed database work item",
       },
     ],
   },

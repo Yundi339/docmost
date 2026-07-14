@@ -97,6 +97,15 @@ export class WsService {
     pageId: string,
     data: any,
   ): Promise<void> {
+    await this.emitPageEvent(spaceId, pageId, data);
+  }
+
+  async emitPageEvent(
+    spaceId: string,
+    pageId: string,
+    data: any,
+  ): Promise<void> {
+    if (!this.server) return;
     const room = getSpaceRoomName(spaceId);
 
     const hasRestrictions = await this.spaceHasRestrictions(spaceId);

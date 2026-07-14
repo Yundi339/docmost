@@ -6,7 +6,10 @@ import {
 } from '../../casl/interfaces/space-ability.type';
 
 describe('PageAccessService', () => {
-  let pagePermissionRepo: { canUserEditPage: jest.Mock };
+  let pagePermissionRepo: {
+    canUserEditPage: jest.Mock;
+    filterAccessiblePageIdsWithPermissions: jest.Mock;
+  };
   let spaceAbility: { createForUser: jest.Mock };
   let service: PageAccessService;
 
@@ -16,6 +19,7 @@ describe('PageAccessService', () => {
   beforeEach(() => {
     pagePermissionRepo = {
       canUserEditPage: jest.fn(),
+      filterAccessiblePageIdsWithPermissions: jest.fn(),
     };
     spaceAbility = {
       createForUser: jest.fn(),
@@ -28,12 +32,14 @@ describe('PageAccessService', () => {
   });
 
   function spacePerms({ canRead = true, canEdit = false } = {}) {
-    const can = jest.fn((action: SpaceCaslAction, subject: SpaceCaslSubject) => {
-      if (subject !== SpaceCaslSubject.Page) return false;
-      if (action === SpaceCaslAction.Read) return canRead;
-      if (action === SpaceCaslAction.Edit) return canEdit;
-      return false;
-    });
+    const can = jest.fn(
+      (action: SpaceCaslAction, subject: SpaceCaslSubject) => {
+        if (subject !== SpaceCaslSubject.Page) return false;
+        if (action === SpaceCaslAction.Read) return canRead;
+        if (action === SpaceCaslAction.Edit) return canEdit;
+        return false;
+      },
+    );
 
     return {
       can,
@@ -166,5 +172,58 @@ describe('PageAccessService', () => {
       canEdit: true,
       hasRestriction: false,
     });
+  });
+
+  it('filters inaccessible pages and preserves page-level edit permissions in one batch', async () => {
+    const secondPage = { id: 'page-2', spaceId: 'space-id' } as any;
+    const hiddenPage = { id: 'page-3', spaceId: 'space-id' } as any;
+    spaceAbility.createForUser.mockResolvedValue(
+      spacePerms({ canRead: true, canEdit: true }),
+    );
+    pagePermissionRepo.filterAccessiblePageIdsWithPermissions.mockResolvedValue(
+      [
+        { id: page.id, canEdit: true },
+        { id: secondPage.id, canEdit: false },
+      ],
+    );
+
+    await expect(
+      service.filterViewablePagesWithPermissions(
+        [page, secondPage, hiddenPage],
+        user,
+      ),
+    ).resolves.toEqual([
+      { page, canEdit: true },
+      { page: secondPage, canEdit: false },
+    ]);
+    expect(
+      pagePermissionRepo.filterAccessiblePageIdsWithPermissions,
+    ).toHaveBeenCalledWith([page.id, secondPage.id, hiddenPage.id], user.id);
+  });
+
+  it('keeps space edit permission as the upper bound for batched pages', async () => {
+    spaceAbility.createForUser.mockResolvedValue(
+      spacePerms({ canRead: true, canEdit: false }),
+    );
+    pagePermissionRepo.filterAccessiblePageIdsWithPermissions.mockResolvedValue(
+      [{ id: page.id, canEdit: true }],
+    );
+
+    await expect(
+      service.filterViewablePagesWithPermissions([page], user),
+    ).resolves.toEqual([{ page, canEdit: false }]);
+  });
+
+  it('does not query page permissions when the user cannot read the space', async () => {
+    spaceAbility.createForUser.mockResolvedValue(
+      spacePerms({ canRead: false, canEdit: false }),
+    );
+
+    await expect(
+      service.filterViewablePagesWithPermissions([page], user),
+    ).resolves.toEqual([]);
+    expect(
+      pagePermissionRepo.filterAccessiblePageIdsWithPermissions,
+    ).not.toHaveBeenCalled();
   });
 });

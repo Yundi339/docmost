@@ -302,6 +302,7 @@ export class McpPageToolProvider implements McpToolProvider {
           await this.pageService.movePageToParent(
             page,
             input.targetPageId ?? null,
+            user.id,
           );
           return textResult(`Page ${input.pageId} moved successfully`, false);
         },

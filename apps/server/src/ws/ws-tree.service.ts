@@ -10,14 +10,13 @@ type PageTreeAudience = {
 
 type TreePage = Pick<
   Page,
-  | 'id'
-  | 'slugId'
-  | 'title'
-  | 'icon'
-  | 'position'
-  | 'spaceId'
-  | 'parentPageId'
+  'id' | 'slugId' | 'title' | 'icon' | 'position' | 'spaceId' | 'parentPageId'
 > & { creatorId?: string };
+
+type PageQueryInvalidation = {
+  entity: string;
+  id?: string;
+};
 
 @Injectable()
 export class WsTreeService {
@@ -26,10 +25,7 @@ export class WsTreeService {
     private readonly pageRepo: PageRepo,
   ) {}
 
-  async notifyPageCreated(
-    page: TreePage,
-    hasChildren = false,
-  ): Promise<void> {
+  async notifyPageCreated(page: TreePage, hasChildren = false): Promise<void> {
     await this.wsService.emitTreeEvent(
       await this.getPageCreatedEvent(page, hasChildren),
     );
@@ -175,6 +171,20 @@ export class WsTreeService {
         lastUpdatedById: page.lastUpdatedById,
       },
     });
+  }
+
+  async notifyPageQueriesInvalidated(
+    page: Pick<Page, 'id' | 'spaceId'>,
+    invalidations: PageQueryInvalidation[],
+  ): Promise<void> {
+    for (const invalidation of invalidations) {
+      await this.wsService.emitPageEvent(page.spaceId, page.id, {
+        operation: 'invalidate',
+        spaceId: page.spaceId,
+        entity: [invalidation.entity],
+        id: invalidation.id,
+      });
+    }
   }
 
   async notifyPageRestricted(page: Page, excludeUserId: string): Promise<void> {

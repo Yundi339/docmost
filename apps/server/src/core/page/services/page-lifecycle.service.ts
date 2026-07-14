@@ -19,6 +19,12 @@ import {
 } from '../../../integrations/audit/audit.service';
 import { AuditEvent, AuditResource } from '../../../common/events/audit-events';
 import { getPageTitle } from '../../../common/helpers';
+import { PageOperationPolicyService } from '../policies/page-operation-policy.service';
+import { InjectKysely } from 'nestjs-kysely';
+import { KyselyDB } from '@docmost/db/types/kysely.types';
+import { executeTx } from '@docmost/db/utils';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventName } from '../../../common/events/event.contants';
 
 @Injectable()
 export class PageLifecycleService {
@@ -27,6 +33,9 @@ export class PageLifecycleService {
     private readonly pageService: PageService,
     private readonly pageAccessService: PageAccessService,
     private readonly spaceAbility: SpaceAbilityFactory,
+    private readonly pageOperationPolicy: PageOperationPolicyService,
+    @InjectKysely() private readonly db: KyselyDB,
+    private readonly eventEmitter: EventEmitter2,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -76,7 +85,42 @@ export class PageLifecycleService {
       throw new ForbiddenException();
     }
     await this.pageAccessService.validateCanEdit(page, user);
-    await this.pageRepo.restorePage(page.id, workspace.id);
+    let restoredPageIds: string[] = [];
+    await executeTx(this.db, async (trx) => {
+      const currentPage = await this.pageRepo.findById(page.id, {
+        withLock: true,
+        trx,
+      });
+      if (
+        !currentPage ||
+        !currentPage.deletedAt ||
+        currentPage.workspaceId !== workspace.id ||
+        currentPage.spaceId !== page.spaceId ||
+        currentPage.parentPageId !== page.parentPageId
+      ) {
+        throw new NotFoundException('Page not found');
+      }
+
+      await this.pageOperationPolicy.assertOperation({
+        operation: 'restore',
+        page: currentPage,
+        actorId: user.id,
+        trx,
+      });
+      restoredPageIds = await this.pageRepo.restorePage(
+        currentPage.id,
+        workspace.id,
+        trx,
+        false,
+      );
+    });
+
+    if (restoredPageIds.length > 0) {
+      this.eventEmitter.emit(EventName.PAGE_RESTORED, {
+        pageIds: restoredPageIds,
+        workspaceId: workspace.id,
+      });
+    }
 
     this.auditService.log({
       event: AuditEvent.PAGE_RESTORED,
