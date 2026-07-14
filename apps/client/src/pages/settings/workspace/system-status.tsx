@@ -29,6 +29,7 @@ import {
   ISystemStatusRedis,
 } from "@/features/system-status/types/system-status.types";
 import UpdateLog from "@/features/system-status/components/update-log";
+import SystemDiagnostics from "@/features/system-status/components/system-diagnostics";
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -54,13 +55,23 @@ function StatusBadge({ status }: { status: "up" | "down" }) {
     );
   }
   return (
-    <Badge color="red" leftSection={<IconAlertCircle size={12} />} variant="light">
+    <Badge
+      color="red"
+      leftSection={<IconAlertCircle size={12} />}
+      variant="light"
+    >
       {t("Unavailable")}
     </Badge>
   );
 }
 
-function MetricRow({ label, value }: { label: string; value: React.ReactNode }) {
+function MetricRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
     <Group justify="space-between" gap="xs" wrap="nowrap">
       <Text size="sm" c="dimmed">
@@ -87,8 +98,14 @@ function AppCard({ data }: { data: ISystemStatus }) {
       <Stack gap={6}>
         <MetricRow label={t("Version")} value={data.app.version} />
         <MetricRow label={t("Node")} value={data.app.nodeVersion} />
-        <MetricRow label={t("Edition")} value={data.app.cloud ? t("Cloud") : t("Self-hosted")} />
-        <MetricRow label={t("Uptime")} value={formatUptime(data.app.uptimeSeconds)} />
+        <MetricRow
+          label={t("Edition")}
+          value={data.app.cloud ? t("Cloud") : t("Self-hosted")}
+        />
+        <MetricRow
+          label={t("Uptime")}
+          value={formatUptime(data.app.uptimeSeconds)}
+        />
       </Stack>
     </Card>
   );
@@ -163,7 +180,10 @@ function RedisCard({ data }: { data: ISystemStatusRedis }) {
             value={data.latencyMs != null ? `${data.latencyMs} ms` : null}
           />
           <MetricRow label={t("Memory used")} value={data.usedMemoryPretty} />
-          <MetricRow label={t("Connected clients")} value={data.connectedClients} />
+          <MetricRow
+            label={t("Connected clients")}
+            value={data.connectedClients}
+          />
         </Stack>
       )}
     </Card>
@@ -201,16 +221,17 @@ export default function SystemStatus() {
 
       {isLoading && <Loader />}
 
-      {isError && (
-        <Text c="red">{t("Failed to load system status.")}</Text>
-      )}
+      {isError && <Text c="red">{t("Failed to load system status.")}</Text>}
 
       {data && (
-        <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
-          <AppCard data={data} />
-          <DatabaseCard data={data.database} />
-          <RedisCard data={data.redis} />
-        </SimpleGrid>
+        <>
+          <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+            <AppCard data={data} />
+            <DatabaseCard data={data.database} />
+            <RedisCard data={data.redis} />
+          </SimpleGrid>
+          <SystemDiagnostics data={data.diagnostics} />
+        </>
       )}
 
       <UpdateLog />

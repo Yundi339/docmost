@@ -63,6 +63,10 @@ export const auditEventLabels: Record<string, string> = {
   "database.record_moved": "Moved work item between databases",
   "database.record_trashed": "Trashed database work item",
 
+  "system.diagnostic_detected": "Detected system diagnostic",
+  "system.diagnostic_resolved": "Resolved system diagnostic",
+  "system.diagnostic_occurred": "Recorded system diagnostic incident",
+
   "space.created": "Created space",
   "space.updated": "Updated space",
   "space.deleted": "Deleted space",
@@ -253,6 +257,23 @@ export const eventFilterOptions: EventGroup[] = [
   {
     group: "Comment",
     items: [{ value: "comment.deleted", label: "Deleted comment" }],
+  },
+  {
+    group: "System",
+    items: [
+      {
+        value: "system.diagnostic_detected",
+        label: "Detected system diagnostic",
+      },
+      {
+        value: "system.diagnostic_resolved",
+        label: "Resolved system diagnostic",
+      },
+      {
+        value: "system.diagnostic_occurred",
+        label: "Recorded system diagnostic incident",
+      },
+    ],
   },
   {
     group: "Page",

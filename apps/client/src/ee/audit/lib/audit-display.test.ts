@@ -31,6 +31,9 @@ describe("audit display formatting", () => {
     expect(getEventLabel("space.graph_exported")).toBe(
       "Exported space relationship graph",
     );
+    expect(getEventLabel("system.diagnostic_detected")).toBe(
+      "Detected system diagnostic",
+    );
   });
 
   it("labels known and future fields without exposing camelCase", () => {
@@ -44,6 +47,7 @@ describe("audit display formatting", () => {
     expect(getAuditFieldLabel("affectedRecordCount")).toBe(
       "Affected record count",
     );
+    expect(getAuditFieldLabel("diagnosticCode")).toBe("Diagnostic code");
     expect(getAuditFieldLabel("futureAuditField")).toBe("Future Audit Field");
   });
 

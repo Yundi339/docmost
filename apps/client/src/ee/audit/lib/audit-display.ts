@@ -70,6 +70,11 @@ const auditFieldLabels: Record<string, string> = {
   closeReason: "Close reason",
   passwordProtected: "Password protection",
   sampled: "Sampled",
+  diagnosticCode: "Diagnostic code",
+  severity: "Severity",
+  count: "Count",
+  value: "Value",
+  threshold: "Threshold",
   id: "ID",
 };
 
@@ -123,6 +128,16 @@ const auditValueLabels: Record<string, string> = {
   page_title: "Page title",
   rename: "Rename",
   delete: "Delete",
+  external_apitable_active: "External APITable data sources",
+  large_board: "Large boards",
+  orphan_database_source: "Orphaned database sources",
+  invalid_database_relation: "Invalid board-page relationships",
+  realtime_invalidation_failure: "Realtime update delivery",
+  system_diagnostics: "System diagnostics",
+  database_invalidation: "Board realtime update",
+  info: "Information",
+  warning: "Warning",
+  error: "Error",
 };
 
 export function getAuditFieldLabel(key: string): string {

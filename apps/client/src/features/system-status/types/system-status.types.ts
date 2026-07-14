@@ -26,9 +26,46 @@ export interface ISystemStatusRedis {
   error?: string;
 }
 
+export type SystemDiagnosticCode =
+  | "external_apitable_active"
+  | "large_board"
+  | "orphan_database_source"
+  | "invalid_database_relation"
+  | "realtime_invalidation_failure";
+
+export interface ISystemDiagnosticCheck {
+  code: SystemDiagnosticCode;
+  status: "ok" | "attention";
+  severity: "info" | "warning" | "error";
+  count: number;
+  value?: number;
+  threshold?: number;
+  windowHours?: number;
+}
+
+export interface ISystemDiagnosticHistoryEntry {
+  id: string;
+  code: SystemDiagnosticCode;
+  state: "detected" | "resolved" | "occurred";
+  severity: "info" | "warning" | "error";
+  count: number;
+  value?: number;
+  threshold?: number;
+  createdAt: string;
+}
+
+export interface ISystemDiagnostics {
+  status: "up" | "down";
+  checkedAt: string;
+  checks: ISystemDiagnosticCheck[];
+  history: ISystemDiagnosticHistoryEntry[];
+  error?: string;
+}
+
 export interface ISystemStatus {
   app: ISystemStatusApp;
   database: ISystemStatusDatabase;
   redis: ISystemStatusRedis;
+  diagnostics: ISystemDiagnostics;
   timestamp: string;
 }
