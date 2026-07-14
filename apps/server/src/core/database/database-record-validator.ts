@@ -89,6 +89,14 @@ function validateFieldValue(
       }
       return;
     case 'multiSelect':
+      assertStringArray(value, field.name);
+      if (
+        field.options?.length &&
+        value.some((item) => !field.options?.includes(item))
+      ) {
+        reject('Value is not a configured option', field.name);
+      }
+      return;
     case 'user':
     case 'person':
       assertStringArray(value, field.name);
@@ -112,7 +120,10 @@ function assertString(
   if (value.length > maxLength) reject('Field value is too long', fieldName);
 }
 
-function assertStringArray(value: unknown, fieldName: string) {
+function assertStringArray(
+  value: unknown,
+  fieldName: string,
+): asserts value is string[] {
   if (
     !Array.isArray(value) ||
     value.length > MAX_ARRAY_LENGTH ||

@@ -4,7 +4,7 @@ const schema = [
   { name: 'Task', type: 'text', isPrimary: true },
   { name: 'Status', type: 'singleSelect', options: ['Todo', 'Done'] },
   { name: 'Estimate', type: 'number' },
-  { name: 'Tags', type: 'multiSelect' },
+  { name: 'Tags', type: 'multiSelect', options: ['security', 'performance'] },
 ];
 
 describe('validateDatabaseRecordFields', () => {
@@ -25,6 +25,9 @@ describe('validateDatabaseRecordFields', () => {
     ).toThrow('Unknown database field');
     expect(() =>
       validateDatabaseRecordFields(schema, { Status: 'Invalid' }),
+    ).toThrow('Value is not a configured option');
+    expect(() =>
+      validateDatabaseRecordFields(schema, { Tags: ['unknown'] }),
     ).toThrow('Value is not a configured option');
   });
 

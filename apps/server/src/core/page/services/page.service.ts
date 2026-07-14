@@ -58,6 +58,8 @@ import { WatcherService } from '../../watcher/watcher.service';
 import { sql } from 'kysely';
 import { WsTreeService } from '../../../ws/ws-tree.service';
 import { PageOperationPolicyService } from '../policies/page-operation-policy.service';
+import { PageContentLifecycleService } from '../../../collaboration/services/page-content-lifecycle.service';
+import { PageAccessService } from '../page-access/page-access.service';
 
 @Injectable()
 export class PageService {
@@ -77,6 +79,8 @@ export class PageService {
     private readonly watcherService: WatcherService,
     private readonly wsTreeService: WsTreeService,
     private readonly pageOperationPolicy: PageOperationPolicyService,
+    private readonly pageContentLifecycle: PageContentLifecycleService,
+    private readonly pageAccessService: PageAccessService,
   ) {}
 
   async findById(
@@ -97,33 +101,6 @@ export class PageService {
     workspaceId: string,
     createPageDto: CreatePageDto,
   ): Promise<Page> {
-    let parentPageId = undefined;
-    let parentPage: Page | undefined;
-
-    // check if parent page exists
-    if (createPageDto.parentPageId) {
-      parentPage = await this.pageRepo.findById(createPageDto.parentPageId);
-
-      if (
-        !parentPage ||
-        parentPage.deletedAt ||
-        parentPage.spaceId !== createPageDto.spaceId ||
-        parentPage.workspaceId !== workspaceId
-      ) {
-        throw new NotFoundException('Parent page not found');
-      }
-
-      parentPageId = parentPage.id;
-    }
-
-    if (parentPage) {
-      await this.pageOperationPolicy.assertOperation({
-        operation: 'createChild',
-        parentPage,
-        actorId: userId,
-      });
-    }
-
     let content = undefined;
     let textContent = undefined;
     let ydoc = undefined;
@@ -139,22 +116,58 @@ export class PageService {
       ydoc = createYdocFromJson(prosemirrorJson);
     }
 
-    const page = await this.pageRepo.insertPage({
-      slugId: generateSlugId(),
-      title: createPageDto.title,
-      position: await this.nextPagePosition(
-        createPageDto.spaceId,
-        parentPageId,
-      ),
-      icon: createPageDto.icon,
-      parentPageId: parentPageId,
-      spaceId: createPageDto.spaceId,
-      creatorId: userId,
-      workspaceId: workspaceId,
-      lastUpdatedById: userId,
-      content,
-      textContent,
-      ydoc,
+    const page = await executeTx(this.db, async (trx) => {
+      let parentPageId: string | undefined;
+      if (createPageDto.parentPageId) {
+        const parentPage = await this.pageRepo.findById(
+          createPageDto.parentPageId,
+          { trx, withLock: true },
+        );
+        if (
+          !parentPage ||
+          parentPage.deletedAt ||
+          parentPage.spaceId !== createPageDto.spaceId ||
+          parentPage.workspaceId !== workspaceId
+        ) {
+          throw new NotFoundException('Parent page not found');
+        }
+
+        await this.pageOperationPolicy.assertOperation({
+          operation: 'createChild',
+          parentPage,
+          actorId: userId,
+          trx,
+        });
+        parentPageId = parentPage.id;
+      }
+
+      return this.pageRepo.insertPage(
+        {
+          slugId: generateSlugId(),
+          title: createPageDto.title,
+          position: await this.nextPagePositionIn(
+            trx,
+            createPageDto.spaceId,
+            parentPageId,
+          ),
+          icon: createPageDto.icon,
+          parentPageId,
+          spaceId: createPageDto.spaceId,
+          creatorId: userId,
+          workspaceId,
+          lastUpdatedById: userId,
+          content,
+          textContent,
+          ydoc,
+        },
+        trx,
+        false,
+      );
+    });
+
+    this.eventEmitter.emit(EventName.PAGE_CREATED, {
+      pageIds: [page.id],
+      workspaceId: page.workspaceId,
     });
 
     this.generalQueue
@@ -173,6 +186,15 @@ export class PageService {
 
   async nextPagePosition(spaceId: string, parentPageId?: string | null) {
     return this.nextPagePositionIn(this.db, spaceId, parentPageId);
+  }
+
+  async lockPageTreeSpacesForUpdate(
+    spaceIds: string[],
+    trx: KyselyTransaction,
+  ): Promise<void> {
+    for (const spaceId of [...new Set(spaceIds)].sort()) {
+      await this.lockSpaceTreeForMove(spaceId, trx);
+    }
   }
 
   private async nextPagePositionIn(
@@ -225,9 +247,29 @@ export class PageService {
     updatePageDto: UpdatePageDto,
     user: User,
   ): Promise<Page> {
-    const contributors = new Set<string>(page.contributorIds);
+    const updatesContent = Boolean(
+      updatePageDto.content !== undefined &&
+      updatePageDto.operation &&
+      updatePageDto.format,
+    );
+    if (updatesContent) {
+      await this.updatePageContent(
+        page.id,
+        updatePageDto.content,
+        updatePageDto.operation,
+        updatePageDto.format,
+        user,
+      );
+    }
+
+    const latestPage = updatesContent
+      ? await this.pageRepo.findById(page.id)
+      : page;
+    if (!latestPage || latestPage.deletedAt) {
+      throw new NotFoundException('Page not found');
+    }
+    const contributors = new Set<string>(latestPage.contributorIds);
     contributors.add(user.id);
-    const contributorIds = Array.from(contributors);
 
     await this.pageRepo.updatePage(
       {
@@ -235,7 +277,7 @@ export class PageService {
         icon: updatePageDto.icon,
         lastUpdatedById: user.id,
         updatedAt: new Date(),
-        contributorIds: contributorIds,
+        contributorIds: Array.from(contributors),
       },
       page.id,
     );
@@ -250,20 +292,6 @@ export class PageService {
       .catch((err) =>
         this.logger.warn(`Failed to queue add-page-watchers: ${err.message}`),
       );
-
-    if (
-      updatePageDto.content &&
-      updatePageDto.operation &&
-      updatePageDto.format
-    ) {
-      await this.updatePageContent(
-        page.id,
-        updatePageDto.content,
-        updatePageDto.operation,
-        updatePageDto.format,
-        user,
-      );
-    }
 
     const updatedPage = await this.pageRepo.findById(page.id, {
       includeSpace: true,
@@ -288,6 +316,33 @@ export class PageService {
     user: User,
   ): Promise<void> {
     const prosemirrorJson = await this.parseProsemirrorContent(content, format);
+
+    await executeTx(this.db, async (trx) => {
+      const currentPage = await this.pageRepo.findById(pageId, {
+        includeContent: operation === 'replace',
+        trx,
+        withLock: true,
+      });
+      if (
+        !currentPage ||
+        currentPage.deletedAt ||
+        currentPage.workspaceId !== user.workspaceId
+      ) {
+        throw new NotFoundException('Page not found');
+      }
+      await this.pageAccessService.validateCanEdit(currentPage, user);
+
+      if (operation === 'replace') {
+        await this.pageContentLifecycle.validateBeforeSave({
+          page: currentPage,
+          previousContent: currentPage.content,
+          nextContent: prosemirrorJson,
+          actor: user,
+          trx,
+          origin: 'direct',
+        });
+      }
+    });
 
     const documentName = `page.${pageId}`;
     await this.collaborationGateway.handleYjsEvent(

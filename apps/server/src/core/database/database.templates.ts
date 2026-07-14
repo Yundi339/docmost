@@ -263,6 +263,7 @@ function asStringArray(value: unknown): string[] {
 export function normalizeApitableRecord(
   record: ApitableRecordInput,
   primaryFieldName?: string,
+  statusFieldName = 'Status',
 ): DocmostDatabaseRecord {
   const fields = record.fields ?? {};
   const title = asString(
@@ -273,7 +274,7 @@ export function normalizeApitableRecord(
   return {
     id: record.recordId || record.id || '',
     title,
-    status: asString(fields.Status, 'Todo'),
+    status: asString(fields[statusFieldName], 'Todo'),
     assigneeIds: asStringArray(fields.Assignee),
     dueDate: asString(fields['Due date']) || null,
     priority: asString(fields.Priority) || null,

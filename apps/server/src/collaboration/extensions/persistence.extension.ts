@@ -32,6 +32,10 @@ import {
   HISTORY_FAST_THRESHOLD,
   HISTORY_INTERVAL,
 } from '../constants';
+import {
+  PageContentLifecycleEffect,
+  PageContentLifecycleService,
+} from '../services/page-content-lifecycle.service';
 
 @Injectable()
 export class PersistenceExtension implements Extension {
@@ -45,6 +49,7 @@ export class PersistenceExtension implements Extension {
     @InjectQueue(QueueName.HISTORY_QUEUE) private historyQueue: Queue,
     @InjectQueue(QueueName.NOTIFICATION_QUEUE) private notificationQueue: Queue,
     private readonly collabHistory: CollabHistoryService,
+    private readonly pageContentLifecycle: PageContentLifecycleService,
   ) {}
 
   async onLoadDocument(data: onLoadDocumentPayload) {
@@ -110,6 +115,7 @@ export class PersistenceExtension implements Extension {
     }
 
     let page: Page = null;
+    let postCommitEffects: PageContentLifecycleEffect[] = [];
     const editingUserIds = this.consumeContributors(documentName);
 
     try {
@@ -134,11 +140,27 @@ export class PersistenceExtension implements Extension {
         try {
           const existingContributors = page.contributorIds || [];
           contributorIds = Array.from(
-            new Set([...existingContributors, ...editingUserIds, page.creatorId]),
+            new Set([
+              ...existingContributors,
+              ...editingUserIds,
+              page.creatorId,
+            ]),
           );
         } catch (err) {
           //this.logger.debug('Contributors error:' + err?.['message']);
         }
+
+        postCommitEffects = await this.pageContentLifecycle.beforeSave({
+          page,
+          previousContent: page.content,
+          nextContent: tiptapJson,
+          actor: context.user,
+          trx,
+          origin:
+            context?.contentUpdateOrigin === 'direct'
+              ? 'direct'
+              : 'collaboration',
+        });
 
         await this.pageRepo.updatePage(
           {
@@ -156,9 +178,26 @@ export class PersistenceExtension implements Extension {
       });
     } catch (err) {
       this.logger.error(`Failed to update page ${pageId}`, err);
+      page = null;
+      postCommitEffects = [];
+
+      if (context?.propagateStoreErrors === true) {
+        throw err;
+      }
     }
 
     if (page) {
+      for (const effect of postCommitEffects) {
+        try {
+          await effect();
+        } catch (err) {
+          this.logger.error(
+            `Failed to run page content lifecycle effect for ${pageId}`,
+            err,
+          );
+        }
+      }
+
       document.broadcastStateless(
         JSON.stringify({
           type: 'page.updated',
@@ -180,7 +219,9 @@ export class PersistenceExtension implements Extension {
 
       const userMentions = extractUserMentions(mentions);
       const oldMentions = page.content ? extractMentions(page.content) : [];
-      const oldMentionedUserIds = extractUserMentions(oldMentions).map((m) => m.entityId);
+      const oldMentionedUserIds = extractUserMentions(oldMentions).map(
+        (m) => m.entityId,
+      );
 
       if (userMentions.length > 0) {
         await this.notificationQueue.add(QueueJob.PAGE_MENTION_NOTIFICATION, {

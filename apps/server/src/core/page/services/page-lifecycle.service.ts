@@ -87,6 +87,12 @@ export class PageLifecycleService {
     await this.pageAccessService.validateCanEdit(page, user);
     let restoredPageIds: string[] = [];
     await executeTx(this.db, async (trx) => {
+      if (page.parentPageId) {
+        await this.pageRepo.findById(page.parentPageId, {
+          withLock: true,
+          trx,
+        });
+      }
       const currentPage = await this.pageRepo.findById(page.id, {
         withLock: true,
         trx,

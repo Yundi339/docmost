@@ -169,4 +169,29 @@ describe('PageLifecycleService', () => {
     expect(pageRepo.restorePage).not.toHaveBeenCalled();
     expect(eventEmitter.emit).not.toHaveBeenCalled();
   });
+
+  it('locks a deleted page parent before the page being restored', async () => {
+    const parent = { ...page, id: 'parent-page', deletedAt: null };
+    const deleted = {
+      ...page,
+      parentPageId: parent.id,
+      deletedAt: new Date(),
+    };
+    const restored = { ...deleted, deletedAt: null };
+    pageRepo.findById
+      .mockResolvedValueOnce(deleted)
+      .mockResolvedValueOnce(parent)
+      .mockResolvedValueOnce(deleted)
+      .mockResolvedValueOnce(restored);
+
+    await service.restorePage(deleted.id, user, workspace);
+
+    const parentLockOrder = pageRepo.findById.mock.invocationCallOrder[1];
+    const pageLockOrder = pageRepo.findById.mock.invocationCallOrder[2];
+    expect(parentLockOrder).toBeLessThan(pageLockOrder);
+    expect(pageRepo.findById).toHaveBeenNthCalledWith(2, parent.id, {
+      withLock: true,
+      trx: { id: 'trx' },
+    });
+  });
 });

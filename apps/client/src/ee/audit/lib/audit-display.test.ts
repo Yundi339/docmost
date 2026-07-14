@@ -15,6 +15,7 @@ const t = (key: string) =>
       "API key": "API 密钥",
       "Search pages": "搜索页面",
       "Additional verification failed": "二次验证失败",
+      Rename: "重命名",
     }) as Record<string, string>
   )[key] ?? key;
 
@@ -37,6 +38,12 @@ describe("audit display formatting", () => {
       "OAuth authorization ID",
     );
     expect(getAuditFieldLabel("ownerRecovery")).toBe("Owner recovery");
+    expect(getAuditFieldLabel("optionOperation")).toBe(
+      "Field option operation",
+    );
+    expect(getAuditFieldLabel("affectedRecordCount")).toBe(
+      "Affected record count",
+    );
     expect(getAuditFieldLabel("futureAuditField")).toBe("Future Audit Field");
   });
 
@@ -53,6 +60,9 @@ describe("audit display formatting", () => {
     expect(formatAuditPrimitive(true, "success", t as any)).toBe("是");
     expect(formatAuditPrimitive("step_up_failed", "reason", t as any)).toBe(
       "二次验证失败",
+    );
+    expect(formatAuditPrimitive("rename", "optionOperation", t as any)).toBe(
+      "重命名",
     );
   });
 

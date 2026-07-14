@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
@@ -43,11 +44,13 @@ import {
   CreateDatabaseFieldDto,
   CreateDatabaseRecordDto,
   CreateDatabaseViewDto,
+  DeleteDatabaseDto,
   DetachDatabaseRecordDto,
   ListDatabaseTargetsDto,
   ReorderDatabaseRecordDto,
   TrashDatabaseRecordPageDto,
   UpdateDatabaseFieldDto,
+  UpdateDatabaseFieldOptionDto,
   UpdateDatabaseRecordDto,
   UpdateDatabaseTitleDto,
 } from './dto/database.dto';
@@ -71,8 +74,27 @@ interface DatabaseMetadata {
   apitable?: Record<string, unknown>;
 }
 
+type DatabaseDeletionResult = {
+  database: DatabaseBlock;
+  alreadyDeleted: boolean;
+  workItemPageIds: string[];
+  trashedPageIds: string[];
+  archivedDatabaseIds: string[];
+  archivedRecordCount: number;
+};
+
+type DatabaseDeletionContext = {
+  expectedHostPageId: string;
+  expectedBlockId: string;
+  allowMissing?: boolean;
+  includeDeleted?: boolean;
+  rejectImplicitDeletion?: boolean;
+};
+
 @Injectable()
 export class DatabaseService {
+  private readonly logger = new Logger(DatabaseService.name);
+
   constructor(
     private readonly databaseRepo: DatabaseRepo,
     private readonly pageRepo: PageRepo,
@@ -87,6 +109,10 @@ export class DatabaseService {
   ) {}
 
   async createDatabase(dto: CreateDatabaseDto, user: User) {
+    const blockId = dto.blockId.trim();
+    if (!blockId || blockId !== dto.blockId) {
+      throw new BadRequestException('Invalid database block ID');
+    }
     const page = await this.pageRepo.findById(dto.pageId);
     if (!page || page.deletedAt || page.workspaceId !== user.workspaceId) {
       throw new NotFoundException('Page not found');
@@ -96,7 +122,7 @@ export class DatabaseService {
 
     const existing = await this.databaseRepo.findByPageAndBlock(
       page.id,
-      dto.blockId,
+      blockId,
     );
     if (existing) return this.toResponse(existing);
 
@@ -115,75 +141,111 @@ export class DatabaseService {
       provider: apitable.provider,
     };
 
-    const { database, createdPages } = await executeTx(this.db, async (trx) => {
-      const database = await this.databaseRepo.insertDatabaseBlock(
-        {
-          blockId: dto.blockId,
-          pageId: page.id,
-          spaceId: page.spaceId,
-          workspaceId: page.workspaceId,
-          createdById: user.id,
-          updatedById: user.id,
-          title,
-          template,
-          activeViewId: activeView.id,
-          apitableDatasheetId: apitable.datasheetId,
-          apitableViewId: activeView.id,
-          fields: fields as unknown as Json,
-          views: views as unknown as Json,
-          metadata: metadata as unknown as Json,
-        },
-        trx,
-      );
-
-      if (this.isNativeDatabase(database)) {
-        const seedRecords = this.seedRecordFields(template);
-        const createdPages: Page[] = [];
-        for (const recordFields of seedRecords) {
-          createdPages.push(
-            await this.createRecordPage(
-              database,
-              recordFields,
-              user,
-              trx,
-              false,
-            ),
-          );
+    const { database, createdPages, created } = await executeTx(
+      this.db,
+      async (trx) => {
+        const lockedPage = await this.pageRepo.findById(page.id, {
+          trx,
+          withLock: true,
+        });
+        if (
+          !lockedPage ||
+          lockedPage.deletedAt ||
+          lockedPage.workspaceId !== user.workspaceId
+        ) {
+          throw new NotFoundException('Page not found');
         }
-        let previousSortOrder: string | null = null;
+        await this.pageAccessService.validateCanEdit(lockedPage, user);
 
-        await this.databaseRepo.insertDatabaseRecords(
-          seedRecords.map((recordFields, index) => {
-            previousSortOrder = generateJitteredKeyBetween(
-              previousSortOrder,
-              null,
-            );
+        const concurrentDatabase = await this.databaseRepo.findByPageAndBlock(
+          lockedPage.id,
+          blockId,
+          trx,
+        );
+        if (concurrentDatabase) {
+          return {
+            database: concurrentDatabase,
+            createdPages: [] as Page[],
+            created: false,
+          };
+        }
 
-            return {
-              databaseId: database.id,
-              pageId: createdPages[index].id,
-              spaceId: database.spaceId,
-              workspaceId: database.workspaceId,
-              createdById: user.id,
-              updatedById: user.id,
-              fields: recordFields as unknown as Json,
-              sortOrder: previousSortOrder,
-            };
-          }),
+        const database = await this.databaseRepo.insertDatabaseBlock(
+          {
+            blockId,
+            pageId: lockedPage.id,
+            spaceId: lockedPage.spaceId,
+            workspaceId: lockedPage.workspaceId,
+            createdById: user.id,
+            updatedById: user.id,
+            title,
+            template,
+            activeViewId: activeView.id,
+            apitableDatasheetId: apitable.datasheetId,
+            apitableViewId: activeView.id,
+            fields: fields as unknown as Json,
+            views: views as unknown as Json,
+            metadata: metadata as unknown as Json,
+          },
           trx,
         );
 
-        return { database, createdPages };
-      }
+        if (this.isNativeDatabase(database)) {
+          const seedRecords = this.seedRecordFields(template);
+          const createdPages: Page[] = [];
+          for (const recordFields of seedRecords) {
+            createdPages.push(
+              await this.createRecordPage(
+                database,
+                recordFields,
+                user,
+                trx,
+                false,
+                lockedPage,
+              ),
+            );
+          }
+          let previousSortOrder: string | null = null;
 
-      return { database, createdPages: [] };
-    });
+          await this.databaseRepo.insertDatabaseRecords(
+            seedRecords.map((recordFields, index) => {
+              previousSortOrder = generateJitteredKeyBetween(
+                previousSortOrder,
+                null,
+              );
+
+              return {
+                databaseId: database.id,
+                pageId: createdPages[index].id,
+                spaceId: database.spaceId,
+                workspaceId: database.workspaceId,
+                createdById: user.id,
+                updatedById: user.id,
+                fields: recordFields as unknown as Json,
+                sortOrder: previousSortOrder,
+              };
+            }),
+            trx,
+          );
+
+          return { database, createdPages, created: true };
+        }
+
+        return { database, createdPages: [], created: true };
+      },
+    );
+
+    if (!created) return this.toResponse(database);
 
     if (createdPages.length > 0) {
-      this.eventEmitter.emit(EventName.PAGE_CREATED, {
-        pageIds: createdPages.map((createdPage) => createdPage.id),
-        workspaceId: database.workspaceId,
-      });
+      try {
+        this.eventEmitter.emit(EventName.PAGE_CREATED, {
+          pageIds: createdPages.map((createdPage) => createdPage.id),
+          workspaceId: database.workspaceId,
+        });
+      } catch (error) {
+        this.logger.error('Failed to emit seeded database pages', error);
+      }
     }
 
     this.auditService.log({
@@ -261,33 +323,44 @@ export class DatabaseService {
   }
 
   async createView(dto: CreateDatabaseViewDto, user: User) {
-    const database = await this.getAuthorizedDatabase(
+    const databaseSnapshot = await this.getAuthorizedDatabase(
       dto.databaseId,
       user,
       'edit',
     );
-    const views = this.getViews(database.views);
-    const view: DatabaseViewDefinition = {
-      id: uuid7(),
-      name: dto.name.trim(),
-      type: dto.type as DatabaseViewDefinition['type'],
-      groupBy: dto.groupBy,
-    };
+    const viewName = dto.name.trim();
+    if (!viewName) throw new BadRequestException('View name is required');
+    const viewId = uuid7();
 
-    const updated = await this.databaseRepo.updateViews(
-      database.id,
-      [...views, view] as unknown as Json,
-      view.id,
-      user.id,
-    );
+    const { updated, view } = await executeTx(this.db, async (trx) => {
+      const { database } = await this.lockAuthorizedDatabaseForEdit(
+        databaseSnapshot,
+        user,
+        trx,
+      );
+      const view: DatabaseViewDefinition = {
+        id: viewId,
+        name: viewName,
+        type: dto.type as DatabaseViewDefinition['type'],
+        groupBy: this.resolveViewGroupBy(database, dto.type, dto.groupBy),
+      };
+      const updated = await this.databaseRepo.updateViews(
+        database.id,
+        [...this.getViews(database.views), view] as unknown as Json,
+        view.id,
+        user.id,
+        trx,
+      );
+      return { updated, view };
+    });
 
     this.auditService.log({
       event: AuditEvent.DATABASE_VIEW_CREATED,
       resourceType: AuditResource.PAGE,
-      resourceId: database.pageId,
-      spaceId: database.spaceId,
+      resourceId: updated.pageId,
+      spaceId: updated.spaceId,
       metadata: {
-        databaseId: database.id,
+        databaseId: updated.id,
         viewId: view.id,
         viewType: view.type,
       },
@@ -298,28 +371,39 @@ export class DatabaseService {
   }
 
   async updateTitle(dto: UpdateDatabaseTitleDto, user: User) {
-    const database = await this.getAuthorizedDatabase(
+    const databaseSnapshot = await this.getAuthorizedDatabase(
       dto.databaseId,
       user,
       'edit',
     );
     const title = dto.title.trim();
-    const updated = await this.databaseRepo.updateTitle(
-      database.id,
-      title,
-      user.id,
-    );
+    const { previousTitle, updated } = await executeTx(this.db, async (trx) => {
+      const { database } = await this.lockAuthorizedDatabaseForEdit(
+        databaseSnapshot,
+        user,
+        trx,
+      );
+      return {
+        previousTitle: database.title,
+        updated: await this.databaseRepo.updateTitle(
+          database.id,
+          title,
+          user.id,
+          trx,
+        ),
+      };
+    });
 
     this.auditService.log({
       event: AuditEvent.DATABASE_TITLE_UPDATED,
       resourceType: AuditResource.PAGE,
-      resourceId: database.pageId,
-      spaceId: database.spaceId,
+      resourceId: updated.pageId,
+      spaceId: updated.spaceId,
       changes: {
-        before: { title: database.title },
+        before: { title: previousTitle },
         after: { title: updated.title },
       },
-      metadata: { databaseId: database.id },
+      metadata: { databaseId: updated.id },
     });
     await this.notifyDatabaseChanged(updated, { info: true });
 
@@ -327,37 +411,43 @@ export class DatabaseService {
   }
 
   async createField(dto: CreateDatabaseFieldDto, user: User) {
-    const database = await this.getAuthorizedDatabase(
+    const databaseSnapshot = await this.getAuthorizedDatabase(
       dto.databaseId,
       user,
       'edit',
     );
-    const fields = this.getFields(database.fields);
     const requestedName = dto.name?.trim() || this.defaultFieldName(dto.type);
     validateDatabaseFieldName(requestedName);
-    const name = this.makeUniqueFieldName(requestedName, fields);
     const type = this.normalizeFieldType(dto.type);
-    const field: DatabaseFieldDefinition = {
-      name,
-      type,
-      options: dto.options?.length
-        ? dto.options
-        : this.defaultOptionsForField(type),
-    };
+    const requestedOptions = dto.options
+      ? this.normalizeFieldOptions(dto.options)
+      : undefined;
+    this.assertFieldOptionsSupported(type, requestedOptions);
+    const { field, updated } = await executeTx(this.db, async (trx) => {
+      const { database } = await this.lockAuthorizedDatabaseForEdit(
+        databaseSnapshot,
+        user,
+        trx,
+      );
+      this.assertNativeSchemaMutation(database);
+      const fields = this.getFields(database.fields);
+      const field: DatabaseFieldDefinition = {
+        name: this.makeUniqueFieldName(requestedName, fields),
+        type,
+        options: requestedOptions?.length
+          ? requestedOptions
+          : this.defaultOptionsForField(type),
+      };
+      if (!field.options?.length) delete field.options;
 
-    if (!field.options?.length) delete field.options;
-
-    const nextFields = this.insertField(
-      fields,
-      field,
-      dto.position,
-      dto.anchorFieldName,
-    );
-
-    const updated = await executeTx(this.db, async (trx) => {
-      const updated = await this.databaseRepo.updateFields(
+      let updated = await this.databaseRepo.updateFields(
         database.id,
-        nextFields as unknown as Json,
+        this.insertField(
+          fields,
+          field,
+          dto.position,
+          dto.anchorFieldName,
+        ) as unknown as Json,
         user.id,
         trx,
       );
@@ -370,18 +460,36 @@ export class DatabaseService {
           user.id,
           trx,
         );
+        const legacyUpdate = this.transformLegacyMetadataRecordFields(
+          database,
+          (recordFields) =>
+            Object.prototype.hasOwnProperty.call(recordFields, field.name)
+              ? recordFields
+              : {
+                  ...recordFields,
+                  [field.name]: this.defaultValueForField(field),
+                },
+        );
+        if (legacyUpdate.changedRecordCount > 0) {
+          updated = await this.databaseRepo.updateMetadata(
+            database.id,
+            legacyUpdate.metadata as unknown as Json,
+            user.id,
+            trx,
+          );
+        }
       }
 
-      return updated;
+      return { field, updated };
     });
 
     this.auditService.log({
       event: AuditEvent.DATABASE_FIELD_CREATED,
       resourceType: AuditResource.PAGE,
-      resourceId: database.pageId,
-      spaceId: database.spaceId,
+      resourceId: updated.pageId,
+      spaceId: updated.spaceId,
       metadata: {
-        databaseId: database.id,
+        databaseId: updated.id,
         fieldName: field.name,
         fieldType: field.type,
       },
@@ -392,76 +500,155 @@ export class DatabaseService {
   }
 
   async updateField(dto: UpdateDatabaseFieldDto, user: User) {
-    const database = await this.getAuthorizedDatabase(
+    const databaseSnapshot = await this.getAuthorizedDatabase(
       dto.databaseId,
       user,
       'edit',
     );
-    const fields = this.getFields(database.fields);
-    const fieldIndex = fields.findIndex(
-      (field) => field.name === dto.fieldName,
-    );
-    if (fieldIndex === -1) throw new NotFoundException('Field not found');
-
-    const currentField = fields[fieldIndex];
-    const nextType = dto.type
-      ? this.normalizeFieldType(dto.type)
-      : currentField.type;
-    if (
-      currentField.isPrimary &&
-      nextType !== 'text' &&
-      nextType !== 'longText'
-    ) {
-      throw new BadRequestException(
-        'The primary title field must remain a text field',
-      );
-    }
     const requestedName = dto.name?.trim();
+    if (dto.name !== undefined && !requestedName) {
+      throw new BadRequestException('Field name is required');
+    }
     if (requestedName) validateDatabaseFieldName(requestedName);
-    const nextName = requestedName
-      ? this.makeUniqueFieldName(requestedName, fields, currentField.name)
-      : currentField.name;
-    const nextField: DatabaseFieldDefinition = {
-      ...currentField,
-      name: nextName,
-      type: nextType,
-      options:
-        dto.options ??
-        currentField.options ??
-        this.defaultOptionsForField(nextType),
-    };
+    const requestedOptions = dto.options
+      ? this.normalizeFieldOptions(dto.options)
+      : undefined;
+    const { currentField, nextField, updated } = await executeTx(
+      this.db,
+      async (trx) => {
+        const { database } = await this.lockAuthorizedDatabaseForEdit(
+          databaseSnapshot,
+          user,
+          trx,
+        );
+        this.assertNativeSchemaMutation(database);
+        const fields = this.getFields(database.fields);
+        const fieldIndex = fields.findIndex(
+          (field) => field.name === dto.fieldName,
+        );
+        if (fieldIndex === -1) throw new NotFoundException('Field not found');
 
-    if (!nextField.options?.length) delete nextField.options;
+        const currentField = fields[fieldIndex];
+        if (
+          currentField.isPrimary &&
+          requestedName &&
+          requestedName !== currentField.name
+        ) {
+          throw new BadRequestException({
+            code: 'DATABASE_PRIMARY_FIELD_RENAME_UNSUPPORTED',
+            message: 'The primary title field cannot be renamed',
+          });
+        }
+        const nextType = dto.type
+          ? this.normalizeFieldType(dto.type)
+          : currentField.type;
+        if (nextType !== currentField.type) {
+          throw new ConflictException({
+            code: 'DATABASE_FIELD_TYPE_CHANGE_UNSUPPORTED',
+            message: 'Changing a database field type is not supported yet',
+          });
+        }
+        this.assertFieldOptionsSupported(nextType, requestedOptions);
+        const nextName = requestedName
+          ? this.makeUniqueFieldName(requestedName, fields, currentField.name)
+          : currentField.name;
+        const nextField: DatabaseFieldDefinition = {
+          ...currentField,
+          name: nextName,
+          type: nextType,
+          options:
+            requestedOptions ??
+            currentField.options ??
+            this.defaultOptionsForField(nextType),
+        };
+        if (!nextField.options?.length) delete nextField.options;
 
-    const nextFields = fields.map((field, index) =>
-      index === fieldIndex ? nextField : field,
-    );
-    const updated = await executeTx(this.db, async (trx) => {
-      const updated = await this.databaseRepo.updateFields(
-        database.id,
-        nextFields as unknown as Json,
-        user.id,
-        trx,
-      );
+        if (requestedOptions) {
+          const removedOptions = (currentField.options ?? []).filter(
+            (option) => !requestedOptions.includes(option),
+          );
+          if (removedOptions.length > 0) {
+            throw new ConflictException({
+              code: 'DATABASE_FIELD_OPTION_OPERATION_REQUIRED',
+              message:
+                'Rename or delete field options with the dedicated option operation',
+            });
+          }
+        }
 
-      if (this.isNativeDatabase(database) && nextName !== currentField.name) {
-        await this.databaseRepo.renameDatabaseRecordField(
+        const nextFields = fields.map((field, index) =>
+          index === fieldIndex ? nextField : field,
+        );
+        let updated = await this.databaseRepo.updateFields(
           database.id,
-          currentField.name,
-          nextName,
+          nextFields as unknown as Json,
           user.id,
           trx,
         );
-      }
 
-      return updated;
-    });
+        if (this.isNativeDatabase(database) && nextName !== currentField.name) {
+          await this.databaseRepo.renameDatabaseRecordField(
+            database.id,
+            currentField.name,
+            nextName,
+            user.id,
+            trx,
+          );
+
+          const views = this.getViews(database.views);
+          const nextViews = views.map((view) =>
+            view.groupBy === currentField.name
+              ? { ...view, groupBy: nextName }
+              : view,
+          );
+          if (nextViews.some((view, index) => view !== views[index])) {
+            updated = await this.databaseRepo.updateViews(
+              database.id,
+              nextViews as unknown as Json,
+              database.activeViewId,
+              user.id,
+              trx,
+            );
+          }
+
+          const legacyUpdate = this.transformLegacyMetadataRecordFields(
+            database,
+            (recordFields) => {
+              if (
+                !Object.prototype.hasOwnProperty.call(
+                  recordFields,
+                  currentField.name,
+                )
+              ) {
+                return recordFields;
+              }
+              const nextRecordFields = {
+                ...recordFields,
+                [nextName]: recordFields[currentField.name],
+              };
+              delete nextRecordFields[currentField.name];
+              return nextRecordFields;
+            },
+          );
+          if (legacyUpdate.changedRecordCount > 0) {
+            updated = await this.databaseRepo.updateMetadata(
+              database.id,
+              legacyUpdate.metadata as unknown as Json,
+              user.id,
+              trx,
+            );
+          }
+        }
+
+        return { currentField, nextField, updated };
+      },
+    );
 
     this.auditService.log({
       event: AuditEvent.DATABASE_FIELD_UPDATED,
       resourceType: AuditResource.PAGE,
-      resourceId: database.pageId,
-      spaceId: database.spaceId,
+      resourceId: updated.pageId,
+      spaceId: updated.spaceId,
       changes: {
         before: {
           fieldName: currentField.name,
@@ -469,11 +656,204 @@ export class DatabaseService {
         },
         after: { fieldName: nextField.name, fieldType: nextField.type },
       },
-      metadata: { databaseId: database.id },
+      metadata: { databaseId: updated.id },
     });
     await this.notifyDatabaseChanged(updated, { info: true, records: true });
 
     return this.toResponse(updated);
+  }
+
+  async updateFieldOption(dto: UpdateDatabaseFieldOptionDto, user: User) {
+    const databaseSnapshot = await this.getAuthorizedDatabase(
+      dto.databaseId,
+      user,
+      'edit',
+    );
+    const option = dto.option.trim();
+    if (!option) throw new BadRequestException('Field option is required');
+    const snapshotHadOption = Boolean(
+      this.getFields(databaseSnapshot.fields)
+        .find((field) => field.name === dto.fieldName)
+        ?.options?.includes(option),
+    );
+
+    const result = await executeTx(this.db, async (trx) => {
+      const { database } = await this.lockAuthorizedDatabaseForEdit(
+        databaseSnapshot,
+        user,
+        trx,
+      );
+      if (!this.isNativeDatabase(database)) {
+        throw new ConflictException({
+          code: 'DATABASE_EXTERNAL_OPTION_OPERATION_UNSUPPORTED',
+          message:
+            'External database options must be changed in the source provider',
+        });
+      }
+
+      const fields = this.getFields(database.fields);
+      const fieldIndex = fields.findIndex(
+        (field) => field.name === dto.fieldName,
+      );
+      if (fieldIndex === -1) throw new NotFoundException('Field not found');
+
+      const field = fields[fieldIndex];
+      if (!['status', 'singleSelect'].includes(field.type)) {
+        throw new BadRequestException({
+          code: 'DATABASE_FIELD_OPTION_OPERATION_UNSUPPORTED',
+          message: 'This field does not support single-value options',
+        });
+      }
+
+      const options = this.normalizeFieldOptions(field.options ?? []);
+      const requestedNextOption =
+        dto.operation === 'rename'
+          ? (dto.name?.trim() ?? '')
+          : (dto.replacementOption?.trim() ?? '');
+      if (!options.includes(option)) {
+        if (snapshotHadOption) {
+          throw new ConflictException({
+            code: 'DATABASE_FIELD_OPTION_CHANGED_RETRY',
+            message: 'The field options changed concurrently; retry',
+          });
+        }
+        if (requestedNextOption && options.includes(requestedNextOption)) {
+          return {
+            database,
+            field,
+            nextOption: requestedNextOption,
+            affectedRecordCount: 0,
+            changed: false,
+          };
+        }
+        throw new NotFoundException('Field option not found');
+      }
+
+      let nextOption: string;
+      let nextOptions: string[];
+      if (dto.operation === 'rename') {
+        nextOption = requestedNextOption;
+        if (!nextOption) {
+          throw new BadRequestException('New field option name is required');
+        }
+        if (nextOption !== option && options.includes(nextOption)) {
+          throw new ConflictException({
+            code: 'DATABASE_FIELD_OPTION_EXISTS',
+            message: 'A field option with this name already exists',
+          });
+        }
+        nextOptions = options.map((value) =>
+          value === option ? nextOption : value,
+        );
+      } else {
+        nextOption = requestedNextOption;
+        if (
+          !nextOption ||
+          nextOption === option ||
+          !options.includes(nextOption)
+        ) {
+          throw new BadRequestException({
+            code: 'DATABASE_FIELD_OPTION_REPLACEMENT_REQUIRED',
+            message: 'A remaining field option is required as the replacement',
+          });
+        }
+        nextOptions = options.filter((value) => value !== option);
+      }
+
+      if (nextOption === option) {
+        return {
+          database,
+          field,
+          nextOption,
+          affectedRecordCount: 0,
+          changed: false,
+        };
+      }
+
+      const tableRecordCount =
+        await this.databaseRepo.replaceDatabaseRecordFieldValue(
+          database.id,
+          field.name,
+          option,
+          nextOption,
+          user.id,
+          trx,
+        );
+      const legacyUpdate = this.transformLegacyMetadataRecordFields(
+        database,
+        (recordFields) =>
+          recordFields[field.name] === option
+            ? { ...recordFields, [field.name]: nextOption }
+            : recordFields,
+      );
+      const nextFields = fields.map((value, index) =>
+        index === fieldIndex ? { ...field, options: nextOptions } : value,
+      );
+      let updated = await this.databaseRepo.updateFields(
+        database.id,
+        nextFields as unknown as Json,
+        user.id,
+        trx,
+      );
+      if (legacyUpdate.changedRecordCount > 0) {
+        updated = await this.databaseRepo.updateMetadata(
+          database.id,
+          legacyUpdate.metadata as unknown as Json,
+          user.id,
+          trx,
+        );
+      }
+
+      return {
+        database: updated,
+        field,
+        nextOption,
+        affectedRecordCount: tableRecordCount + legacyUpdate.changedRecordCount,
+        changed: true,
+      };
+    });
+
+    if (result.changed) {
+      try {
+        await this.auditService.log({
+          event: AuditEvent.DATABASE_FIELD_UPDATED,
+          resourceType: AuditResource.PAGE,
+          resourceId: result.database.pageId,
+          spaceId: result.database.spaceId,
+          changes: {
+            before: { fieldName: result.field.name, option },
+            after: {
+              fieldName: result.field.name,
+              option:
+                dto.operation === 'rename' ? result.nextOption : undefined,
+            },
+          },
+          metadata: {
+            databaseId: result.database.id,
+            optionOperation: dto.operation,
+            affectedRecordCount: result.affectedRecordCount,
+          },
+        });
+      } catch (error) {
+        this.logger.error(
+          'Failed to audit database field option update',
+          error,
+        );
+      }
+      try {
+        await this.notifyDatabaseChanged(result.database, {
+          info: true,
+          records: true,
+        });
+      } catch (error) {
+        this.logger.error(
+          'Failed to publish database field option update',
+          error,
+        );
+      }
+    }
+
+    return this.toResponse(result.database);
   }
 
   async listRecords(databaseId: string, user: User) {
@@ -534,13 +914,17 @@ export class DatabaseService {
 
     return {
       items: this.getLegacyMetadataRecords(database).map((record) =>
-        normalizeApitableRecord(record),
+        normalizeApitableRecord(
+          record,
+          getPrimaryDatabaseFieldName(database.fields),
+          this.getDatabaseStatusFieldName(database),
+        ),
       ),
     };
   }
 
   async createRecord(dto: CreateDatabaseRecordDto, user: User) {
-    const database = await this.getAuthorizedDatabase(
+    let database = await this.getAuthorizedDatabase(
       dto.databaseId,
       user,
       'edit',
@@ -563,30 +947,60 @@ export class DatabaseService {
       return createdRecord;
     }
 
-    validateDatabaseRecordFields(database.fields, dto.fields);
-    await this.validateRecordUserReferences(database, dto.fields);
+    const result = await executeTx(this.db, async (trx) => {
+      const hostPage = await this.pageRepo.findById(database.pageId, {
+        trx,
+        withLock: true,
+      });
+      if (
+        !hostPage ||
+        hostPage.deletedAt ||
+        hostPage.id !== database.pageId ||
+        hostPage.workspaceId !== database.workspaceId ||
+        hostPage.spaceId !== database.spaceId
+      ) {
+        throw new NotFoundException('Page not found');
+      }
+      await this.pageAccessService.validateCanEdit(hostPage, user);
 
-    const fields = this.buildNewRecordFields(database, dto.fields);
-    const { recordPage, record } = await executeTx(this.db, async (trx) => {
+      const currentDatabase = await this.databaseRepo.findById(
+        database.id,
+        trx,
+        true,
+      );
+      if (!currentDatabase) throw new NotFoundException('Database not found');
+      if (
+        currentDatabase.pageId !== hostPage.id ||
+        currentDatabase.workspaceId !== hostPage.workspaceId ||
+        currentDatabase.spaceId !== hostPage.spaceId
+      ) {
+        throw new NotFoundException('Database not found');
+      }
+
+      validateDatabaseRecordFields(currentDatabase.fields, dto.fields);
+      await this.validateRecordUserReferences(currentDatabase, dto.fields, trx);
+      const fields = this.buildNewRecordFields(currentDatabase, dto.fields);
+
       const recordPage = await this.createRecordPage(
-        database,
+        currentDatabase,
         fields,
         user,
         trx,
         false,
+        hostPage,
       );
       const lastSortOrder =
         await this.databaseRepo.getLastDatabaseRecordSortOrder(
-          database.id,
+          currentDatabase.id,
           trx,
         );
 
       const record = await this.databaseRepo.insertDatabaseRecord(
         {
-          databaseId: database.id,
+          databaseId: currentDatabase.id,
           pageId: recordPage.id,
-          spaceId: database.spaceId,
-          workspaceId: database.workspaceId,
+          spaceId: currentDatabase.spaceId,
+          workspaceId: currentDatabase.workspaceId,
           createdById: user.id,
           updatedById: user.id,
           fields: fields as unknown as Json,
@@ -595,13 +1009,19 @@ export class DatabaseService {
         trx,
       );
 
-      return { recordPage, record };
+      return { database: currentDatabase, recordPage, record };
     });
+    database = result.database;
+    const { recordPage, record } = result;
 
-    this.eventEmitter.emit(EventName.PAGE_CREATED, {
-      pageIds: [recordPage.id],
-      workspaceId: database.workspaceId,
-    });
+    try {
+      this.eventEmitter.emit(EventName.PAGE_CREATED, {
+        pageIds: [recordPage.id],
+        workspaceId: database.workspaceId,
+      });
+    } catch (error) {
+      this.logger.error('Failed to emit database record page creation', error);
+    }
 
     this.auditService.log({
       event: AuditEvent.DATABASE_RECORD_CREATED,
@@ -616,18 +1036,23 @@ export class DatabaseService {
     });
     await this.notifyDatabaseChanged(database, { records: true });
 
-    return this.normalizeNativeRecordWithPage(database, record, user);
+    return this.normalizeNativeRecordForList(
+      database,
+      record,
+      recordPage,
+      true,
+    );
   }
 
   async updateRecord(dto: UpdateDatabaseRecordDto, user: User) {
-    const database = await this.getAuthorizedDatabase(
+    const databaseSnapshot = await this.getAuthorizedDatabase(
       dto.databaseId,
       user,
       'edit',
     );
-    const datasheetId = database.apitableDatasheetId;
+    const datasheetId = databaseSnapshot.apitableDatasheetId;
 
-    if (datasheetId && !this.isNativeDatabase(database)) {
+    if (datasheetId && !this.isNativeDatabase(databaseSnapshot)) {
       const updatedRecord = await this.apitableClient.updateRecord(
         datasheetId,
         dto.recordId,
@@ -636,33 +1061,46 @@ export class DatabaseService {
       this.auditService.log({
         event: AuditEvent.DATABASE_RECORD_UPDATED,
         resourceType: AuditResource.PAGE,
-        resourceId: database.pageId,
-        spaceId: database.spaceId,
+        resourceId: databaseSnapshot.pageId,
+        spaceId: databaseSnapshot.spaceId,
         metadata: {
-          databaseId: database.id,
+          databaseId: databaseSnapshot.id,
           recordId: dto.recordId,
           changedFields: Object.keys(dto.fields),
           provider: 'apitable',
         },
       });
-      await this.notifyDatabaseChanged(database, { records: true });
+      await this.notifyDatabaseChanged(databaseSnapshot, { records: true });
       return updatedRecord;
     }
 
-    validateDatabaseRecordFields(database.fields, dto.fields);
-    await this.validateRecordUserReferences(database, dto.fields);
-
-    const record = await this.databaseRepo.findDatabaseRecord(
-      database.id,
+    const recordSnapshot = await this.databaseRepo.findDatabaseRecord(
+      databaseSnapshot.id,
       dto.recordId,
     );
 
-    if (!record) {
-      const updatedRecord = await this.updateLegacyMetadataRecord(
-        database,
-        dto.recordId,
-        dto.fields,
-        user.id,
+    if (!recordSnapshot) {
+      const { database, updatedRecord } = await executeTx(
+        this.db,
+        async (trx) => {
+          const { database } = await this.lockAuthorizedDatabaseForEdit(
+            databaseSnapshot,
+            user,
+            trx,
+          );
+          validateDatabaseRecordFields(database.fields, dto.fields);
+          await this.validateRecordUserReferences(database, dto.fields, trx);
+          return {
+            database,
+            updatedRecord: await this.updateLegacyMetadataRecord(
+              database,
+              dto.recordId,
+              dto.fields,
+              user.id,
+              trx,
+            ),
+          };
+        },
       );
       this.auditService.log({
         event: AuditEvent.DATABASE_RECORD_UPDATED,
@@ -680,17 +1118,87 @@ export class DatabaseService {
       return updatedRecord;
     }
 
-    const recordPage = await this.getActiveRecordPage(database, record);
-    if (!recordPage) throw new NotFoundException('Record page not found');
-    await this.pageAccessService.validateCanEdit(recordPage, user);
+    if (!recordSnapshot.pageId) {
+      throw new ConflictException({
+        code: 'DATABASE_PAGE_MEMBERSHIP_INVALID',
+        message: 'The work item relationship must be repaired',
+      });
+    }
 
-    const nextFields = {
-      ...((record.fields as Record<string, unknown>) ?? {}),
-      ...dto.fields,
-    };
-    const { updatedRecord, pageTitleChanged } = await executeTx(
-      this.db,
-      async (trx) => {
+    const { database, recordPage, updatedRecord, pageTitleChanged } =
+      await executeTx(this.db, async (trx) => {
+        const hostPage = await this.pageRepo.findById(databaseSnapshot.pageId, {
+          trx,
+          withLock: true,
+        });
+        if (
+          !hostPage ||
+          hostPage.deletedAt ||
+          hostPage.id !== databaseSnapshot.pageId ||
+          hostPage.workspaceId !== user.workspaceId ||
+          hostPage.workspaceId !== databaseSnapshot.workspaceId ||
+          hostPage.spaceId !== databaseSnapshot.spaceId
+        ) {
+          throw new NotFoundException('Page not found');
+        }
+        await this.pageAccessService.validateCanEdit(hostPage, user);
+
+        const recordPage = await this.pageRepo.findById(
+          recordSnapshot.pageId!,
+          {
+            trx,
+            withLock: true,
+          },
+        );
+        if (!recordPage || recordPage.deletedAt) {
+          throw new NotFoundException('Record page not found');
+        }
+        if (
+          recordPage.workspaceId !== databaseSnapshot.workspaceId ||
+          recordPage.spaceId !== databaseSnapshot.spaceId ||
+          recordPage.id === databaseSnapshot.pageId ||
+          recordPage.parentPageId !== databaseSnapshot.pageId
+        ) {
+          throw new ConflictException({
+            code: 'DATABASE_PAGE_MEMBERSHIP_INVALID',
+            message: 'The work item relationship must be repaired',
+          });
+        }
+        await this.pageAccessService.validateCanEdit(recordPage, user);
+
+        const database = await this.databaseRepo.findById(
+          databaseSnapshot.id,
+          trx,
+          true,
+        );
+        if (
+          !database ||
+          database.pageId !== hostPage.id ||
+          database.workspaceId !== hostPage.workspaceId ||
+          database.spaceId !== hostPage.spaceId
+        ) {
+          throw new NotFoundException('Database not found');
+        }
+        const currentRecord = await this.databaseRepo.findDatabaseRecord(
+          database.id,
+          dto.recordId,
+          trx,
+          true,
+        );
+        if (!currentRecord) throw new NotFoundException('Record not found');
+        if (currentRecord.pageId !== recordPage.id) {
+          throw new ConflictException({
+            code: 'DATABASE_RECORD_CHANGED_RETRY',
+            message: 'The work item changed while it was being updated; retry',
+          });
+        }
+
+        validateDatabaseRecordFields(database.fields, dto.fields);
+        await this.validateRecordUserReferences(database, dto.fields, trx);
+        const nextFields = {
+          ...((currentRecord.fields as Record<string, unknown>) ?? {}),
+          ...dto.fields,
+        };
         const updatedRecord =
           await this.databaseRepo.updateDatabaseRecordFields(
             database.id,
@@ -701,6 +1209,8 @@ export class DatabaseService {
           );
 
         return {
+          database,
+          recordPage,
           updatedRecord,
           pageTitleChanged: await this.syncRecordPage(
             database,
@@ -710,17 +1220,25 @@ export class DatabaseService {
             trx,
           ),
         };
-      },
-    );
+      });
 
+    let responseRecordPage = recordPage;
     if (pageTitleChanged && updatedRecord.pageId) {
-      const updatedPage = await this.pageRepo.findById(updatedRecord.pageId);
-      if (updatedPage) {
-        this.eventEmitter.emit(EventName.PAGE_UPDATED, {
-          pageIds: [updatedPage.id],
-          workspaceId: updatedPage.workspaceId,
-        });
-        await this.wsTreeService.notifyPageUpdated(updatedPage);
+      try {
+        const updatedPage = await this.pageRepo.findById(updatedRecord.pageId);
+        if (updatedPage) {
+          responseRecordPage = updatedPage;
+          this.eventEmitter.emit(EventName.PAGE_UPDATED, {
+            pageIds: [updatedPage.id],
+            workspaceId: updatedPage.workspaceId,
+          });
+          await this.wsTreeService.notifyPageUpdated(updatedPage);
+        }
+      } catch (error) {
+        this.logger.error(
+          'Failed to publish database record page update',
+          error,
+        );
       }
     }
 
@@ -738,47 +1256,149 @@ export class DatabaseService {
     });
     await this.notifyDatabaseChanged(database, { records: true });
 
-    return this.normalizeNativeRecordWithPage(database, updatedRecord, user);
+    return this.normalizeNativeRecordForList(
+      database,
+      updatedRecord,
+      responseRecordPage,
+      true,
+    );
   }
 
   async reorderRecord(dto: ReorderDatabaseRecordDto, user: User) {
-    const database = await this.getAuthorizedDatabase(
+    const databaseSnapshot = await this.getAuthorizedDatabase(
       dto.databaseId,
       user,
       'edit',
     );
-    const record = await this.databaseRepo.findDatabaseRecord(
-      database.id,
+    const recordSnapshot = await this.databaseRepo.findDatabaseRecord(
+      databaseSnapshot.id,
       dto.recordId,
     );
+    if (!recordSnapshot) throw new NotFoundException('Record not found');
+    if (!recordSnapshot.pageId) {
+      throw new ConflictException({
+        code: 'DATABASE_PAGE_MEMBERSHIP_INVALID',
+        message: 'The work item relationship must be repaired',
+      });
+    }
+    if (
+      dto.beforeRecordId === recordSnapshot.id ||
+      dto.afterRecordId === recordSnapshot.id ||
+      (dto.beforeRecordId && dto.beforeRecordId === dto.afterRecordId)
+    ) {
+      throw new BadRequestException('Invalid record ordering anchors');
+    }
 
-    if (!record) throw new NotFoundException('Record not found');
+    const { database, record, recordPage, updatedRecord } = await executeTx(
+      this.db,
+      async (trx) => {
+        const hostPage = await this.pageRepo.findById(databaseSnapshot.pageId, {
+          trx,
+          withLock: true,
+        });
+        const recordPage = await this.pageRepo.findById(
+          recordSnapshot.pageId!,
+          {
+            trx,
+            withLock: true,
+          },
+        );
+        if (
+          !hostPage ||
+          hostPage.deletedAt ||
+          hostPage.id !== databaseSnapshot.pageId ||
+          hostPage.workspaceId !== user.workspaceId ||
+          hostPage.workspaceId !== databaseSnapshot.workspaceId ||
+          hostPage.spaceId !== databaseSnapshot.spaceId
+        ) {
+          throw new NotFoundException('Page not found');
+        }
+        if (!recordPage || recordPage.deletedAt) {
+          throw new NotFoundException('Record page not found');
+        }
+        if (
+          recordPage.workspaceId !== hostPage.workspaceId ||
+          recordPage.spaceId !== hostPage.spaceId ||
+          recordPage.id === hostPage.id ||
+          recordPage.parentPageId !== hostPage.id
+        ) {
+          throw new ConflictException({
+            code: 'DATABASE_PAGE_MEMBERSHIP_INVALID',
+            message: 'The work item relationship must be repaired',
+          });
+        }
+        await this.pageAccessService.validateCanEdit(hostPage, user);
+        await this.pageAccessService.validateCanEdit(recordPage, user);
 
-    const recordPage = await this.getActiveRecordPage(database, record);
-    if (!recordPage) throw new NotFoundException('Record page not found');
-    await this.pageAccessService.validateCanEdit(recordPage, user);
-
-    const beforeRecord = dto.beforeRecordId
-      ? await this.databaseRepo.findDatabaseRecord(
+        const database = await this.databaseRepo.findById(
+          databaseSnapshot.id,
+          trx,
+          true,
+        );
+        if (
+          !database ||
+          database.pageId !== hostPage.id ||
+          database.workspaceId !== hostPage.workspaceId ||
+          database.spaceId !== hostPage.spaceId
+        ) {
+          throw new NotFoundException('Database not found');
+        }
+        const record = await this.databaseRepo.findDatabaseRecord(
           database.id,
-          dto.beforeRecordId,
-        )
-      : undefined;
-    const afterRecord = dto.afterRecordId
-      ? await this.databaseRepo.findDatabaseRecord(
-          database.id,
-          dto.afterRecordId,
-        )
-      : undefined;
-    const sortOrder = generateJitteredKeyBetween(
-      afterRecord?.sortOrder ?? null,
-      beforeRecord?.sortOrder ?? null,
-    );
-    const updatedRecord = await this.databaseRepo.updateDatabaseRecordSort(
-      database.id,
-      record.id,
-      sortOrder,
-      user.id,
+          recordSnapshot.id,
+          trx,
+          true,
+        );
+        if (!record) throw new NotFoundException('Record not found');
+        if (record.pageId !== recordPage.id) {
+          throw new ConflictException({
+            code: 'DATABASE_RECORD_CHANGED_RETRY',
+            message: 'The work item changed while it was reordered; retry',
+          });
+        }
+
+        const beforeRecord = dto.beforeRecordId
+          ? await this.databaseRepo.findDatabaseRecord(
+              database.id,
+              dto.beforeRecordId,
+              trx,
+              true,
+            )
+          : undefined;
+        const afterRecord = dto.afterRecordId
+          ? await this.databaseRepo.findDatabaseRecord(
+              database.id,
+              dto.afterRecordId,
+              trx,
+              true,
+            )
+          : undefined;
+        if (
+          (dto.beforeRecordId && !beforeRecord) ||
+          (dto.afterRecordId && !afterRecord)
+        ) {
+          throw new ConflictException({
+            code: 'DATABASE_REORDER_TARGET_CHANGED_RETRY',
+            message: 'The board order changed while it was reordered; retry',
+          });
+        }
+        const sortOrder = generateJitteredKeyBetween(
+          afterRecord?.sortOrder ?? null,
+          beforeRecord?.sortOrder ?? null,
+        );
+        return {
+          database,
+          record,
+          recordPage,
+          updatedRecord: await this.databaseRepo.updateDatabaseRecordSort(
+            database.id,
+            record.id,
+            sortOrder,
+            user.id,
+            trx,
+          ),
+        };
+      },
     );
 
     this.auditService.log({
@@ -796,11 +1416,16 @@ export class DatabaseService {
     });
     await this.notifyDatabaseChanged(database, { records: true });
 
-    return this.normalizeNativeRecordWithPage(database, updatedRecord, user);
+    return this.normalizeNativeRecordForList(
+      database,
+      updatedRecord,
+      recordPage,
+      true,
+    );
   }
 
   async attachPage(dto: AttachDatabasePageDto, user: User) {
-    const database = await this.getAuthorizedDatabase(
+    let database = await this.getAuthorizedDatabase(
       dto.databaseId,
       user,
       'edit',
@@ -811,7 +1436,7 @@ export class DatabaseService {
         message: 'Only native databases can manage Docmost pages',
       });
     }
-    const page = await this.pageRepo.findById(dto.pageId, {
+    let page = await this.pageRepo.findById(dto.pageId, {
       includeTextContent: true,
     });
     if (
@@ -823,10 +1448,6 @@ export class DatabaseService {
       throw new NotFoundException('Page not found');
     }
     await this.pageAccessService.validateCanEdit(page, user);
-    if (dto.fields) {
-      validateDatabaseRecordFields(database.fields, dto.fields);
-      await this.validateRecordUserReferences(database, dto.fields);
-    }
 
     if (Boolean(dto.sourceDatabaseId) !== Boolean(dto.sourceRecordId)) {
       throw new BadRequestException(
@@ -854,8 +1475,113 @@ export class DatabaseService {
     const previousAudience = await this.wsTreeService.capturePageAudience(page);
     try {
       await executeTx(this.db, async (trx) => {
+        await this.pageService.lockPageTreeSpacesForUpdate(
+          [
+            ...new Set(
+              [page.spaceId, database.spaceId, sourceDatabase?.spaceId].filter(
+                (spaceId): spaceId is string => Boolean(spaceId),
+              ),
+            ),
+          ],
+          trx,
+        );
+
+        const lockedPages = new Map<string, Page>();
+        const hostPageIdsToLock = [database.pageId, sourceDatabase?.pageId]
+          .filter((pageId): pageId is string => Boolean(pageId))
+          .filter((pageId, index, pageIds) => pageIds.indexOf(pageId) === index)
+          .sort();
+        const pageIdsToLock = [
+          ...hostPageIdsToLock,
+          ...(hostPageIdsToLock.includes(page.id) ? [] : [page.id]),
+        ];
+        for (const pageId of pageIdsToLock) {
+          const lockedPage = await this.pageRepo.findById(pageId, {
+            includeTextContent: pageId === page.id,
+            trx,
+            withLock: true,
+          });
+          if (!lockedPage || lockedPage.deletedAt) {
+            throw new NotFoundException('Page not found');
+          }
+          lockedPages.set(pageId, lockedPage);
+        }
+
+        const lockedPage = lockedPages.get(page.id);
+        const targetHostPage = lockedPages.get(database.pageId);
+        if (
+          !lockedPage ||
+          !targetHostPage ||
+          lockedPage.workspaceId !== database.workspaceId ||
+          lockedPage.spaceId !== page.spaceId ||
+          targetHostPage.workspaceId !== database.workspaceId ||
+          targetHostPage.spaceId !== database.spaceId
+        ) {
+          throw new ConflictException({
+            code: 'DATABASE_PAGE_CHANGED_RETRY',
+            message: 'The page changed while it was being moved; retry',
+          });
+        }
+        await this.pageAccessService.validateCanEdit(lockedPage, user);
+        if (targetHostPage.id !== lockedPage.id) {
+          await this.pageAccessService.validateCanEdit(targetHostPage, user);
+        }
+        page = lockedPage;
+
+        const lockedDatabaseIds = [database.id, sourceDatabase?.id]
+          .filter((id): id is string => Boolean(id))
+          .sort();
+        const lockedDatabases = new Map<string, DatabaseBlock>();
+        for (const lockedDatabaseId of lockedDatabaseIds) {
+          const lockedDatabase = await this.databaseRepo.findById(
+            lockedDatabaseId,
+            trx,
+            true,
+          );
+          if (!lockedDatabase) {
+            throw new NotFoundException('Database not found');
+          }
+          lockedDatabases.set(lockedDatabase.id, lockedDatabase);
+        }
+
+        const lockedTargetDatabase = lockedDatabases.get(database.id);
+        if (
+          !lockedTargetDatabase ||
+          lockedTargetDatabase.pageId !== targetHostPage.id ||
+          lockedTargetDatabase.spaceId !== targetHostPage.spaceId ||
+          lockedTargetDatabase.workspaceId !== targetHostPage.workspaceId
+        ) {
+          throw new NotFoundException('Database not found');
+        }
+        database = lockedTargetDatabase;
+
+        if (sourceDatabase) {
+          const sourceHostPage = lockedPages.get(sourceDatabase.pageId);
+          const lockedSourceDatabase = lockedDatabases.get(sourceDatabase.id);
+          if (
+            !sourceHostPage ||
+            !lockedSourceDatabase ||
+            lockedSourceDatabase.pageId !== sourceHostPage.id ||
+            lockedSourceDatabase.spaceId !== sourceHostPage.spaceId ||
+            lockedSourceDatabase.workspaceId !== sourceHostPage.workspaceId
+          ) {
+            throw new NotFoundException('Source database not found');
+          }
+          if (
+            sourceHostPage.id !== lockedPage.id &&
+            sourceHostPage.id !== targetHostPage.id
+          ) {
+            await this.pageAccessService.validateCanEdit(sourceHostPage, user);
+          }
+          sourceDatabase = lockedSourceDatabase;
+        }
+
         const memberships =
-          await this.databaseRepo.listActiveDatabaseRecordsByPage(page.id, trx);
+          await this.databaseRepo.listActiveDatabaseRecordsByPage(
+            page.id,
+            trx,
+            true,
+          );
         if (memberships.length > 1) {
           throw new ConflictException({
             code: 'DATABASE_PAGE_MEMBERSHIP_CONFLICT',
@@ -864,6 +1590,25 @@ export class DatabaseService {
         }
 
         const currentMembership = memberships[0];
+        const sourceFields =
+          currentMembership && sourceDatabase
+            ? this.projectCompatibleRecordFields(
+                sourceDatabase,
+                database,
+                currentMembership.fields as Record<string, unknown>,
+              )
+            : {};
+        const requestedFields = sourceDatabase
+          ? this.getMoveFieldOverrides(database, dto.fields)
+          : (dto.fields ?? {});
+        const attachmentFields = { ...sourceFields, ...requestedFields };
+        validateDatabaseRecordFields(database.fields, attachmentFields);
+        await this.validateRecordUserReferences(
+          database,
+          attachmentFields,
+          trx,
+        );
+
         if (currentMembership && currentMembership.databaseId !== database.id) {
           if (
             currentMembership.databaseId !== dto.sourceDatabaseId ||
@@ -893,7 +1638,7 @@ export class DatabaseService {
           const fields = this.buildFieldsForAttachedPage(
             database,
             page,
-            dto.fields,
+            attachmentFields,
           );
           const lastSortOrder =
             await this.databaseRepo.getLastDatabaseRecordSortOrder(
@@ -937,40 +1682,61 @@ export class DatabaseService {
       throw new BadRequestException('Failed to attach page');
     }
 
-    const relocatedPage = await this.pageRepo.findById(page.id, {
-      includeHasChildren: true,
-    });
-    if (relocatedPage) {
-      await this.wsTreeService.notifyPageRelocated(
-        page,
-        relocatedPage,
-        Boolean(
-          (relocatedPage as Page & { hasChildren?: boolean }).hasChildren,
-        ),
-        previousAudience,
-      );
+    try {
+      const relocatedPage = await this.pageRepo.findById(page.id, {
+        includeHasChildren: true,
+      });
+      if (relocatedPage) {
+        await this.wsTreeService.notifyPageRelocated(
+          page,
+          relocatedPage,
+          Boolean(
+            (relocatedPage as Page & { hasChildren?: boolean }).hasChildren,
+          ),
+          previousAudience,
+        );
+      }
+    } catch (error) {
+      this.logger.error('Failed to publish database page relocation', error);
     }
 
-    this.auditService.log({
-      event: sourceDatabase
-        ? AuditEvent.DATABASE_RECORD_MOVED
-        : AuditEvent.DATABASE_RECORD_ATTACHED,
-      resourceType: AuditResource.PAGE,
-      resourceId: page.id,
-      spaceId: database.spaceId,
-      metadata: {
-        databaseId: database.id,
-        recordId: attachedRecord.id,
-        databasePageId: database.pageId,
-        sourceDatabaseId: sourceDatabase?.id,
-      },
-    });
-    await this.notifyDatabaseChanged(database, { records: true });
+    try {
+      await this.auditService.log({
+        event: sourceDatabase
+          ? AuditEvent.DATABASE_RECORD_MOVED
+          : AuditEvent.DATABASE_RECORD_ATTACHED,
+        resourceType: AuditResource.PAGE,
+        resourceId: page.id,
+        spaceId: database.spaceId,
+        metadata: {
+          databaseId: database.id,
+          recordId: attachedRecord.id,
+          databasePageId: database.pageId,
+          sourceDatabaseId: sourceDatabase?.id,
+        },
+      });
+    } catch (error) {
+      this.logger.error('Failed to audit database page attachment', error);
+    }
+    try {
+      await this.notifyDatabaseChanged(database, { records: true });
+    } catch (error) {
+      this.logger.error('Failed to publish target database update', error);
+    }
     if (sourceDatabase && sourceDatabase.id !== database.id) {
-      await this.notifyDatabaseChanged(sourceDatabase, { records: true });
+      try {
+        await this.notifyDatabaseChanged(sourceDatabase, { records: true });
+      } catch (error) {
+        this.logger.error('Failed to publish source database update', error);
+      }
     }
 
-    return this.normalizeNativeRecordWithPage(database, attachedRecord, user);
+    return this.normalizeNativeRecordForList(
+      database,
+      attachedRecord,
+      page,
+      true,
+    );
   }
 
   async detachRecord(dto: DetachDatabaseRecordDto, user: User) {
@@ -981,61 +1747,393 @@ export class DatabaseService {
     });
   }
 
+  async deleteDatabase(dto: DeleteDatabaseDto, user: User) {
+    const result = await executeTx(this.db, (trx) =>
+      this.deleteDatabaseInTransaction(dto.databaseId, user, trx, {
+        expectedHostPageId: dto.pageId,
+        expectedBlockId: dto.blockId,
+        includeDeleted: true,
+      }),
+    );
+    if (!result) throw new NotFoundException('Database not found');
+    if (!result.alreadyDeleted) {
+      await this.finalizeDatabaseDeletion(result);
+    }
+
+    return {
+      databaseId: result.database.id,
+      alreadyDeleted: result.alreadyDeleted,
+      workItemCount: result.workItemPageIds.length,
+      trashedPageCount: result.trashedPageIds.length,
+    };
+  }
+
+  async deleteDatabaseFromPageContent(
+    databaseId: string,
+    sourcePageId: string,
+    sourceBlockId: string | undefined,
+    user: User,
+    trx: KyselyTransaction,
+    rejectImplicitDeletion = false,
+  ): Promise<(() => Promise<void>) | undefined> {
+    if (!sourceBlockId) return undefined;
+    const result = await this.deleteDatabaseInTransaction(
+      databaseId,
+      user,
+      trx,
+      {
+        allowMissing: true,
+        expectedHostPageId: sourcePageId,
+        expectedBlockId: sourceBlockId,
+        rejectImplicitDeletion,
+      },
+    );
+    if (!result) return undefined;
+
+    return () => this.finalizeDatabaseDeletion(result, user);
+  }
+
+  private async deleteDatabaseInTransaction(
+    databaseId: string,
+    user: User,
+    trx: KyselyTransaction,
+    context: DatabaseDeletionContext,
+  ): Promise<DatabaseDeletionResult | undefined> {
+    const {
+      allowMissing = false,
+      expectedHostPageId,
+      expectedBlockId,
+      includeDeleted = false,
+      rejectImplicitDeletion = false,
+    } = context;
+    const databaseSnapshot = includeDeleted
+      ? await this.databaseRepo.findByIdIncludingDeleted(databaseId, trx)
+      : await this.databaseRepo.findById(databaseId, trx);
+    if (
+      !databaseSnapshot ||
+      databaseSnapshot.workspaceId !== user.workspaceId
+    ) {
+      if (allowMissing) return undefined;
+      throw new NotFoundException('Database not found');
+    }
+    if (
+      databaseSnapshot.pageId !== expectedHostPageId ||
+      databaseSnapshot.blockId !== expectedBlockId
+    ) {
+      return undefined;
+    }
+    if (rejectImplicitDeletion) {
+      throw new ConflictException({
+        code: 'DATABASE_EXPLICIT_DELETE_REQUIRED',
+        message: 'Delete the board before removing its content block',
+      });
+    }
+
+    const hostPage = await this.pageRepo.findById(databaseSnapshot.pageId, {
+      trx,
+      withLock: true,
+    });
+    if (
+      !hostPage ||
+      hostPage.deletedAt ||
+      hostPage.workspaceId !== databaseSnapshot.workspaceId ||
+      hostPage.spaceId !== databaseSnapshot.spaceId
+    ) {
+      throw new NotFoundException('Page not found');
+    }
+    await this.pageAccessService.validateCanEdit(hostPage, user);
+
+    const database = includeDeleted
+      ? await this.databaseRepo.findByIdIncludingDeleted(databaseId, trx, true)
+      : await this.databaseRepo.findById(databaseId, trx, true);
+    if (!database || database.workspaceId !== user.workspaceId) {
+      if (allowMissing) return undefined;
+      throw new NotFoundException('Database not found');
+    }
+    if (
+      database.pageId !== expectedHostPageId ||
+      database.blockId !== expectedBlockId ||
+      database.spaceId !== hostPage.spaceId
+    ) {
+      if (allowMissing) return undefined;
+      throw new NotFoundException('Database not found');
+    }
+
+    if (database.deletedAt) {
+      return {
+        database,
+        alreadyDeleted: true,
+        workItemPageIds: [],
+        trashedPageIds: [],
+        archivedDatabaseIds: [],
+        archivedRecordCount: 0,
+      };
+    }
+
+    const records = await this.databaseRepo.listDatabaseRecords(
+      database.id,
+      trx,
+      true,
+    );
+    const workItemPages: Page[] = [];
+    for (const record of records) {
+      if (!record.pageId || record.pageId === database.pageId) {
+        if (this.isNativeDatabase(database)) {
+          throw new ConflictException({
+            code: 'DATABASE_PAGE_MEMBERSHIP_INVALID',
+            message: 'The work item relationship must be repaired',
+          });
+        }
+        continue;
+      }
+      const page = await this.pageRepo.findById(record.pageId, {
+        trx,
+        withLock: true,
+      });
+      if (!page || page.deletedAt) continue;
+      if (
+        page.workspaceId !== database.workspaceId ||
+        page.spaceId !== database.spaceId ||
+        page.parentPageId !== database.pageId
+      ) {
+        throw new ConflictException({
+          code: 'DATABASE_PAGE_MEMBERSHIP_INVALID',
+          message: 'The work item relationship must be repaired',
+        });
+      }
+      await this.pageAccessService.validateCanEdit(page, user);
+      workItemPages.push(page);
+    }
+
+    const trashedPageIds = new Set<string>();
+    for (const page of workItemPages) {
+      const removedIds = await this.pageRepo.removePage(
+        page.id,
+        user.id,
+        database.workspaceId,
+        trx,
+        false,
+      );
+      removedIds.forEach((pageId) => trashedPageIds.add(pageId));
+    }
+
+    const archived = await this.databaseRepo.archiveDatabases(
+      [database.id],
+      user.id,
+      trx,
+    );
+
+    return {
+      database,
+      alreadyDeleted: false,
+      workItemPageIds: workItemPages.map((page) => page.id),
+      trashedPageIds: [...trashedPageIds],
+      archivedDatabaseIds: archived.databaseIds,
+      archivedRecordCount: archived.recordCount,
+    };
+  }
+
+  private async finalizeDatabaseDeletion(
+    result: DatabaseDeletionResult,
+    actor?: User,
+  ): Promise<void> {
+    try {
+      if (result.trashedPageIds.length > 0) {
+        this.eventEmitter.emit(EventName.PAGE_SOFT_DELETED, {
+          pageIds: result.trashedPageIds,
+          workspaceId: result.database.workspaceId,
+          databaseInvalidationHandled: true,
+        });
+      }
+    } catch (error) {
+      this.logger.error('Failed to emit database deletion events', error);
+    }
+
+    const auditPayload = {
+      event: AuditEvent.DATABASE_DELETED,
+      resourceType: AuditResource.PAGE,
+      resourceId: result.database.pageId,
+      spaceId: result.database.spaceId,
+      changes: {
+        before: {
+          databaseId: result.database.id,
+          title: result.database.title,
+          template: result.database.template,
+        },
+      },
+      metadata: {
+        databaseId: result.database.id,
+        databasePageId: result.database.pageId,
+        workItemCount: result.workItemPageIds.length,
+        trashedPageCount: result.trashedPageIds.length,
+        archivedDatabaseCount: result.archivedDatabaseIds.length,
+        archivedRecordCount: result.archivedRecordCount,
+        provider: this.getMetadata(result.database.metadata).provider,
+        externalDataPreserved: !this.isNativeDatabase(result.database),
+      },
+    };
+    try {
+      if (actor) {
+        await this.auditService.logWithContext(auditPayload, {
+          workspaceId: result.database.workspaceId,
+          actorId: actor.id,
+          actorType: 'user',
+        });
+      } else {
+        await this.auditService.log(auditPayload);
+      }
+    } catch (error) {
+      this.logger.error('Failed to audit database deletion', error);
+    }
+
+    try {
+      await this.notifyDatabaseChanged(result.database, {
+        info: true,
+        records: true,
+        treeMetadata: true,
+      });
+    } catch (error) {
+      this.logger.error('Failed to publish database deletion', error);
+    }
+  }
+
   async trashRecordPage(dto: TrashDatabaseRecordPageDto, user: User) {
-    const database = await this.getAuthorizedDatabase(
+    const databaseSnapshot = await this.getAuthorizedDatabase(
       dto.databaseId,
       user,
       'edit',
     );
-    const record = await this.databaseRepo.findDatabaseRecord(
-      database.id,
+    const recordSnapshot = await this.databaseRepo.findDatabaseRecord(
+      databaseSnapshot.id,
       dto.recordId,
     );
-    if (!record) throw new NotFoundException('Record not found');
-
-    const recordPage = await this.getActiveRecordPage(database, record);
-    if (recordPage) {
-      await this.pageAccessService.validateCanEdit(recordPage, user);
-    }
-
-    const trashedPageIds = await executeTx(this.db, async (trx) => {
-      if (recordPage) {
-        return this.pageRepo.removePage(
-          recordPage.id,
-          user.id,
-          database.workspaceId,
-          trx,
-          false,
-        );
-      }
-      return [];
-    });
-
-    if (trashedPageIds.length > 0) {
-      this.eventEmitter.emit(EventName.PAGE_SOFT_DELETED, {
-        pageIds: trashedPageIds,
-        workspaceId: database.workspaceId,
-        databaseInvalidationHandled: true,
+    if (!recordSnapshot) throw new NotFoundException('Record not found');
+    if (!recordSnapshot.pageId) {
+      throw new ConflictException({
+        code: 'DATABASE_PAGE_MEMBERSHIP_INVALID',
+        message: 'The work item relationship must be repaired',
       });
     }
 
-    this.auditService.log({
-      event: AuditEvent.DATABASE_RECORD_TRASHED,
-      resourceType: AuditResource.PAGE,
-      resourceId: record.pageId,
-      spaceId: database.spaceId,
-      metadata: {
-        databaseId: database.id,
-        recordId: record.id,
-        databasePageId: database.pageId,
-      },
+    const result = await executeTx(this.db, async (trx) => {
+      const hostPage = await this.pageRepo.findById(databaseSnapshot.pageId, {
+        trx,
+        withLock: true,
+      });
+      if (
+        !hostPage ||
+        hostPage.deletedAt ||
+        hostPage.id !== databaseSnapshot.pageId ||
+        hostPage.workspaceId !== user.workspaceId ||
+        hostPage.workspaceId !== databaseSnapshot.workspaceId ||
+        hostPage.spaceId !== databaseSnapshot.spaceId
+      ) {
+        throw new NotFoundException('Page not found');
+      }
+      await this.pageAccessService.validateCanEdit(hostPage, user);
+
+      const recordPage = await this.pageRepo.findById(recordSnapshot.pageId!, {
+        trx,
+        withLock: true,
+      });
+      if (!recordPage) {
+        throw new ConflictException({
+          code: 'DATABASE_PAGE_MEMBERSHIP_INVALID',
+          message: 'The work item relationship must be repaired',
+        });
+      }
+      if (
+        recordPage.workspaceId !== hostPage.workspaceId ||
+        recordPage.spaceId !== hostPage.spaceId ||
+        recordPage.id === hostPage.id ||
+        recordPage.parentPageId !== hostPage.id
+      ) {
+        throw new ConflictException({
+          code: 'DATABASE_PAGE_MEMBERSHIP_INVALID',
+          message: 'The work item relationship must be repaired',
+        });
+      }
+
+      const database = await this.databaseRepo.findById(
+        databaseSnapshot.id,
+        trx,
+        true,
+      );
+      if (
+        !database ||
+        database.pageId !== hostPage.id ||
+        database.workspaceId !== hostPage.workspaceId ||
+        database.spaceId !== hostPage.spaceId
+      ) {
+        throw new NotFoundException('Database not found');
+      }
+      const record = await this.databaseRepo.findDatabaseRecord(
+        database.id,
+        recordSnapshot.id,
+        trx,
+        true,
+      );
+      if (!record) throw new NotFoundException('Record not found');
+      if (record.pageId !== recordPage.id) {
+        throw new ConflictException({
+          code: 'DATABASE_RECORD_CHANGED_RETRY',
+          message: 'The work item changed while it was moved to trash; retry',
+        });
+      }
+
+      const alreadyTrashed = Boolean(recordPage.deletedAt);
+      if (!alreadyTrashed) {
+        await this.pageAccessService.validateCanEdit(recordPage, user);
+      }
+      const trashedPageIds = alreadyTrashed
+        ? []
+        : await this.pageRepo.removePage(
+            recordPage.id,
+            user.id,
+            database.workspaceId,
+            trx,
+            false,
+          );
+
+      return { database, record, recordPage, alreadyTrashed, trashedPageIds };
     });
-    await this.notifyDatabaseChanged(database, { records: true });
+    const { database, record, recordPage, alreadyTrashed, trashedPageIds } =
+      result;
+
+    if (trashedPageIds.length > 0) {
+      try {
+        this.eventEmitter.emit(EventName.PAGE_SOFT_DELETED, {
+          pageIds: trashedPageIds,
+          workspaceId: database.workspaceId,
+          databaseInvalidationHandled: true,
+        });
+      } catch (error) {
+        this.logger.error(
+          'Failed to emit database record page deletion',
+          error,
+        );
+      }
+    }
+
+    if (!alreadyTrashed) {
+      this.auditService.log({
+        event: AuditEvent.DATABASE_RECORD_TRASHED,
+        resourceType: AuditResource.PAGE,
+        resourceId: record.pageId,
+        spaceId: database.spaceId,
+        metadata: {
+          databaseId: database.id,
+          recordId: record.id,
+          databasePageId: database.pageId,
+        },
+      });
+      await this.notifyDatabaseChanged(database, { records: true });
+    }
 
     return {
       recordId: record.id,
       pageId: record.pageId,
-      trashedPageId: recordPage?.id ?? null,
+      trashedPageId: alreadyTrashed ? null : recordPage.id,
     };
   }
 
@@ -1084,6 +2182,44 @@ export class DatabaseService {
     return database;
   }
 
+  private async lockAuthorizedDatabaseForEdit(
+    database: DatabaseBlock,
+    user: User,
+    trx: KyselyTransaction,
+  ): Promise<{ database: DatabaseBlock; hostPage: Page }> {
+    const hostPage = await this.pageRepo.findById(database.pageId, {
+      trx,
+      withLock: true,
+    });
+    if (
+      !hostPage ||
+      hostPage.deletedAt ||
+      hostPage.id !== database.pageId ||
+      hostPage.workspaceId !== user.workspaceId ||
+      hostPage.workspaceId !== database.workspaceId ||
+      hostPage.spaceId !== database.spaceId
+    ) {
+      throw new NotFoundException('Page not found');
+    }
+    await this.pageAccessService.validateCanEdit(hostPage, user);
+
+    const lockedDatabase = await this.databaseRepo.findById(
+      database.id,
+      trx,
+      true,
+    );
+    if (
+      !lockedDatabase ||
+      lockedDatabase.workspaceId !== hostPage.workspaceId ||
+      lockedDatabase.spaceId !== hostPage.spaceId ||
+      lockedDatabase.pageId !== hostPage.id
+    ) {
+      throw new NotFoundException('Database not found');
+    }
+
+    return { database: lockedDatabase, hostPage };
+  }
+
   private toResponse(database: Awaited<ReturnType<DatabaseRepo['findById']>>) {
     if (!database) throw new BadRequestException('Database is empty');
     return {
@@ -1113,16 +2249,99 @@ export class DatabaseService {
     return normalizeDatabaseFields(fields);
   }
 
+  private resolveViewGroupBy(
+    database: Pick<DatabaseBlock, 'fields'>,
+    viewType: string,
+    requestedGroupBy?: string,
+  ): string | undefined {
+    const fields = this.getFields(database.fields);
+    const requestedName = requestedGroupBy?.trim();
+    const defaultField =
+      viewType === 'kanban'
+        ? fields.find((field) =>
+            ['status', 'singleSelect'].includes(field.type),
+          )
+        : undefined;
+    const field = requestedName
+      ? fields.find((candidate) => candidate.name === requestedName)
+      : defaultField;
+
+    if (!field) {
+      if (viewType === 'kanban' || requestedName) {
+        throw new BadRequestException({
+          code: 'DATABASE_VIEW_GROUP_FIELD_INVALID',
+          message: 'The view group field does not exist',
+        });
+      }
+      return undefined;
+    }
+
+    if (
+      viewType === 'kanban' &&
+      !['status', 'singleSelect'].includes(field.type)
+    ) {
+      throw new BadRequestException({
+        code: 'DATABASE_VIEW_GROUP_FIELD_INVALID',
+        message: 'A board must be grouped by a single-select field',
+      });
+    }
+    if (['calendar', 'timeline'].includes(viewType) && field.type !== 'date') {
+      throw new BadRequestException({
+        code: 'DATABASE_VIEW_GROUP_FIELD_INVALID',
+        message: 'This view must use a date field',
+      });
+    }
+
+    return field.name;
+  }
+
+  private normalizeFieldOptions(options: string[]): string[] {
+    const normalized = options.map((option) => option.trim());
+    if (normalized.some((option) => !option)) {
+      throw new BadRequestException({
+        code: 'DATABASE_FIELD_OPTION_INVALID',
+        message: 'Field options cannot be empty',
+      });
+    }
+    if (new Set(normalized).size !== normalized.length) {
+      throw new BadRequestException({
+        code: 'DATABASE_FIELD_OPTION_DUPLICATE',
+        message: 'Field options must be unique',
+      });
+    }
+    return normalized;
+  }
+
+  private assertFieldOptionsSupported(
+    fieldType: DatabaseFieldType,
+    options?: string[],
+  ) {
+    if (
+      options === undefined ||
+      ['status', 'singleSelect', 'multiSelect'].includes(fieldType)
+    ) {
+      return;
+    }
+    throw new BadRequestException({
+      code: 'DATABASE_FIELD_OPTIONS_UNSUPPORTED',
+      message: 'This database field type does not support options',
+    });
+  }
+
   private getLegacyMetadataRecords(database: { metadata: unknown }) {
     const metadata = this.getMetadata(database.metadata);
     return Array.isArray(metadata.records) ? metadata.records : [];
   }
 
   private async updateLegacyMetadataRecord(
-    database: { id: string; metadata: unknown },
+    database: Pick<
+      DatabaseBlock,
+      'id' | 'metadata' | 'fields' | 'views' | 'activeViewId'
+    >,
     recordId: string,
     fields: Record<string, unknown>,
     userId: string,
+    trx?: KyselyTransaction,
   ) {
     const records = this.getLegacyMetadataRecords(database);
     const index = records.findIndex((record) => record.recordId === recordId);
@@ -1145,9 +2364,14 @@ export class DatabaseService {
       database.id,
       metadata as unknown as Json,
       userId,
+      trx,
     );
 
-    return normalizeApitableRecord(nextRecords[index]);
+    return normalizeApitableRecord(
+      nextRecords[index],
+      getPrimaryDatabaseFieldName(database.fields),
+      this.getDatabaseStatusFieldName(database),
+    );
   }
 
   private getMetadata(metadata: unknown): DatabaseMetadata {
@@ -1155,6 +2379,35 @@ export class DatabaseService {
       return metadata as DatabaseMetadata;
     }
     return {};
+  }
+
+  private transformLegacyMetadataRecordFields(
+    database: { metadata: unknown },
+    transform: (fields: Record<string, unknown>) => Record<string, unknown>,
+  ) {
+    const metadata = this.getMetadata(database.metadata);
+    const records = Array.isArray(metadata.records) ? metadata.records : [];
+    let changedRecordCount = 0;
+    const nextRecords = records.map((record) => {
+      const fields =
+        record.fields &&
+        typeof record.fields === 'object' &&
+        !Array.isArray(record.fields)
+          ? (record.fields as Record<string, unknown>)
+          : {};
+      const nextFields = transform(fields);
+      if (nextFields === fields) return record;
+      changedRecordCount += 1;
+      return { ...record, fields: nextFields };
+    });
+
+    return {
+      changedRecordCount,
+      metadata:
+        changedRecordCount > 0
+          ? { ...metadata, records: nextRecords }
+          : metadata,
+    };
   }
 
   private isNativeDatabase(database: {
@@ -1171,31 +2424,15 @@ export class DatabaseService {
     );
   }
 
-  private async normalizeNativeRecordWithPage(
-    database: DatabaseBlock,
-    record: DatabaseRecord,
-    user: User,
+  private assertNativeSchemaMutation(
+    database: Pick<DatabaseBlock, 'metadata' | 'apitableDatasheetId'>,
   ) {
-    const recordPage = await this.ensureRecordPage(database, record, user);
-    const permissions =
-      await this.pageAccessService.validateCanViewWithPermissions(
-        recordPage,
-        user,
-      );
-
-    return normalizeApitableRecord(
-      {
-        id: record.id,
-        fields: record.fields as Record<string, unknown>,
-        pageId: recordPage.id,
-        pageSlugId: recordPage.slugId,
-        pageTitle: recordPage.title,
-        pageIcon: recordPage.icon === '📄' ? null : recordPage.icon,
-        sortOrder: record.sortOrder,
-        canEdit: permissions.canEdit,
-      },
-      getPrimaryDatabaseFieldName(database.fields),
-    );
+    if (this.isNativeDatabase(database)) return;
+    throw new ConflictException({
+      code: 'DATABASE_EXTERNAL_SCHEMA_MANAGED_BY_PROVIDER',
+      message:
+        'External database fields must be changed in the source provider',
+    });
   }
 
   private normalizeNativeRecordForList(
@@ -1216,67 +2453,20 @@ export class DatabaseService {
         canEdit,
       },
       getPrimaryDatabaseFieldName(database.fields),
+      this.getDatabaseStatusFieldName(database),
     );
   }
 
-  private async getActiveRecordPage(
-    database: DatabaseBlock,
-    record: DatabaseRecord,
+  private getDatabaseStatusFieldName(
+    database: Pick<DatabaseBlock, 'views' | 'activeViewId'>,
   ) {
-    if (!record.pageId) return null;
-
-    const page = await this.pageRepo.findById(record.pageId);
-    if (
-      !page ||
-      page.deletedAt ||
-      page.workspaceId !== database.workspaceId ||
-      page.spaceId !== database.spaceId ||
-      page.parentPageId !== database.pageId
-    ) {
-      return null;
-    }
-
-    return page;
-  }
-
-  private async ensureRecordPage(
-    database: DatabaseBlock,
-    record: DatabaseRecord,
-    user: User,
-  ): Promise<Page> {
-    const fields = (record.fields as Record<string, unknown>) ?? {};
-
-    if (record.pageId && record.pageId !== database.pageId) {
-      const page = await this.pageRepo.findById(record.pageId);
-      if (
-        page &&
-        !page.deletedAt &&
-        page.workspaceId === database.workspaceId &&
-        page.spaceId === database.spaceId &&
-        page.parentPageId === database.pageId
-      ) {
-        return page;
-      }
-      if (page?.deletedAt) {
-        throw new NotFoundException('Record page is in trash');
-      }
-      if (page) {
-        throw new ConflictException({
-          code: 'DATABASE_PAGE_MEMBERSHIP_INVALID',
-          message: 'The work item relationship must be repaired',
-        });
-      }
-    }
-
-    const recordPage = await this.createRecordPage(database, fields, user);
-    await this.databaseRepo.updateDatabaseRecordPageId(
-      database.id,
-      record.id,
-      recordPage.id,
-      user.id,
+    const views = this.getViews(database.views);
+    const activeView = views.find((view) => view.id === database.activeViewId);
+    return (
+      (activeView?.type === 'kanban' ? activeView.groupBy : undefined) ??
+      views.find((view) => view.type === 'kanban')?.groupBy ??
+      'Status'
     );
-
-    return recordPage;
   }
 
   private async moveRecordPageToDestination(
@@ -1316,15 +2506,19 @@ export class DatabaseService {
     user: User,
     trx?: KyselyTransaction,
     emitLifecycleEvent = true,
+    lockedParentPage?: Page,
   ): Promise<Page> {
     const parentPageId = database.pageId;
-    const parentPage = await this.pageRepo.findById(parentPageId, {
-      trx,
-      withLock: Boolean(trx),
-    });
+    const parentPage =
+      lockedParentPage ??
+      (await this.pageRepo.findById(parentPageId, {
+        trx,
+        withLock: Boolean(trx),
+      }));
     if (
       !parentPage ||
       parentPage.deletedAt ||
+      parentPage.id !== parentPageId ||
       parentPage.spaceId !== database.spaceId ||
       parentPage.workspaceId !== database.workspaceId
     ) {
@@ -1366,6 +2560,64 @@ export class DatabaseService {
       trx,
       emitLifecycleEvent,
     );
+  }
+
+  private projectCompatibleRecordFields(
+    sourceDatabase: Pick<DatabaseBlock, 'fields'>,
+    targetDatabase: Pick<DatabaseBlock, 'fields'>,
+    sourceValues: Record<string, unknown>,
+  ) {
+    const sourceFields = new Map(
+      this.getFields(sourceDatabase.fields).map((field) => [field.name, field]),
+    );
+    const projected: Record<string, unknown> = {};
+
+    for (const targetField of this.getFields(targetDatabase.fields)) {
+      if (targetField.isPrimary) continue;
+      const sourceField = sourceFields.get(targetField.name);
+      if (!sourceField || sourceField.type !== targetField.type) continue;
+      if (
+        !Object.prototype.hasOwnProperty.call(sourceValues, targetField.name)
+      ) {
+        continue;
+      }
+
+      const value = sourceValues[targetField.name];
+      try {
+        validateDatabaseRecordFields(targetDatabase.fields, {
+          [targetField.name]: value,
+        });
+        projected[targetField.name] = value;
+      } catch (error) {
+        if (!(error instanceof BadRequestException)) throw error;
+      }
+    }
+
+    return projected;
+  }
+
+  private getMoveFieldOverrides(
+    database: Pick<DatabaseBlock, 'views'>,
+    requestedFields?: Record<string, unknown>,
+  ) {
+    if (!requestedFields) return {};
+    const allowedFields = new Set(
+      this.getViews(database.views)
+        .filter((view) => view.type === 'kanban' && view.groupBy)
+        .map((view) => view.groupBy as string),
+    );
+    const unsupportedField = Object.keys(requestedFields).find(
+      (fieldName) => !allowedFields.has(fieldName),
+    );
+    if (unsupportedField) {
+      throw new ConflictException({
+        code: 'DATABASE_MOVE_FIELD_OVERRIDE_UNSUPPORTED',
+        message:
+          'Only target board group fields can be overridden while moving a work item',
+        field: unsupportedField,
+      });
+    }
+    return requestedFields;
   }
 
   private buildFieldsForAttachedPage(
@@ -1479,15 +2731,23 @@ export class DatabaseService {
     }
     if (invalidations.length === 0) return;
 
-    await this.wsTreeService.notifyPageQueriesInvalidated(
-      { id: database.pageId, spaceId: database.spaceId },
-      invalidations,
-    );
+    try {
+      await this.wsTreeService.notifyPageQueriesInvalidated(
+        { id: database.pageId, spaceId: database.spaceId },
+        invalidations,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish database invalidation for ${database.id}`,
+        error,
+      );
+    }
   }
 
   private async validateRecordUserReferences(
     database: Pick<DatabaseBlock, 'fields' | 'workspaceId'>,
     fields: Record<string, unknown>,
+    trx?: KyselyTransaction,
   ): Promise<void> {
     const userFields = this.getFields(database.fields).filter(
       (field) => field.type === 'user' || field.type === 'person',
@@ -1506,6 +2766,7 @@ export class DatabaseService {
       await this.databaseRepo.listActiveWorkspaceUserIds(
         database.workspaceId,
         references.map(({ userId }) => userId),
+        trx,
       ),
     );
     const invalidReference = references.find(
@@ -1567,22 +2828,20 @@ export class DatabaseService {
       'status',
       'date',
       'user',
-      'attachment',
       'checkbox',
       'url',
       'email',
       'phone',
-      'relation',
-      'rollup',
-      'formula',
-      'button',
       'id',
-      'place',
     ];
 
-    return supportedTypes.includes(type as DatabaseFieldType)
-      ? (type as DatabaseFieldType)
-      : 'text';
+    if (!supportedTypes.includes(type as DatabaseFieldType)) {
+      throw new BadRequestException({
+        code: 'DATABASE_FIELD_TYPE_UNSUPPORTED',
+        message: 'This database field type is not supported yet',
+      });
+    }
+    return type as DatabaseFieldType;
   }
 
   private defaultFieldName(type?: string) {

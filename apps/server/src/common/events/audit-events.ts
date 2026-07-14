@@ -43,6 +43,7 @@ export const AuditEvent = {
 
   // Database / board
   DATABASE_CREATED: 'database.created',
+  DATABASE_DELETED: 'database.deleted',
   DATABASE_VIEW_CREATED: 'database.view_created',
   DATABASE_TITLE_UPDATED: 'database.title_updated',
   DATABASE_FIELD_CREATED: 'database.field_created',

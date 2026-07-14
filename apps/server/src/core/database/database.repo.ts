@@ -43,20 +43,41 @@ export class DatabaseRepo {
       .executeTakeFirstOrThrow();
   }
 
-  async findById(databaseId: string): Promise<DatabaseBlock | undefined> {
-    return this.db
+  async findById(
+    databaseId: string,
+    trx?: KyselyTransaction,
+    withLock = false,
+  ): Promise<DatabaseBlock | undefined> {
+    let query = dbOrTx(this.db, trx)
       .selectFrom('databaseBlocks')
       .selectAll()
       .where('id', '=', databaseId)
-      .where('deletedAt', 'is', null)
-      .executeTakeFirst();
+      .where('deletedAt', 'is', null);
+
+    if (withLock && trx) query = query.forUpdate();
+    return query.executeTakeFirst();
+  }
+
+  async findByIdIncludingDeleted(
+    databaseId: string,
+    trx?: KyselyTransaction,
+    withLock = false,
+  ): Promise<DatabaseBlock | undefined> {
+    let query = dbOrTx(this.db, trx)
+      .selectFrom('databaseBlocks')
+      .selectAll()
+      .where('id', '=', databaseId);
+
+    if (withLock && trx) query = query.forUpdate();
+    return query.executeTakeFirst();
   }
 
   async findByPageAndBlock(
     pageId: string,
     blockId: string,
+    trx?: KyselyTransaction,
   ): Promise<DatabaseBlock | undefined> {
-    return this.db
+    return dbOrTx(this.db, trx)
       .selectFrom('databaseBlocks')
       .selectAll()
       .where('pageId', '=', pageId)
@@ -79,10 +100,11 @@ export class DatabaseRepo {
   async listActiveWorkspaceUserIds(
     workspaceId: string,
     userIds: string[],
+    trx?: KyselyTransaction,
   ): Promise<string[]> {
     if (userIds.length === 0) return [];
 
-    const users = await this.db
+    const users = await dbOrTx(this.db, trx)
       .selectFrom('users')
       .select('id')
       .where('workspaceId', '=', workspaceId)
@@ -99,11 +121,13 @@ export class DatabaseRepo {
     views: Json,
     activeViewId: string,
     userId: string,
+    trx?: KyselyTransaction,
   ): Promise<DatabaseBlock> {
-    return this.db
+    return dbOrTx(this.db, trx)
       .updateTable('databaseBlocks')
       .set({ views, activeViewId, updatedById: userId, updatedAt: new Date() })
       .where('id', '=', databaseId)
+      .where('deletedAt', 'is', null)
       .returningAll()
       .executeTakeFirstOrThrow();
   }
@@ -112,8 +136,9 @@ export class DatabaseRepo {
     databaseId: string,
     title: string,
     userId: string,
+    trx?: KyselyTransaction,
   ): Promise<DatabaseBlock> {
-    return this.db
+    return dbOrTx(this.db, trx)
       .updateTable('databaseBlocks')
       .set({ title, updatedById: userId, updatedAt: new Date() })
       .where('id', '=', databaseId)
@@ -177,15 +202,40 @@ export class DatabaseRepo {
       .execute();
   }
 
+  async replaceDatabaseRecordFieldValue(
+    databaseId: string,
+    fieldName: string,
+    oldValue: string,
+    newValue: string,
+    userId: string,
+    trx: KyselyTransaction,
+  ): Promise<number> {
+    const records = await trx
+      .updateTable('databaseRecords')
+      .set({
+        fields: sql<Json>`jsonb_set(fields, array[${fieldName}]::text[], ${JSON.stringify(newValue)}::jsonb, true)`,
+        updatedById: userId,
+        updatedAt: new Date(),
+      })
+      .where('databaseId', '=', databaseId)
+      .where(sql<boolean>`fields ->> ${fieldName} = ${oldValue}`)
+      .returning('id')
+      .execute();
+
+    return records.length;
+  }
+
   async updateMetadata(
     databaseId: string,
     metadata: Json,
     userId: string,
+    trx?: KyselyTransaction,
   ): Promise<DatabaseBlock> {
-    return this.db
+    return dbOrTx(this.db, trx)
       .updateTable('databaseBlocks')
       .set({ metadata, updatedById: userId, updatedAt: new Date() })
       .where('id', '=', databaseId)
+      .where('deletedAt', 'is', null)
       .returningAll()
       .executeTakeFirstOrThrow();
   }
@@ -214,29 +264,69 @@ export class DatabaseRepo {
       .execute();
   }
 
-  async listDatabaseRecords(databaseId: string): Promise<DatabaseRecord[]> {
-    return this.db
+  async listDatabaseRecords(
+    databaseId: string,
+    trx?: KyselyTransaction,
+    withLock = false,
+  ): Promise<DatabaseRecord[]> {
+    let query = dbOrTx(this.db, trx)
       .selectFrom('databaseRecords')
       .selectAll()
       .where('databaseId', '=', databaseId)
-      .where('deletedAt', 'is', null)
+      .where('deletedAt', 'is', null);
+
+    if (withLock && trx) query = query.forUpdate();
+    return query
       .orderBy('sortOrder', 'asc')
       .orderBy('createdAt', 'asc')
       .execute();
+  }
+
+  async archiveDatabases(
+    databaseIds: string[],
+    userId: string,
+    trx: KyselyTransaction,
+  ): Promise<{ databaseIds: string[]; recordCount: number }> {
+    const uniqueIds = [...new Set(databaseIds)];
+    if (uniqueIds.length === 0) return { databaseIds: [], recordCount: 0 };
+
+    const now = new Date();
+    const records = await trx
+      .updateTable('databaseRecords')
+      .set({ deletedAt: now, updatedById: userId, updatedAt: now })
+      .where('databaseId', 'in', uniqueIds)
+      .where('deletedAt', 'is', null)
+      .returning('id')
+      .execute();
+    const databases = await trx
+      .updateTable('databaseBlocks')
+      .set({ deletedAt: now, updatedById: userId, updatedAt: now })
+      .where('id', 'in', uniqueIds)
+      .where('deletedAt', 'is', null)
+      .returning('id')
+      .execute();
+
+    return {
+      databaseIds: databases.map((database) => database.id),
+      recordCount: records.length,
+    };
   }
 
   async findDatabaseRecord(
     databaseId: string,
     recordId: string,
     trx?: KyselyTransaction,
+    withLock = false,
   ): Promise<DatabaseRecord | undefined> {
-    return dbOrTx(this.db, trx)
+    let query = dbOrTx(this.db, trx)
       .selectFrom('databaseRecords')
       .selectAll()
       .where('databaseId', '=', databaseId)
       .where('id', '=', recordId)
-      .where('deletedAt', 'is', null)
-      .executeTakeFirst();
+      .where('deletedAt', 'is', null);
+
+    if (withLock && trx) query = query.forUpdate();
+    return query.executeTakeFirst();
   }
 
   async findDatabaseRecordByPage(
@@ -256,8 +346,9 @@ export class DatabaseRepo {
   async listActiveDatabaseRecordsByPage(
     pageId: string,
     trx?: KyselyTransaction,
+    withLock = false,
   ): Promise<DatabaseRecord[]> {
-    return dbOrTx(this.db, trx)
+    let query = dbOrTx(this.db, trx)
       .selectFrom('databaseRecords')
       .innerJoin('databaseBlocks', (join) =>
         join
@@ -266,8 +357,10 @@ export class DatabaseRepo {
       )
       .selectAll('databaseRecords')
       .where('databaseRecords.pageId', '=', pageId)
-      .where('databaseRecords.deletedAt', 'is', null)
-      .execute();
+      .where('databaseRecords.deletedAt', 'is', null);
+
+    if (withLock && trx) query = query.forUpdate();
+    return query.execute();
   }
 
   async listActiveDatabaseOwnersByRecordPages(
@@ -365,13 +458,36 @@ export class DatabaseRepo {
       .executeTakeFirstOrThrow();
   }
 
+  async updateDatabaseRecordField(
+    databaseId: string,
+    recordId: string,
+    fieldName: string,
+    value: Json,
+    userId: string,
+    trx?: KyselyTransaction,
+  ): Promise<DatabaseRecord> {
+    return dbOrTx(this.db, trx)
+      .updateTable('databaseRecords')
+      .set({
+        fields: sql<Json>`jsonb_set(fields, array[${fieldName}]::text[], ${JSON.stringify(value)}::jsonb, true)`,
+        updatedById: userId,
+        updatedAt: new Date(),
+      })
+      .where('databaseId', '=', databaseId)
+      .where('id', '=', recordId)
+      .where('deletedAt', 'is', null)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  }
+
   async updateDatabaseRecordSort(
     databaseId: string,
     recordId: string,
     sortOrder: string,
     userId: string,
+    trx?: KyselyTransaction,
   ): Promise<DatabaseRecord> {
-    return this.db
+    return dbOrTx(this.db, trx)
       .updateTable('databaseRecords')
       .set({ sortOrder, updatedById: userId, updatedAt: new Date() })
       .where('databaseId', '=', databaseId)

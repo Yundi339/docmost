@@ -20,12 +20,14 @@ import {
   CreateDatabaseViewDto,
   DatabaseEmbedUrlDto,
   DatabaseInfoDto,
+  DeleteDatabaseDto,
   DetachDatabaseRecordDto,
   ListDatabaseTargetsDto,
   ListDatabaseRecordsDto,
   ReorderDatabaseRecordDto,
   TrashDatabaseRecordPageDto,
   UpdateDatabaseFieldDto,
+  UpdateDatabaseFieldOptionDto,
   UpdateDatabaseRecordDto,
   UpdateDatabaseTitleDto,
 } from './dto/database.dto';
@@ -49,6 +51,13 @@ export class DatabaseController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @Post('delete')
+  delete(@Body() dto: DeleteDatabaseDto, @AuthUser() user: User) {
+    return this.databaseService.deleteDatabase(dto, user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
   @Post('targets/list')
   listTargets(@Body() dto: ListDatabaseTargetsDto, @AuthUser() user: User) {
     return this.databaseService.listTargets(dto, user);
@@ -76,6 +85,15 @@ export class DatabaseController {
   @Post('fields/update')
   updateField(@Body() dto: UpdateDatabaseFieldDto, @AuthUser() user: User) {
     return this.databaseService.updateField(dto, user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('fields/options/update')
+  updateFieldOption(
+    @Body() dto: UpdateDatabaseFieldOptionDto,
+    @AuthUser() user: User,
+  ) {
+    return this.databaseService.updateFieldOption(dto, user);
   }
 
   @HttpCode(HttpStatus.OK)

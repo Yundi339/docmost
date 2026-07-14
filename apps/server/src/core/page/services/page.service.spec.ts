@@ -72,6 +72,9 @@ function createService() {
   const generalQueue = {
     add: jest.fn().mockResolvedValue(undefined),
   };
+  const eventEmitter = {
+    emit: jest.fn(),
+  };
   const collaborationGateway = {
     handleYjsEvent: jest.fn().mockResolvedValue(undefined),
   };
@@ -94,6 +97,12 @@ function createService() {
     assertOperation: jest.fn().mockResolvedValue(undefined),
     addMetadata: jest.fn().mockImplementation(async (pages) => pages),
   };
+  const pageContentLifecycle = {
+    validateBeforeSave: jest.fn().mockResolvedValue(undefined),
+  };
+  const pageAccessService = {
+    validateCanEdit: jest.fn().mockResolvedValue({ hasRestriction: false }),
+  };
 
   const service = new PageService(
     pageRepo as any,
@@ -104,11 +113,13 @@ function createService() {
     {} as any,
     {} as any,
     generalQueue as any,
-    {} as any,
+    eventEmitter as any,
     collaborationGateway as any,
     {} as any,
     wsTreeService as any,
     pageOperationPolicy as any,
+    pageContentLifecycle as any,
+    pageAccessService as any,
   );
 
   jest
@@ -119,8 +130,11 @@ function createService() {
   return {
     collaborationGateway,
     db,
+    eventEmitter,
     generalQueue,
     pageRepo,
+    pageContentLifecycle,
+    pageAccessService,
     pageOperationPolicy,
     service,
     trx,
@@ -130,10 +144,10 @@ function createService() {
 
 describe('PageService.create', () => {
   it('persists pages through the repository lifecycle event source', async () => {
-    const { pageRepo, service } = createService();
+    const { eventEmitter, pageRepo, service, trx } = createService();
     const createdPage = page({ title: 'Created through MCP' });
     pageRepo.insertPage.mockResolvedValue(createdPage);
-    jest.spyOn(service, 'nextPagePosition').mockResolvedValue('a0');
+    jest.spyOn(service as any, 'nextPagePositionIn').mockResolvedValue('a0');
 
     await service.create('mcp-user', 'workspace-id', {
       spaceId: createdPage.spaceId,
@@ -146,7 +160,13 @@ describe('PageService.create', () => {
         title: createdPage.title,
         workspaceId: 'workspace-id',
       }),
+      trx,
+      false,
     );
+    expect(eventEmitter.emit).toHaveBeenCalledWith('page.created', {
+      pageIds: [createdPage.id],
+      workspaceId: createdPage.workspaceId,
+    });
   });
 
   it('applies extension policy before creating a child page', async () => {
@@ -187,6 +207,34 @@ describe('PageService.create', () => {
     expect(pageOperationPolicy.assertOperation).not.toHaveBeenCalled();
     expect(pageRepo.insertPage).not.toHaveBeenCalled();
   });
+
+  it('locks and revalidates the parent inside the creation transaction', async () => {
+    const { pageOperationPolicy, pageRepo, service, trx } = createService();
+    const parent = page({ id: 'parent-page' });
+    const createdPage = page({ id: 'child-page', parentPageId: parent.id });
+    pageRepo.findById.mockResolvedValue(parent);
+    pageRepo.insertPage.mockResolvedValue(createdPage);
+    jest.spyOn(service as any, 'nextPagePositionIn').mockResolvedValue('a1');
+
+    await service.create('mcp-user', parent.workspaceId, {
+      spaceId: parent.spaceId,
+      parentPageId: parent.id,
+      title: 'Concurrent child',
+    });
+
+    expect(pageRepo.findById).toHaveBeenCalledWith(parent.id, {
+      trx,
+      withLock: true,
+    });
+    expect(pageOperationPolicy.assertOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'createChild',
+        parentPage: parent,
+        actorId: 'mcp-user',
+        trx,
+      }),
+    );
+  });
 });
 
 describe('PageService.update', () => {
@@ -199,15 +247,20 @@ describe('PageService.update', () => {
     await service.update(
       existingPage,
       { pageId: existingPage.id, title: updatedPage.title },
-      { id: 'mcp-user' } as any,
+      { id: 'mcp-user', workspaceId: existingPage.workspaceId } as any,
     );
 
     expect(wsTreeService.notifyPageUpdated).toHaveBeenCalledWith(updatedPage);
   });
 
   it('leaves content-only updates to the collaboration channel', async () => {
-    const { collaborationGateway, pageRepo, service, wsTreeService } =
-      createService();
+    const {
+      collaborationGateway,
+      pageAccessService,
+      pageRepo,
+      service,
+      wsTreeService,
+    } = createService();
     const existingPage = page({ contributorIds: [] });
     pageRepo.findById.mockResolvedValue(existingPage);
 
@@ -219,11 +272,95 @@ describe('PageService.update', () => {
         format: 'markdown',
         operation: 'replace',
       },
-      { id: 'mcp-user' } as any,
+      { id: 'mcp-user', workspaceId: existingPage.workspaceId } as any,
     );
 
     expect(collaborationGateway.handleYjsEvent).toHaveBeenCalled();
+    expect(pageAccessService.validateCanEdit).toHaveBeenCalledWith(
+      existingPage,
+      expect.objectContaining({ id: 'mcp-user' }),
+    );
     expect(wsTreeService.notifyPageUpdated).not.toHaveBeenCalled();
+  });
+
+  it('allows a direct replacement to clear all page content', async () => {
+    const { collaborationGateway, pageRepo, service } = createService();
+    const existingPage = page({ contributorIds: [] });
+    pageRepo.findById.mockResolvedValue(existingPage);
+
+    await service.update(
+      existingPage,
+      {
+        pageId: existingPage.id,
+        content: '',
+        format: 'markdown',
+        operation: 'replace',
+      },
+      { id: 'mcp-user', workspaceId: existingPage.workspaceId } as any,
+    );
+
+    expect(collaborationGateway.handleYjsEvent).toHaveBeenCalledWith(
+      'updatePageContent',
+      `page.${existingPage.id}`,
+      expect.objectContaining({ operation: 'replace' }),
+    );
+  });
+
+  it('does not persist metadata when direct content replacement is rejected', async () => {
+    const { collaborationGateway, pageRepo, service } = createService();
+    const existingPage = page({ contributorIds: [] });
+    pageRepo.findById.mockResolvedValue(existingPage);
+    collaborationGateway.handleYjsEvent.mockRejectedValue(
+      new ConflictException('Explicit board deletion required'),
+    );
+
+    await expect(
+      service.update(
+        existingPage,
+        {
+          pageId: existingPage.id,
+          title: 'Must not be partially applied',
+          content: '# Replacement',
+          format: 'markdown',
+          operation: 'replace',
+        },
+        { id: 'mcp-user', workspaceId: existingPage.workspaceId } as any,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(pageRepo.updatePage).not.toHaveBeenCalled();
+  });
+
+  it('preflights destructive replacements before mutating the Yjs document', async () => {
+    const { collaborationGateway, pageContentLifecycle, pageRepo, service } =
+      createService();
+    const existingPage = page({ contributorIds: [] });
+    pageRepo.findById.mockResolvedValue(existingPage);
+    pageContentLifecycle.validateBeforeSave.mockRejectedValue(
+      new ConflictException('Explicit board deletion required'),
+    );
+
+    await expect(
+      service.update(
+        existingPage,
+        {
+          pageId: existingPage.id,
+          content: '# Replacement',
+          format: 'markdown',
+          operation: 'replace',
+        },
+        { id: 'mcp-user', workspaceId: existingPage.workspaceId } as any,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(pageContentLifecycle.validateBeforeSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: existingPage,
+        origin: 'direct',
+      }),
+    );
+    expect(collaborationGateway.handleYjsEvent).not.toHaveBeenCalled();
+    expect(pageRepo.updatePage).not.toHaveBeenCalled();
   });
 });
 

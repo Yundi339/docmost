@@ -1,4 +1,9 @@
-import { type Editor, NodeViewProps, NodeViewWrapper } from "@tiptap/react";
+import {
+  type Editor,
+  NodeViewProps,
+  NodeViewWrapper,
+  useEditorState,
+} from "@tiptap/react";
 import {
   ActionIcon,
   Badge,
@@ -96,15 +101,25 @@ import {
   useAttachDatabasePageMutation,
   useAttachDatabasePageToDatabaseMutation,
   useDatabaseBoardTargetsQuery,
+  useDeleteDatabaseMutation,
   useDatabaseInfoQuery,
   useDatabaseRecordsQuery,
   useReorderDatabaseRecordMutation,
   useTrashDatabaseRecordPageMutation,
   useUpdateDatabaseFieldMutation,
+  useUpdateDatabaseFieldOptionMutation,
   useUpdateDatabaseRecordMutation,
   useUpdateDatabaseTitleMutation,
 } from "@/features/database/queries/database-query";
 import {
+  DATABASE_BLOCK_DELETE_REQUEST_EVENT,
+  DatabaseBlockDeleteRequest,
+  confirmDatabaseBlockDeletion,
+  getDatabaseBlockRanges,
+  isDatabaseBlockOwnerContext,
+} from "@/features/database/extensions/database-block-delete-guard";
+import {
+  DatabaseBlockInfo,
   DatabaseBoardTarget,
   DatabaseFieldDefinition,
   DatabaseRecord,
@@ -112,6 +127,10 @@ import {
   DatabaseViewDefinition,
   DatabaseViewType,
 } from "@/features/database/types/database.types";
+import {
+  getKanbanGroupField,
+  projectRecordFieldsToBoard,
+} from "@/features/database/utils/database-board-fields";
 import { buildPageUrl } from "@/features/page/page.utils";
 import { PageActionMenu } from "@/features/page/components/header/page-header-menu";
 import {
@@ -121,6 +140,7 @@ import {
 import { useSearchSuggestionsQuery } from "@/features/search/queries/search-query";
 import { PageShareModal } from "@/ee/page-permission";
 import { notifications } from "@mantine/notifications";
+import { isAxiosError } from "axios";
 import { EmbeddedRecordPageEditor } from "./embedded-record-page-editor";
 import {
   clearDocmostDragPayloads,
@@ -136,6 +156,18 @@ import classes from "./database-block-view.module.css";
 const DEFAULT_STATUSES = ["Todo", "In progress", "Done"];
 const DEFAULT_DATABASE_TITLE = "New database";
 const TITLE_FIELD = "Title";
+
+function isExternalDatabase(database?: DatabaseBlockInfo) {
+  const datasheetId = database?.apitableDatasheetId;
+  const provider = database?.metadata?.provider;
+  return Boolean(
+    datasheetId &&
+    provider !== "docmost-native" &&
+    provider !== "docmost-local" &&
+    !datasheetId.startsWith("native_") &&
+    !datasheetId.startsWith("local_"),
+  );
+}
 
 const FIELD_LABELS: Record<string, string> = {
   Title: "Name",
@@ -402,9 +434,11 @@ const VIEW_TYPES: Array<{
 
 function AddViewMenu({
   existingViews,
+  fields,
   onCreateView,
 }: {
   existingViews: DatabaseViewDefinition[];
+  fields: DatabaseFieldDefinition[];
   onCreateView: (view: {
     name: string;
     type: DatabaseViewType;
@@ -418,6 +452,18 @@ function AddViewMenu({
     existingViews.filter((view) => view.type === type).length;
   const selectedView =
     VIEW_TYPES.find((view) => view.type === selectedType) ?? VIEW_TYPES[0];
+  const selectedGroupBy = (() => {
+    if (selectedType === "kanban") {
+      return getKanbanGroupField(fields)?.name;
+    }
+    if (["calendar", "timeline"].includes(selectedType)) {
+      return (
+        fields.find((field) => field.name === selectedView.groupBy)?.name ??
+        fields.find((field) => field.type === "date")?.name
+      );
+    }
+    return undefined;
+  })();
   const selectedName = (() => {
     const count = existingTypeCount(selectedType);
     return count > 0
@@ -486,7 +532,7 @@ function AddViewMenu({
               onCreateView({
                 name: selectedName,
                 type: selectedType,
-                groupBy: selectedView.groupBy,
+                groupBy: selectedGroupBy,
               });
               setOpened(false);
             }}
@@ -845,8 +891,17 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { spaceSlug } = useParams();
-  const { node, selected, editor, updateAttributes } = props;
+  const { node, selected, editor, updateAttributes, getPos } = props;
   const databaseId = node.attrs.databaseId as string | undefined;
+  const blockId = node.attrs.blockId as string | undefined;
+  const duplicateOwnerReferenceCount = useEditorState({
+    editor,
+    selector: ({ editor: currentEditor }) =>
+      currentEditor && databaseId && blockId
+        ? getDatabaseBlockRanges(currentEditor.state.doc, databaseId, blockId)
+            .length
+        : 0,
+  });
   const fallbackTitle =
     (node.attrs.title as string | undefined) || DEFAULT_DATABASE_TITLE;
   const fallbackViewType =
@@ -868,16 +923,20 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const [kanbanDraftStatus, setKanbanDraftStatus] = useState<string | null>(
     null,
   );
+  const [deleteModalOpened, setDeleteModalOpened] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const databaseQuery = useDatabaseInfoQuery(databaseId);
   const recordsQuery = useDatabaseRecordsQuery(databaseId);
+  const deleteDatabaseMutation = useDeleteDatabaseMutation(databaseId);
   const boardTargetsQuery = useDatabaseBoardTargetsQuery(databaseId);
   const createRecordMutation = useCreateDatabaseRecordMutation(databaseId);
   const updateRecordMutation = useUpdateDatabaseRecordMutation(databaseId);
   const updateTitleMutation = useUpdateDatabaseTitleMutation(databaseId);
   const createFieldMutation = useCreateDatabaseFieldMutation(databaseId);
   const updateFieldMutation = useUpdateDatabaseFieldMutation(databaseId);
+  const updateFieldOptionMutation =
+    useUpdateDatabaseFieldOptionMutation(databaseId);
   const createViewMutation = useCreateDatabaseViewMutation(databaseId);
   const reorderRecordMutation = useReorderDatabaseRecordMutation(databaseId);
   const attachPageMutation = useAttachDatabasePageMutation(databaseId);
@@ -897,6 +956,29 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   });
 
   const database = databaseQuery.data;
+  const hasVerifiedOwnership = isDatabaseBlockOwnerContext(
+    database,
+    hostPageId,
+    blockId,
+  );
+  const hasOwnershipMismatch =
+    !blockId ||
+    Boolean(
+      database &&
+      hostPageId &&
+      !isDatabaseBlockOwnerContext(database, hostPageId, blockId),
+    );
+  const hasDuplicateOwnerReference = Boolean(
+    databaseId && blockId && duplicateOwnerReferenceCount > 1,
+  );
+  const removesOnlyCurrentBlock =
+    hasOwnershipMismatch || hasDuplicateOwnerReference;
+  const deleteActionLabel = removesOnlyCurrentBlock
+    ? "Remove board block"
+    : "Delete board";
+  const canEditDatabase = editor.isEditable && hasVerifiedOwnership;
+  const externalDatabase = isExternalDatabase(database);
+  const canEditSchema = canEditDatabase && !externalDatabase;
   const records = recordsQuery.data ?? [];
   const views = database?.views?.length
     ? database.views
@@ -911,15 +993,24 @@ export default function DatabaseBlockView(props: NodeViewProps) {
     views.find(
       (view) => view.id === (activeViewId || database?.activeViewId),
     ) || views[0];
-  const statusField = database?.fields?.find(
-    (field) => field.name === "Status",
-  );
-  const statuses = statusField?.options?.length
-    ? statusField.options
-    : DEFAULT_STATUSES;
   const fields = database?.fields?.length
     ? database.fields
     : [{ name: TITLE_FIELD, type: "text" as const }];
+  const statusField = getKanbanGroupField(fields, activeView);
+  const statusFieldName = statusField?.name ?? "Status";
+  const statuses = statusField?.options?.length
+    ? statusField.options
+    : DEFAULT_STATUSES;
+  const recordsWithViewStatus = useMemo(
+    () =>
+      records.map((record) => {
+        const value = record.fields[statusFieldName];
+        return typeof value === "string" && value
+          ? { ...record, status: value }
+          : record;
+      }),
+    [records, statusFieldName],
+  );
   const hasQueryError = databaseQuery.isError || recordsQuery.isError;
   const isInitialLoading = databaseQuery.isLoading || recordsQuery.isLoading;
   const manualReorderDisabled = Boolean(sortField || filterText.trim());
@@ -947,7 +1038,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const displayedRecords = useMemo(() => {
     const normalizedFilter = filterText.trim().toLowerCase();
     const filteredRecords = normalizedFilter
-      ? records.filter((record) => {
+      ? recordsWithViewStatus.filter((record) => {
           const searchableValues = filterField
             ? [
                 filterField === TITLE_FIELD
@@ -960,7 +1051,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             renderCell(value).toLowerCase().includes(normalizedFilter),
           );
         })
-      : records;
+      : recordsWithViewStatus;
 
     if (!sortField) return filteredRecords;
 
@@ -977,11 +1068,50 @@ export default function DatabaseBlockView(props: NodeViewProps) {
       });
       return sortDirection === "asc" ? result : -result;
     });
-  }, [filterField, filterText, records, sortDirection, sortField]);
+  }, [
+    filterField,
+    filterText,
+    recordsWithViewStatus,
+    sortDirection,
+    sortField,
+  ]);
 
   useEffect(() => {
     setTitleDraft(database?.title || fallbackTitle || DEFAULT_DATABASE_TITLE);
   }, [database?.title, fallbackTitle]);
+
+  useEffect(() => {
+    const handleDeleteRequest = (event: Event) => {
+      const request = (event as CustomEvent<DatabaseBlockDeleteRequest>).detail;
+      let currentPosition: number | undefined;
+      try {
+        const position = getPos();
+        currentPosition = typeof position === "number" ? position : undefined;
+      } catch {
+        return;
+      }
+      if (
+        request?.databaseId === databaseId &&
+        (!request.blockId || request.blockId === blockId) &&
+        (request.position === undefined ||
+          request.position === currentPosition) &&
+        editor.isEditable
+      ) {
+        setDeleteModalOpened(true);
+      }
+    };
+
+    document.addEventListener(
+      DATABASE_BLOCK_DELETE_REQUEST_EVENT,
+      handleDeleteRequest,
+    );
+    return () => {
+      document.removeEventListener(
+        DATABASE_BLOCK_DELETE_REQUEST_EVENT,
+        handleDeleteRequest,
+      );
+    };
+  }, [blockId, databaseId, editor.isEditable, getPos]);
 
   useEffect(() => {
     if (!openedRecord) return;
@@ -992,28 +1122,35 @@ export default function DatabaseBlockView(props: NodeViewProps) {
     if (latestRecord) setOpenedRecord(latestRecord);
   }, [openedRecord?.id, records]);
 
-  const createRecordWithFields = (fields: Record<string, unknown> = {}) => {
-    createRecordMutation.mutate({
-      Title: "",
-      Status: statuses[0] || "Todo",
-      Assignee: [],
-      "Due date": null,
-      Priority: null,
-      Tags: [],
-      Description: "",
-      ...fields,
-    });
+  const createRecordWithFields = async (
+    fields: Record<string, unknown> = {},
+  ): Promise<boolean> => {
+    if (!canEditDatabase) return false;
+    try {
+      await createRecordMutation.mutateAsync({
+        [TITLE_FIELD]: "",
+        ...fields,
+      });
+      return true;
+    } catch {
+      notifications.show({
+        message: t("Failed to create record"),
+        color: "red",
+      });
+      return false;
+    }
   };
 
   const createRecord = (status?: string, title?: string) => {
     const nextTitle = title?.trim();
-    createRecordWithFields({
-      Status: status || statuses[0] || "Todo",
+    return createRecordWithFields({
+      [statusFieldName]: status || statuses[0] || "Todo",
       ...(nextTitle ? { Title: nextTitle } : {}),
     });
   };
 
   const updateRecord = (recordId: string, fields: Record<string, unknown>) => {
+    if (!canEditDatabase) return;
     updateRecordMutation.mutate({ recordId, fields });
   };
 
@@ -1059,19 +1196,23 @@ export default function DatabaseBlockView(props: NodeViewProps) {
     record: DatabaseRecord,
     source?: { databaseId: string; recordId: string },
   ) => {
-    if (!databaseId || !record.pageId) return;
+    if (!canEditDatabase || !databaseId || !record.pageId) return;
 
     await attachPageToDatabaseMutation.mutateAsync({
       databaseId,
       pageId: record.pageId,
-      fields: record.fields,
+      fields: {
+        [statusFieldName]: statuses.includes(record.status)
+          ? record.status
+          : statuses[0],
+      },
       sourceDatabaseId: source?.databaseId,
       sourceRecordId: source?.recordId,
     });
   };
 
   const reorderRecord = (recordId: string, beforeRecordId?: string) => {
-    if (!editor.isEditable) return;
+    if (!canEditDatabase) return;
     if (manualReorderDisabled) {
       notifyManualReorderDisabled();
       return;
@@ -1099,13 +1240,15 @@ export default function DatabaseBlockView(props: NodeViewProps) {
     payload: DragPagePayload | null,
     fields?: Record<string, unknown>,
   ) => {
-    if (!payload?.pageId || !editor.isEditable) return;
+    if (!payload?.pageId || !canEditDatabase) return;
     if (payload.sourceDatabaseId === databaseId) return;
 
     attachPageMutation.mutate({
       pageId: payload.pageId,
       fields: {
-        ...(payload.title ? { Title: payload.title } : {}),
+        ...(!payload.sourceDatabaseId && payload.title
+          ? { Title: payload.title }
+          : {}),
         ...fields,
       },
       sourceDatabaseId: payload.sourceDatabaseId,
@@ -1115,13 +1258,13 @@ export default function DatabaseBlockView(props: NodeViewProps) {
 
   const moveRecordToBoard = async (target: DatabaseBoardTarget) => {
     const record = boardMoveRecord;
-    if (!databaseId || !record?.pageId) return;
+    if (!canEditDatabase || !databaseId || !record?.pageId) return;
 
     try {
       const targetRecord = await attachPageToDatabaseMutation.mutateAsync({
         databaseId: target.id,
         pageId: record.pageId,
-        fields: record.fields,
+        fields: projectRecordFieldsToBoard(record, target),
         sourceDatabaseId: databaseId,
         sourceRecordId: record.id,
       });
@@ -1151,7 +1294,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   };
 
   const moveRecordPageToTrash = (record: DatabaseRecord) => {
-    if (!record.pageId) return;
+    if (!canEditDatabase || !record.pageId) return;
 
     trashRecordPageMutation.mutate(
       { recordId: record.id },
@@ -1161,10 +1304,10 @@ export default function DatabaseBlockView(props: NodeViewProps) {
           showUndoNotification(t("Moved to trash"), async () => {
             try {
               await restorePageMutation.mutateAsync(record.pageId!);
-              notifications.show({ message: t("Restored to board") });
+              notifications.show({ message: t("Restored page") });
             } catch {
               notifications.show({
-                message: t("Failed to restore to board"),
+                message: t("Failed to restore page"),
                 color: "red",
               });
             }
@@ -1176,13 +1319,84 @@ export default function DatabaseBlockView(props: NodeViewProps) {
 
   const commitTitle = () => {
     const nextTitle = titleDraft.trim();
-    if (!databaseId || nextTitle === database?.title) return;
+    if (!canEditDatabase || !databaseId || nextTitle === database?.title)
+      return;
     updateAttributes?.({ title: nextTitle || DEFAULT_DATABASE_TITLE });
     updateTitleMutation.mutate(nextTitle);
   };
 
+  const removeDatabaseBlockNodes = () => {
+    if (!databaseId) return false;
+    const ranges = getDatabaseBlockRanges(editor.state.doc, databaseId);
+    if (ranges.length === 0) return false;
+
+    const transaction = editor.state.tr;
+    for (const range of ranges.reverse()) {
+      transaction.delete(range.from, range.to);
+    }
+    editor.view.dispatch(confirmDatabaseBlockDeletion(transaction));
+    return true;
+  };
+
+  const removeCurrentDatabaseBlockNode = () => {
+    let position: number | undefined;
+    try {
+      const currentPosition = getPos();
+      position =
+        typeof currentPosition === "number" ? currentPosition : undefined;
+    } catch {
+      return false;
+    }
+    if (position === undefined) return false;
+
+    const transaction = editor.state.tr.delete(
+      position,
+      position + node.nodeSize,
+    );
+    editor.view.dispatch(confirmDatabaseBlockDeletion(transaction));
+    return true;
+  };
+
+  const confirmDeleteDatabase = async () => {
+    if (removesOnlyCurrentBlock) {
+      setDeleteModalOpened(false);
+      removeCurrentDatabaseBlockNode();
+      notifications.show({ message: t("Board block removed") });
+      return;
+    }
+
+    if (!hostPageId || !blockId) {
+      notifications.show({
+        message: t("Failed to delete board"),
+        color: "red",
+      });
+      return;
+    }
+
+    try {
+      await deleteDatabaseMutation.mutateAsync({
+        pageId: hostPageId,
+        blockId,
+      });
+      setDeleteModalOpened(false);
+      removeDatabaseBlockNodes();
+      notifications.show({ message: t("Board deleted") });
+    } catch (error) {
+      if (isAxiosError(error) && error.response?.status === 404) {
+        setDeleteModalOpened(false);
+        removeCurrentDatabaseBlockNode();
+        notifications.show({ message: t("Board block removed") });
+        return;
+      }
+      notifications.show({
+        message: t("Failed to delete board"),
+        color: "red",
+      });
+    }
+  };
+
   useEffect(() => {
-    if (!databaseId || !editor.isEditable) return;
+    if (!databaseId || !canEditDatabase) return;
 
     const isInsideThisDatabase = (event: DragEvent) => {
       const root = rootRef.current;
@@ -1225,7 +1439,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
       event.stopPropagation();
       attachPageFromPayload(
         pagePayload,
-        kanbanStatus ? { Status: kanbanStatus } : undefined,
+        kanbanStatus ? { [statusFieldName]: kanbanStatus } : undefined,
       );
     };
 
@@ -1235,7 +1449,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
       document.removeEventListener("dragover", handleDocumentDragOver, true);
       document.removeEventListener("drop", handleDocumentDrop, true);
     };
-  }, [databaseId, editor.isEditable, attachPageMutation]);
+  }, [attachPageMutation, canEditDatabase, databaseId, statusFieldName]);
 
   if (!databaseId) {
     return (
@@ -1268,7 +1482,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
           )
         )
           return;
-        if (!editor.isEditable || !hasDocmostDatabaseDrag(event.dataTransfer))
+        if (!canEditDatabase || !hasDocmostDatabaseDrag(event.dataTransfer))
           return;
         event.preventDefault();
       }}
@@ -1279,7 +1493,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
           )
         )
           return;
-        if (!editor.isEditable || !hasDocmostDatabaseDrag(event.dataTransfer))
+        if (!canEditDatabase || !hasDocmostDatabaseDrag(event.dataTransfer))
           return;
         const target = event.target as HTMLElement;
         if (target.closest("[data-database-drop-zone]")) return;
@@ -1330,7 +1544,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             )}
             value={titleDraft}
             placeholder={t(DEFAULT_DATABASE_TITLE)}
-            disabled={!editor.isEditable}
+            disabled={!canEditDatabase}
             onMouseDown={(event) => event.stopPropagation()}
             onChange={(event) => setTitleDraft(event.currentTarget.value)}
             onBlur={commitTitle}
@@ -1393,6 +1607,32 @@ export default function DatabaseBlockView(props: NodeViewProps) {
               }}
             />
             {editor.isEditable && (
+              <Menu shadow="md" width={220} position="bottom-end" withinPortal>
+                <Menu.Target>
+                  <ActionIcon
+                    variant="subtle"
+                    aria-label={t("Board actions")}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <IconDots size={17} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <Menu.Item
+                    color="red"
+                    leftSection={<IconTrash size={16} />}
+                    onClick={() => setDeleteModalOpened(true)}
+                  >
+                    {t(deleteActionLabel)}
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            )}
+            {canEditDatabase && (
               <Button
                 size="sm"
                 className={classes.newButton}
@@ -1431,9 +1671,10 @@ export default function DatabaseBlockView(props: NodeViewProps) {
               <span>{viewLabel(view, t)}</span>
             </button>
           ))}
-          {editor.isEditable && (
+          {canEditDatabase && (
             <AddViewMenu
               existingViews={views}
+              fields={fields}
               onCreateView={(view) => createViewMutation.mutate(view)}
             />
           )}
@@ -1510,7 +1751,25 @@ export default function DatabaseBlockView(props: NodeViewProps) {
       )}
 
       <div className={classes.body}>
-        {hasQueryError ? (
+        {hasOwnershipMismatch ? (
+          <div className={classes.empty}>
+            <Text fw={600}>{t("This board belongs to another page")}</Text>
+            <Text size="sm" c="dimmed">
+              {t(
+                "Remove this invalid block without deleting the source board or its work items.",
+              )}
+            </Text>
+            {editor.isEditable && (
+              <Button
+                variant="default"
+                leftSection={<IconTrash size={15} />}
+                onClick={() => setDeleteModalOpened(true)}
+              >
+                {t("Remove board block")}
+              </Button>
+            )}
+          </div>
+        ) : hasQueryError ? (
           <div className={classes.empty}>
             <Text fw={600}>{t("Database unavailable")}</Text>
             <Text size="sm" c="dimmed">
@@ -1524,8 +1783,11 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         ) : activeView.type === "kanban" ? (
           <KanbanView
             records={displayedRecords}
+            allRecords={recordsWithViewStatus}
             statuses={statuses}
-            canEdit={editor.isEditable}
+            groupFieldName={statusFieldName}
+            canEdit={canEditDatabase}
+            canEditStructure={canEditSchema}
             databaseId={databaseId}
             userById={userById}
             onOpen={setOpenedRecord}
@@ -1551,7 +1813,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
                 return;
               }
               createFieldMutation.mutate({
-                name: "Status",
+                name: statusFieldName,
                 type: "status",
                 options: nextOptions,
               });
@@ -1567,23 +1829,19 @@ export default function DatabaseBlockView(props: NodeViewProps) {
                 option === status ? nextOption : option,
               );
               if (statusField) {
-                updateFieldMutation.mutate({
+                updateFieldOptionMutation.mutate({
                   fieldName: statusField.name,
-                  options: nextOptions,
+                  operation: "rename",
+                  option: status,
+                  name: nextOption,
                 });
               } else {
                 createFieldMutation.mutate({
-                  name: "Status",
+                  name: statusFieldName,
                   type: "status",
                   options: nextOptions,
                 });
               }
-
-              records
-                .filter((record) => record.status === status)
-                .forEach((record) =>
-                  updateRecord(record.id, { Status: nextOption }),
-                );
             }}
             onDeleteColumn={(status) => {
               const nextOptions = statuses.filter(
@@ -1596,14 +1854,16 @@ export default function DatabaseBlockView(props: NodeViewProps) {
                 return;
 
               if (statusField) {
-                updateFieldMutation.mutate({
+                updateFieldOptionMutation.mutate({
                   fieldName: statusField.name,
-                  options: nextOptions,
+                  operation: "delete",
+                  option: status,
+                  replacementOption: nextOptions[0],
                 });
                 return;
               }
               createFieldMutation.mutate({
-                name: "Status",
+                name: statusFieldName,
                 type: "status",
                 options: nextOptions,
               });
@@ -1614,9 +1874,12 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             onMoveToBoard={setBoardMoveRecord}
             onMoveToTrash={moveRecordPageToTrash}
             onMoveRecord={(recordId, status, beforeRecordId) => {
-              const record = records.find((item) => item.id === recordId);
+              const record = recordsWithViewStatus.find(
+                (item) => item.id === recordId,
+              );
               const statusChanged = record?.status !== status;
-              if (statusChanged) updateRecord(recordId, { Status: status });
+              if (statusChanged)
+                updateRecord(recordId, { [statusFieldName]: status });
 
               if (manualReorderDisabled) {
                 if (beforeRecordId || !statusChanged) {
@@ -1634,7 +1897,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         ) : activeView.type === "gallery" ? (
           <GalleryView
             records={displayedRecords}
-            canEdit={editor.isEditable}
+            canEdit={canEditDatabase}
             databaseId={databaseId}
             onOpen={setOpenedRecord}
             onAttachPage={attachPageFromPayload}
@@ -1643,7 +1906,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         ) : activeView.type === "calendar" ? (
           <CalendarView
             records={displayedRecords}
-            canEdit={editor.isEditable}
+            canEdit={canEditDatabase}
             databaseId={databaseId}
             onOpen={setOpenedRecord}
             onAttachPage={attachPageFromPayload}
@@ -1653,7 +1916,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         ) : activeView.type === "list" ? (
           <ListView
             records={displayedRecords}
-            canEdit={editor.isEditable}
+            canEdit={canEditDatabase}
             databaseId={databaseId}
             onOpen={setOpenedRecord}
             onOpenFullPage={openFullPage}
@@ -1663,7 +1926,7 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         ) : activeView.type === "timeline" ? (
           <TimelineView
             records={displayedRecords}
-            canEdit={editor.isEditable}
+            canEdit={canEditDatabase}
             databaseId={databaseId}
             onOpen={setOpenedRecord}
             onAttachPage={attachPageFromPayload}
@@ -1681,15 +1944,17 @@ export default function DatabaseBlockView(props: NodeViewProps) {
             onCreate={(fields) => createRecordWithFields(fields)}
             onAttachPage={attachPageFromPayload}
             onReorderRecord={reorderRecord}
-            canEdit={editor.isEditable}
+            canEdit={canEditDatabase}
           />
         ) : (
           <TableView
             records={displayedRecords}
             fields={fields}
             statuses={statuses}
+            statusFieldName={statusFieldName}
             users={userOptions}
-            canEdit={editor.isEditable}
+            canEdit={canEditDatabase}
+            canEditSchema={canEditSchema}
             databaseId={databaseId}
             onCreate={() => createRecord()}
             onOpen={setOpenedRecord}
@@ -1733,8 +1998,10 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         record={openedRecord}
         fields={fields}
         statuses={statuses}
+        statusFieldName={statusFieldName}
         users={userOptions}
-        canEdit={editor.isEditable && openedRecord?.canEdit !== false}
+        canEdit={canEditDatabase && openedRecord?.canEdit !== false}
+        canEditSchema={canEditSchema}
         onClose={() => setOpenedRecord(null)}
         onOpenFullPage={() => openFullPage(openedRecord)}
         onAssigneeSearch={setUserSearch}
@@ -1742,6 +2009,83 @@ export default function DatabaseBlockView(props: NodeViewProps) {
         onCreateField={(input) => createFieldMutation.mutate(input)}
         onUpdateField={(input) => updateFieldMutation.mutate(input)}
       />
+
+      <Modal
+        opened={deleteModalOpened}
+        onClose={() => {
+          if (!deleteDatabaseMutation.isPending) setDeleteModalOpened(false);
+        }}
+        title={t(deleteActionLabel)}
+        centered
+        size="md"
+        closeOnClickOutside={!deleteDatabaseMutation.isPending}
+        closeOnEscape={!deleteDatabaseMutation.isPending}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <Stack gap="md">
+          {hasOwnershipMismatch ? (
+            <>
+              <Text size="sm">{t("This board belongs to another page")}</Text>
+              <Text size="sm" c="dimmed">
+                {t(
+                  "Remove this invalid block without deleting the source board or its work items.",
+                )}
+              </Text>
+            </>
+          ) : hasDuplicateOwnerReference ? (
+            <>
+              <Text size="sm">
+                {t("This board appears more than once on this page")}
+              </Text>
+              <Text size="sm" c="dimmed">
+                {t(
+                  "Remove this duplicate block without deleting the shared board or its work items.",
+                )}
+              </Text>
+            </>
+          ) : externalDatabase ? (
+            <>
+              <Text size="sm">
+                {t(
+                  "This removes the board from Docmost. The external APITable datasheet and its records will not be deleted.",
+                )}
+              </Text>
+              <Text size="sm" c="dimmed">
+                {t("Manage the external data in APITable.")}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text size="sm">
+                {t(
+                  "This will delete the board and move all work item pages, including their child pages, to trash.",
+                )}
+              </Text>
+              <Text size="sm" c="dimmed">
+                {t(
+                  "The board cannot be restored. Work item pages can still be restored from trash as regular pages.",
+                )}
+              </Text>
+            </>
+          )}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              disabled={deleteDatabaseMutation.isPending}
+              onClick={() => setDeleteModalOpened(false)}
+            >
+              {t("Cancel")}
+            </Button>
+            <Button
+              color="red"
+              loading={deleteDatabaseMutation.isPending}
+              onClick={() => void confirmDeleteDatabase()}
+            >
+              {t(deleteActionLabel)}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </NodeViewWrapper>
   );
 }
@@ -1837,8 +2181,11 @@ function BoardPickerModal({
 
 function KanbanView({
   records,
+  allRecords,
   statuses,
+  groupFieldName,
   canEdit,
+  canEditStructure,
   databaseId,
   userById,
   onOpen,
@@ -1855,14 +2202,17 @@ function KanbanView({
   onUpdateTitle,
 }: {
   records: DatabaseRecord[];
+  allRecords: DatabaseRecord[];
   statuses: string[];
+  groupFieldName: string;
   canEdit: boolean;
+  canEditStructure: boolean;
   databaseId?: string;
   userById: Map<string, DatabaseUser>;
   onOpen: (record: DatabaseRecord) => void;
   requestedDraftStatus: string | null;
   onDraftRequestHandled: () => void;
-  onCreate: (status: string, title?: string) => void;
+  onCreate: (status: string, title?: string) => Promise<boolean>;
   onCreateColumn: (name: string, afterStatus?: string) => void;
   onRenameColumn: (status: string, name: string) => void;
   onDeleteColumn: (status: string) => void;
@@ -1969,6 +2319,9 @@ function KanbanView({
         const columnRecords = records.filter(
           (record) => record.status === status,
         );
+        const totalColumnRecordCount = allRecords.filter(
+          (record) => record.status === status,
+        ).length;
         return (
           <Fragment key={status}>
             <div
@@ -2021,7 +2374,7 @@ function KanbanView({
                   event.stopPropagation();
                   setDropColumnStatus(null);
                   setDropTargetRecordId(null);
-                  onAttachPage(pagePayload, { Status: status });
+                  onAttachPage(pagePayload, { [groupFieldName]: status });
                 }
               }}
             >
@@ -2054,7 +2407,7 @@ function KanbanView({
                   </Badge>
                 )}
                 <Group gap={3} className={classes.columnActions}>
-                  {canEdit && (
+                  {canEditStructure && (
                     <Menu
                       shadow="md"
                       width={190}
@@ -2095,7 +2448,7 @@ function KanbanView({
                           color="red"
                           leftSection={<IconTrash size={15} />}
                           disabled={
-                            columnRecords.length > 0 || statuses.length <= 1
+                            totalColumnRecordCount > 0 || statuses.length <= 1
                           }
                           onClick={() => onDeleteColumn(status)}
                         >
@@ -2104,7 +2457,7 @@ function KanbanView({
                       </Menu.Dropdown>
                     </Menu>
                   )}
-                  {canEdit && (
+                  {canEditStructure && (
                     <ActionIcon
                       variant="subtle"
                       size="sm"
@@ -2148,6 +2501,7 @@ function KanbanView({
                     onUpdateTitle={(title) => onUpdateTitle(record.id, title)}
                     onMoveRecord={onMoveRecord}
                     onAttachPage={onAttachPage}
+                    groupFieldName={groupFieldName}
                     isDropTarget={dropTargetRecordId === record.id}
                     onDragOverRecord={() => {
                       setDropTargetRecordId(record.id);
@@ -2162,9 +2516,10 @@ function KanbanView({
                 ))}
                 {canEdit && draftStatus === status && (
                   <DraftTaskCard
-                    onCreate={(title) => {
-                      onCreate(status, title);
-                      setDraftStatus(null);
+                    onCreate={async (title) => {
+                      const created = await onCreate(status, title);
+                      if (created) setDraftStatus(null);
+                      return created;
                     }}
                     onCancel={() => setDraftStatus(null)}
                   />
@@ -2189,7 +2544,7 @@ function KanbanView({
           </Fragment>
         );
       })}
-      {canEdit &&
+      {canEditStructure &&
         (addingColumnAfter === ADD_COLUMN_AT_END ? (
           renderAddColumnInput(null)
         ) : (
@@ -2212,16 +2567,22 @@ function DraftTaskCard({
   onCreate,
   onCancel,
 }: {
-  onCreate: (title: string) => void;
+  onCreate: (title: string) => Promise<boolean>;
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
   const [title, setTitle] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittedRef = useRef(false);
 
-  const commit = () => {
+  const commit = async () => {
     const nextTitle = title.trim();
-    if (!nextTitle) return;
-    onCreate(nextTitle);
+    if (!nextTitle || submittedRef.current) return;
+    submittedRef.current = true;
+    setIsSubmitting(true);
+    const created = await onCreate(nextTitle);
+    if (!created) submittedRef.current = false;
+    setIsSubmitting(false);
   };
 
   return (
@@ -2231,15 +2592,15 @@ function DraftTaskCard({
           autoFocus
           className={classes.cardTitleInput}
           value={title}
+          disabled={isSubmitting}
           placeholder={t("Task name...")}
           onChange={(event) => setTitle(event.currentTarget.value)}
-          onBlur={() => {
-            if (!title.trim()) onCancel();
-          }}
+          onBlur={() => (title.trim() ? void commit() : onCancel())}
           onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) return;
             if (event.key === "Enter") {
               event.preventDefault();
-              commit();
+              void commit();
             }
             if (event.key === "Escape") {
               event.preventDefault();
@@ -2263,6 +2624,7 @@ function TaskCard({
   onUpdateTitle,
   onMoveRecord,
   onAttachPage,
+  groupFieldName,
   isDropTarget,
   onDragOverRecord,
   onClearDropTarget,
@@ -2285,6 +2647,7 @@ function TaskCard({
     payload: DragPagePayload | null,
     fields?: Record<string, unknown>,
   ) => void;
+  groupFieldName: string;
   isDropTarget: boolean;
   onDragOverRecord: () => void;
   onClearDropTarget: () => void;
@@ -2340,7 +2703,8 @@ function TaskCard({
           if (recordId !== record.id) onMoveRecord(recordId, status, record.id);
           return;
         }
-        if (pagePayload) onAttachPage(pagePayload, { Status: status });
+        if (pagePayload)
+          onAttachPage(pagePayload, { [groupFieldName]: status });
       }}
     >
       <div className={classes.cardMain}>
@@ -2439,6 +2803,7 @@ function TableView({
   records,
   fields,
   statuses,
+  statusFieldName,
   users,
   databaseId,
   onOpen,
@@ -2453,10 +2818,12 @@ function TableView({
   onCreateField,
   onUpdateField,
   canEdit,
+  canEditSchema,
 }: {
   records: DatabaseRecord[];
   fields: DatabaseFieldDefinition[];
   statuses: string[];
+  statusFieldName: string;
   users: PeopleOption[];
   databaseId?: string;
   onOpen: (record: DatabaseRecord) => void;
@@ -2474,6 +2841,7 @@ function TableView({
   onCreateField: (input: CreateFieldInput) => void;
   onUpdateField: (input: UpdateFieldInput) => void;
   canEdit: boolean;
+  canEditSchema: boolean;
 }) {
   const { t } = useTranslation();
   const visibleFields = fields.length
@@ -2564,7 +2932,7 @@ function TableView({
             key={field.name}
             field={field}
             width={columnWidths[index] ?? defaultWidths[index]}
-            canEdit={canEdit}
+            canEdit={canEditSchema}
             onCreateField={onCreateField}
             onUpdateField={onUpdateField}
             onFilterField={onFilterField}
@@ -2572,7 +2940,10 @@ function TableView({
             onResizeStart={(event) => startColumnResize(index, event)}
           />
         ))}
-        <AddPropertyHeader canEdit={canEdit} onCreateField={onCreateField} />
+        <AddPropertyHeader
+          canEdit={canEditSchema}
+          onCreateField={onCreateField}
+        />
 
         {records.map((record) => (
           <RecordRow
@@ -2580,6 +2951,7 @@ function TableView({
             record={record}
             fields={visibleFields}
             statuses={statuses}
+            statusFieldName={statusFieldName}
             users={users}
             canEdit={isRecordEditable(canEdit, record)}
             databaseId={databaseId}
@@ -2618,6 +2990,7 @@ function RecordRow({
   record,
   fields,
   statuses,
+  statusFieldName,
   users,
   canEdit,
   databaseId,
@@ -2635,6 +3008,7 @@ function RecordRow({
   record: DatabaseRecord;
   fields: DatabaseFieldDefinition[];
   statuses: string[];
+  statusFieldName: string;
   users: PeopleOption[];
   canEdit: boolean;
   databaseId?: string;
@@ -2697,6 +3071,7 @@ function RecordRow({
           record={record}
           field={field}
           statuses={statuses}
+          statusFieldName={statusFieldName}
           users={users}
           canEdit={canEdit}
           databaseId={databaseId}
@@ -3400,6 +3775,7 @@ function EditableTableCell({
   record,
   field,
   statuses,
+  statusFieldName,
   users,
   canEdit,
   databaseId,
@@ -3418,6 +3794,7 @@ function EditableTableCell({
   record: DatabaseRecord;
   field: DatabaseFieldDefinition;
   statuses: string[];
+  statusFieldName: string;
   users: PeopleOption[];
   canEdit: boolean;
   databaseId?: string;
@@ -3663,7 +4040,8 @@ function EditableTableCell({
   }
 
   if (isSelectField(field)) {
-    const options = field.name === "Status" ? statuses : (field.options ?? []);
+    const options =
+      field.name === statusFieldName ? statuses : (field.options ?? []);
     return (
       <div
         className={clsx(
@@ -3677,7 +4055,7 @@ function EditableTableCell({
           value={rawValue}
           options={options}
           canEdit={canEdit}
-          clearable={field.name !== "Status"}
+          clearable={field.name !== statusFieldName}
           onChange={onUpdate}
         />
       </div>
@@ -4515,8 +4893,10 @@ function RecordSidePage({
   record,
   fields,
   statuses,
+  statusFieldName,
   users,
   canEdit,
+  canEditSchema,
   onClose,
   onOpenFullPage,
   onAssigneeSearch,
@@ -4528,8 +4908,10 @@ function RecordSidePage({
   record: DatabaseRecord | null;
   fields: DatabaseFieldDefinition[];
   statuses: string[];
+  statusFieldName: string;
   users: PeopleOption[];
   canEdit: boolean;
+  canEditSchema: boolean;
   onClose: () => void;
   onOpenFullPage: () => void;
   onAssigneeSearch: (query: string) => void;
@@ -4651,13 +5033,14 @@ function RecordSidePage({
                   field={field}
                   value={draftFields[field.name]}
                   statuses={statuses}
+                  statusFieldName={statusFieldName}
                   users={users}
                   canEdit={canEdit}
                   onAssigneeSearch={onAssigneeSearch}
                   onUpdate={(value) => commitField(field.name, value)}
                 />
               ))}
-            {canEdit && (
+            {canEditSchema && (
               <Popover
                 width={520}
                 shadow="md"
@@ -4712,6 +5095,7 @@ function RecordPropertyRow({
   field,
   value,
   statuses,
+  statusFieldName,
   users,
   canEdit,
   onAssigneeSearch,
@@ -4720,6 +5104,7 @@ function RecordPropertyRow({
   field: DatabaseFieldDefinition;
   value: unknown;
   statuses: string[];
+  statusFieldName: string;
   users: PeopleOption[];
   canEdit: boolean;
   onAssigneeSearch: (query: string) => void;
@@ -4747,9 +5132,11 @@ function RecordPropertyRow({
         ) : isSelectField(field) ? (
           <SelectValuePicker
             value={value}
-            options={field.name === "Status" ? statuses : (field.options ?? [])}
+            options={
+              field.name === statusFieldName ? statuses : (field.options ?? [])
+            }
             canEdit={canEdit}
-            clearable={field.name !== "Status"}
+            clearable={field.name !== statusFieldName}
             onChange={onUpdate}
           />
         ) : field.type === "date" ? (

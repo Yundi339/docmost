@@ -3,6 +3,7 @@ import {
   createDatabaseField,
   createDatabaseRecord,
   createDatabaseView,
+  deleteDatabase,
   attachDatabasePage,
   detachDatabaseRecord,
   getDatabaseInfo,
@@ -11,6 +12,7 @@ import {
   reorderDatabaseRecord,
   trashDatabaseRecordPage,
   updateDatabaseField,
+  updateDatabaseFieldOption,
   updateDatabaseTitle,
   updateDatabaseRecord,
 } from "@/features/database/services/database-service";
@@ -33,6 +35,26 @@ export function useDatabaseRecordsQuery(databaseId?: string) {
     queryKey: ["database-records", databaseId],
     queryFn: () => listDatabaseRecords(databaseId!),
     enabled: Boolean(databaseId),
+  });
+}
+
+export function useDeleteDatabaseMutation(databaseId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (context: { pageId: string; blockId: string }) =>
+      deleteDatabase({ databaseId: databaseId!, ...context }),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["database", databaseId] });
+      queryClient.removeQueries({
+        queryKey: ["database-records", databaseId],
+      });
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          ["database-targets", "sidebar-full-tree", "trash-list"].includes(
+            query.queryKey[0] as string,
+          ),
+      });
+    },
   });
 }
 
@@ -327,6 +349,28 @@ export function useUpdateDatabaseFieldMutation(databaseId?: string) {
       type?: DatabaseFieldDefinition["type"];
       options?: string[];
     }) => updateDatabaseField({ databaseId: databaseId!, ...input }),
+    onSuccess: (database) => {
+      queryClient.setQueryData<DatabaseBlockInfo>(
+        ["database", databaseId],
+        database,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["database-records", databaseId],
+      });
+    },
+  });
+}
+
+export function useUpdateDatabaseFieldOptionMutation(databaseId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      fieldName: string;
+      operation: "rename" | "delete";
+      option: string;
+      name?: string;
+      replacementOption?: string;
+    }) => updateDatabaseFieldOption({ databaseId: databaseId!, ...input }),
     onSuccess: (database) => {
       queryClient.setQueryData<DatabaseBlockInfo>(
         ["database", databaseId],

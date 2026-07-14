@@ -11,6 +11,7 @@ import { WatcherModule } from '../watcher/watcher.module';
 import { LabelModule } from '../label/label.module';
 import { PageLifecycleService } from './services/page-lifecycle.service';
 import { PageOperationPolicyService } from './policies/page-operation-policy.service';
+import { PageAccessModule } from './page-access/page-access.module';
 
 @Module({
   controllers: [PageController],
@@ -30,6 +31,12 @@ import { PageOperationPolicyService } from './policies/page-operation-policy.ser
     PageLifecycleService,
     PageOperationPolicyService,
   ],
-  imports: [StorageModule, CollaborationModule, WatcherModule, LabelModule],
+  imports: [
+    StorageModule,
+    CollaborationModule,
+    WatcherModule,
+    LabelModule,
+    PageAccessModule,
+  ],
 })
 export class PageModule {}

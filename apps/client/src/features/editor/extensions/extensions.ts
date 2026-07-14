@@ -81,6 +81,7 @@ import ImageView from "@/features/editor/components/image/image-view.tsx";
 import CalloutView from "@/features/editor/components/callout/callout-view.tsx";
 import StatusView from "@/features/editor/components/status/status-view.tsx";
 import DatabaseBlockView from "@/features/database/components/database-block-view";
+import { DatabaseBlockDeleteGuard } from "@/features/database/extensions/database-block-delete-guard";
 import VideoView from "@/features/editor/components/video/video-view.tsx";
 import AudioView from "@/features/editor/components/audio/audio-view.tsx";
 import AttachmentView from "@/features/editor/components/attachment/attachment-view.tsx";
@@ -376,6 +377,7 @@ export const mainExtensions = [
   DatabaseBlock.configure({
     view: DatabaseBlockView,
   }),
+  DatabaseBlockDeleteGuard,
   MarkdownClipboard.configure({
     transformPastedText: true,
   }),
@@ -415,7 +417,7 @@ const TEMPLATE_EXCLUDED_SLASH_ITEMS = new Set([
   "Draw.io (diagrams.net)",
   "Excalidraw (Whiteboard)",
   "Audio",
-  "Synced block"
+  "Synced block",
 ]);
 
 const TemplateSlashCommand = Command.configure({

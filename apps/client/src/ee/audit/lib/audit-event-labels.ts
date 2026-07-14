@@ -51,6 +51,7 @@ export const auditEventLabels: Record<string, string> = {
   "mcp.oauth_revoked": "Revoked MCP OAuth connection",
 
   "database.created": "Created database",
+  "database.deleted": "Deleted database",
   "database.view_created": "Created database view",
   "database.title_updated": "Updated database title",
   "database.field_created": "Created database field",
@@ -206,6 +207,7 @@ export const eventFilterOptions: EventGroup[] = [
     group: "Database",
     items: [
       { value: "database.created", label: "Created database" },
+      { value: "database.deleted", label: "Deleted database" },
       {
         value: "database.view_created",
         label: "Created database view",

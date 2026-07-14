@@ -31,13 +31,15 @@ describe('DatabasePageLifecycleListener', () => {
       listActiveDatabaseRecordsByPage: jest.fn().mockResolvedValue([record]),
       listActiveDatabaseOwnersByRecordPages: jest.fn().mockResolvedValue([]),
       findById: jest.fn().mockResolvedValue(database),
-      updateDatabaseRecordFields: jest.fn().mockResolvedValue(undefined),
+      updateDatabaseRecordField: jest.fn().mockResolvedValue(undefined),
     };
     const pageRepo = { findById: jest.fn().mockResolvedValue(page) };
     const wsTreeService = {
       notifyPageQueriesInvalidated: jest.fn().mockResolvedValue(undefined),
     };
-    const auditService = { logWithContext: jest.fn() };
+    const auditService = {
+      logWithContext: jest.fn().mockResolvedValue(undefined),
+    };
     return {
       listener: new DatabasePageLifecycleListener(
         databaseRepo as never,
@@ -60,10 +62,11 @@ describe('DatabasePageLifecycleListener', () => {
       workspaceId: page.workspaceId,
     });
 
-    expect(databaseRepo.updateDatabaseRecordFields).toHaveBeenCalledWith(
+    expect(databaseRepo.updateDatabaseRecordField).toHaveBeenCalledWith(
       database.id,
       record.id,
-      { Task: page.title, Status: 'Todo' },
+      'Task',
+      page.title,
       page.lastUpdatedById,
     );
     expect(auditService.logWithContext).toHaveBeenCalledWith(
@@ -87,7 +90,7 @@ describe('DatabasePageLifecycleListener', () => {
       workspaceId: page.workspaceId,
     });
 
-    expect(databaseRepo.updateDatabaseRecordFields).not.toHaveBeenCalled();
+    expect(databaseRepo.updateDatabaseRecordField).not.toHaveBeenCalled();
   });
 
   it('invalidates board and tree queries after generic trash or restore', async () => {

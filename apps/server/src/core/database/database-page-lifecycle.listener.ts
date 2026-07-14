@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
-import { Json } from '@docmost/db/types/db';
 import { EventName } from '../../common/events/event.contants';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import {
@@ -94,14 +93,15 @@ export class DatabasePageLifecycleListener {
     const title = page.title?.trim() || 'Untitled';
     if (fields[primaryFieldName] === title) return;
 
-    await this.databaseRepo.updateDatabaseRecordFields(
+    await this.databaseRepo.updateDatabaseRecordField(
       database.id,
       record.id,
-      { ...fields, [primaryFieldName]: title } as unknown as Json,
+      primaryFieldName,
+      title,
       page.lastUpdatedById,
     );
 
-    this.auditService.logWithContext(
+    await this.auditService.logWithContext(
       {
         event: AuditEvent.DATABASE_RECORD_UPDATED,
         resourceType: AuditResource.PAGE,

@@ -18,6 +18,7 @@ import { LoggerExtension } from './extensions/logger.extension';
 import { CollaborationHandler } from './collaboration.handler';
 import { CollabHistoryService } from './services/collab-history.service';
 import { WatcherModule } from '../core/watcher/watcher.module';
+import { PageContentLifecycleService } from './services/page-content-lifecycle.service';
 
 @Module({
   providers: [
@@ -28,8 +29,9 @@ import { WatcherModule } from '../core/watcher/watcher.module';
     HistoryProcessor,
     CollabHistoryService,
     CollaborationHandler,
+    PageContentLifecycleService,
   ],
-  exports: [CollaborationGateway],
+  exports: [CollaborationGateway, PageContentLifecycleService],
   imports: [TokenModule, WatcherModule],
 })
 export class CollaborationModule implements OnModuleInit, OnModuleDestroy {

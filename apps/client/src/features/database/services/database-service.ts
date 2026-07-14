@@ -24,6 +24,20 @@ export async function getDatabaseInfo(
   return req.data;
 }
 
+export async function deleteDatabase(input: {
+  databaseId: string;
+  pageId: string;
+  blockId: string;
+}): Promise<{
+  databaseId: string;
+  alreadyDeleted: boolean;
+  workItemCount: number;
+  trashedPageCount: number;
+}> {
+  const req = await api.post("/databases/delete", input);
+  return req.data;
+}
+
 export async function listDatabaseTargets(input: {
   excludeDatabaseId?: string;
 }): Promise<DatabaseBoardTarget[]> {
@@ -173,6 +187,21 @@ export async function updateDatabaseField(input: {
 }): Promise<DatabaseBlockInfo> {
   const req = await api.post<DatabaseBlockInfo>(
     "/databases/fields/update",
+    input,
+  );
+  return req.data;
+}
+
+export async function updateDatabaseFieldOption(input: {
+  databaseId: string;
+  fieldName: string;
+  operation: "rename" | "delete";
+  option: string;
+  name?: string;
+  replacementOption?: string;
+}): Promise<DatabaseBlockInfo> {
+  const req = await api.post<DatabaseBlockInfo>(
+    "/databases/fields/options/update",
     input,
   );
   return req.data;

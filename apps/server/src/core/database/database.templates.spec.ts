@@ -91,6 +91,19 @@ describe('database templates', () => {
     ).toBe('Renamed title');
   });
 
+  it('normalizes the card status from the configured board group field', () => {
+    expect(
+      normalizeApitableRecord(
+        {
+          id: 'record_1',
+          fields: { Title: 'Task', Phase: 'Review' },
+        },
+        'Title',
+        'Phase',
+      ).status,
+    ).toBe('Review');
+  });
+
   it('infers a primary field for legacy schemas', () => {
     expect(
       normalizeDatabaseFields([

@@ -67,6 +67,8 @@ export const DATABASE_FIELD_TYPES = [
 
 export const DATABASE_FIELD_POSITIONS = ['left', 'right', 'end'] as const;
 
+export const DATABASE_FIELD_OPTION_OPERATIONS = ['rename', 'delete'] as const;
+
 export class CreateDatabaseDto {
   @IsUUID()
   pageId: string;
@@ -93,6 +95,16 @@ export class CreateDatabaseDto {
 export class DatabaseInfoDto {
   @IsUUID()
   databaseId: string;
+}
+
+export class DeleteDatabaseDto extends DatabaseInfoDto {
+  @IsUUID()
+  pageId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(128)
+  blockId: string;
 }
 
 export class CreateDatabaseViewDto extends DatabaseInfoDto {
@@ -163,6 +175,31 @@ export class UpdateDatabaseFieldDto extends DatabaseInfoDto {
   @IsString({ each: true })
   @MaxLength(200, { each: true })
   options?: string[];
+}
+
+export class UpdateDatabaseFieldOptionDto extends DatabaseInfoDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
+  fieldName: string;
+
+  @IsIn(DATABASE_FIELD_OPTION_OPERATIONS)
+  operation: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  option: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  replacementOption?: string;
 }
 
 export class ListDatabaseRecordsDto extends DatabaseInfoDto {}

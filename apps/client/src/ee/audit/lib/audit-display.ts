@@ -43,8 +43,16 @@ const auditFieldLabels: Record<string, string> = {
   viewType: "View type",
   fieldName: "Field name",
   fieldType: "Field type",
+  option: "Option",
+  optionOperation: "Field option operation",
+  affectedRecordCount: "Affected record count",
   changedFields: "Changed fields",
   seededRecordCount: "Seeded record count",
+  workItemCount: "Work item count",
+  trashedPageCount: "Trashed page count",
+  archivedDatabaseCount: "Archived database count",
+  archivedRecordCount: "Archived record count",
+  externalDataPreserved: "External data preserved",
   sourceDatabaseId: "Source database ID",
   beforeRecordId: "Previous record ID",
   afterRecordId: "Next record ID",
@@ -113,6 +121,8 @@ const auditValueLabels: Record<string, string> = {
   session_replaced: "Session replaced",
   service_shutdown: "Service shutdown",
   page_title: "Page title",
+  rename: "Rename",
+  delete: "Delete",
 };
 
 export function getAuditFieldLabel(key: string): string {

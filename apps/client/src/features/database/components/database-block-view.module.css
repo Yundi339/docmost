@@ -3,7 +3,6 @@
   background: transparent;
 }
 
-
 .databaseBlockFullscreen {
   position: fixed !important;
   inset: 0 !important;
@@ -11,7 +10,10 @@
   margin: 0 !important;
   padding: 28px 48px 48px;
   overflow: auto;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-8));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-8)
+  );
 }
 
 .databaseBlockFullscreen .header {
@@ -63,7 +65,8 @@
 
 .toolbar {
   padding: 2px 0 12px;
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .viewTabs {
@@ -91,11 +94,17 @@
 }
 
 .viewTab:hover {
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-6)
+  );
 }
 
 .activeViewTab {
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-5)
+  );
   color: light-dark(var(--mantine-color-gray-9), var(--mantine-color-white));
 }
 
@@ -131,7 +140,10 @@
 .toolbarButton:hover,
 .addViewButton:hover,
 .toolbarButtonActive {
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-6)
+  );
   color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-0));
 }
 
@@ -143,7 +155,10 @@
 .addViewPopover {
   padding: 12px !important;
   border-radius: 14px !important;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7)) !important;
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-7)
+  ) !important;
 }
 
 .addViewHeader {
@@ -159,9 +174,13 @@
 .addViewTile {
   appearance: none;
   min-height: 94px;
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
   border-radius: 10px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-8));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-8)
+  );
   color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-gray-1));
   display: flex;
   flex-direction: column;
@@ -215,7 +234,10 @@
 }
 
 .addDataSourceRow:hover {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-5)
+  );
 }
 
 .addDataSourceRow svg:last-child {
@@ -227,7 +249,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-top: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   margin-top: 10px;
   padding: 10px 4px 0;
 }
@@ -262,7 +285,10 @@
   flex: 0 0 290px;
   width: 290px;
   border-radius: 8px;
-  background: light-dark(rgba(var(--column-rgb), 0.07), rgba(var(--column-rgb), 0.12));
+  background: light-dark(
+    rgba(var(--column-rgb), 0.07),
+    rgba(var(--column-rgb), 0.12)
+  );
   padding: 8px;
   min-height: 180px;
   scroll-snap-align: start;
@@ -315,7 +341,10 @@
   min-height: 42px;
   border: 0;
   border-radius: 8px;
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-6)
+  );
   color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-1));
   font: inherit;
   font-size: 14px;
@@ -331,13 +360,20 @@
 }
 
 .addColumnButton:hover {
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-5)
+  );
   color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-0));
 }
 
 .addColumnInput {
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-7)
+  );
   color: light-dark(var(--mantine-color-gray-9), var(--mantine-color-gray-0));
   padding: 0 12px;
   box-shadow: light-dark(0 8px 30px rgba(15, 15, 15, 0.14), none);
@@ -345,7 +381,10 @@
 
 .addColumnInput:focus {
   outline: none;
-  border-color: light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-2));
+  border-color: light-dark(
+    var(--mantine-color-gray-4),
+    var(--mantine-color-dark-2)
+  );
 }
 
 .columnActions {
@@ -362,9 +401,13 @@
   width: 132px;
   min-width: 0;
   height: 24px;
-  border: 1px solid light-dark(rgba(var(--column-rgb), 0.3), rgba(var(--column-rgb), 0.45));
+  border: 1px solid
+    light-dark(rgba(var(--column-rgb), 0.3), rgba(var(--column-rgb), 0.45));
   border-radius: 5px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-6)
+  );
   color: light-dark(rgb(var(--column-rgb)), var(--mantine-color-gray-0));
   font: inherit;
   font-size: 12px;
@@ -374,14 +417,21 @@
 
 .columnNameInput:focus {
   outline: none;
-  border-color: light-dark(rgba(var(--column-rgb), 0.55), rgba(var(--column-rgb), 0.75));
+  border-color: light-dark(
+    rgba(var(--column-rgb), 0.55),
+    rgba(var(--column-rgb), 0.75)
+  );
 }
 
 .card {
   position: relative;
-  border: 1px solid light-dark(rgba(var(--column-rgb), 0.18), rgba(var(--column-rgb), 0.2));
+  border: 1px solid
+    light-dark(rgba(var(--column-rgb), 0.18), rgba(var(--column-rgb), 0.2));
   border-radius: 6px;
-  background: light-dark(var(--mantine-color-white), rgba(var(--column-rgb), 0.16));
+  background: light-dark(
+    var(--mantine-color-white),
+    rgba(var(--column-rgb), 0.16)
+  );
   box-shadow: light-dark(0 1px 2px rgba(15, 15, 15, 0.08), none);
   transition:
     background 120ms ease,
@@ -431,8 +481,14 @@
 }
 
 .card:hover {
-  border-color: light-dark(rgba(var(--column-rgb), 0.35), rgba(var(--column-rgb), 0.45));
-  background: light-dark(var(--mantine-color-white), rgba(var(--column-rgb), 0.22));
+  border-color: light-dark(
+    rgba(var(--column-rgb), 0.35),
+    rgba(var(--column-rgb), 0.45)
+  );
+  background: light-dark(
+    var(--mantine-color-white),
+    rgba(var(--column-rgb), 0.22)
+  );
 }
 
 .cardMain {
@@ -474,16 +530,20 @@
   right: 6px;
   opacity: 1;
   transition: opacity 120ms ease;
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
   border-radius: 5px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-6)
+  );
   color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-gray-1));
   pointer-events: auto;
   z-index: 3;
 }
 
 .card:hover .cardMenuButton,
-.cardMenuButton[data-expanded='true'] {
+.cardMenuButton[data-expanded="true"] {
   opacity: 1;
 }
 
@@ -501,7 +561,10 @@
   max-width: 100%;
   min-height: 22px;
   border-radius: 999px;
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-5)
+  );
   color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-1));
   font-size: 12px;
   font-weight: 550;
@@ -527,7 +590,8 @@
   background: transparent;
   color: light-dark(rgb(var(--column-rgb)), var(--mantine-color-gray-2));
   font: inherit;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   padding: 0 14px;
   cursor: pointer;
 }
@@ -546,8 +610,10 @@
 .tableGrid {
   display: grid;
   min-width: 860px;
-  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
-  border-left: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-top: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-left: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .rowOverlayControls {
@@ -564,11 +630,14 @@
 }
 
 .rowOverlayControls::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: -3px;
   border-radius: 8px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-8));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-8)
+  );
   opacity: 0;
   z-index: -1;
 }
@@ -621,7 +690,10 @@
 .rowPlusButton:hover,
 .rowGripButton:hover,
 .rowSelectButton:hover {
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-5)
+  );
   color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-0));
 }
 
@@ -637,7 +709,7 @@
 }
 
 .rowDragDropZone::after {
-  content: '';
+  content: "";
   position: absolute;
   inset-inline: 0;
   top: -3px;
@@ -662,8 +734,10 @@
   align-items: center;
   gap: 8px;
   border: 0;
-  border-right: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-right: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   background: transparent;
   color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-1));
   font: inherit;
@@ -676,7 +750,10 @@
 
 .tableHeaderCell:hover,
 .addPropertyHeader:hover {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-6)
+  );
 }
 
 .tableHeaderCell {
@@ -694,7 +771,10 @@
 }
 
 .columnResizeHandle:hover {
-  background: light-dark(var(--mantine-color-blue-1), var(--mantine-color-blue-9));
+  background: light-dark(
+    var(--mantine-color-blue-1),
+    var(--mantine-color-blue-9)
+  );
 }
 
 .addPropertyHeader {
@@ -707,8 +787,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border-right: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-right: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   background: transparent;
   color: inherit;
   font-size: 14px;
@@ -717,16 +799,23 @@
 }
 
 .tableCell:focus-within {
-  box-shadow: inset 0 0 0 1px light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
+  box-shadow: inset 0 0 0 1px
+    light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
   z-index: 1;
 }
 
 .tableCell:hover {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-6)
+  );
 }
 
 .tableCellRowDrop {
-  background: light-dark(rgba(35, 131, 226, 0.12), rgba(35, 131, 226, 0.18)) !important;
+  background: light-dark(
+    rgba(35, 131, 226, 0.12),
+    rgba(35, 131, 226, 0.18)
+  ) !important;
   box-shadow: inset 0 2px 0 rgba(35, 131, 226, 0.86);
 }
 
@@ -759,9 +848,13 @@
 
 .inlineOpenButton {
   appearance: none;
-  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
   border-radius: 5px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-6)
+  );
   color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-gray-2));
   display: inline-flex;
   align-items: center;
@@ -793,7 +886,10 @@
 }
 
 .inlineFullPageButton:hover {
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-5)
+  );
   color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-0));
 }
 
@@ -813,7 +909,8 @@
   align-items: center;
   gap: 8px;
   border: 0;
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   background: transparent;
   color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-2));
   font: inherit;
@@ -823,7 +920,10 @@
 }
 
 .newRowButton:hover {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-6)
+  );
 }
 
 .notionPopover,
@@ -831,7 +931,10 @@
 .datePopover {
   padding: 8px !important;
   border-radius: 10px !important;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7)) !important;
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-7)
+  ) !important;
 }
 
 .popoverSearch,
@@ -841,9 +944,13 @@
   align-items: center;
   gap: 8px;
   min-height: 34px;
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
   border-radius: 7px;
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-8)
+  );
   color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-1));
   padding: 0 9px;
 }
@@ -901,13 +1008,17 @@
 .personOption:hover,
 .popoverFooter:hover,
 .viewSettingsItem:hover {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-5)
+  );
 }
 
 .popoverFooter {
   margin-top: 6px;
   color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-1));
-  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-top: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   border-radius: 0;
   padding-top: 7px;
 }
@@ -1008,35 +1119,65 @@
   padding: 4px 8px;
 }
 
-.optionPill[data-tone='gray'] {
-  --option-bg: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
-  --option-text: light-dark(var(--mantine-color-gray-7), var(--mantine-color-gray-1));
+.optionPill[data-tone="gray"] {
+  --option-bg: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-5)
+  );
+  --option-text: light-dark(
+    var(--mantine-color-gray-7),
+    var(--mantine-color-gray-1)
+  );
 }
 
-.optionPill[data-tone='blue'] {
-  --option-bg: light-dark(var(--mantine-color-blue-1), rgba(34, 139, 230, 0.22));
-  --option-text: light-dark(var(--mantine-color-blue-8), var(--mantine-color-blue-1));
+.optionPill[data-tone="blue"] {
+  --option-bg: light-dark(
+    var(--mantine-color-blue-1),
+    rgba(34, 139, 230, 0.22)
+  );
+  --option-text: light-dark(
+    var(--mantine-color-blue-8),
+    var(--mantine-color-blue-1)
+  );
 }
 
-.optionPill[data-tone='green'] {
+.optionPill[data-tone="green"] {
   --option-bg: light-dark(var(--mantine-color-green-1), rgba(64, 192, 87, 0.2));
-  --option-text: light-dark(var(--mantine-color-green-8), var(--mantine-color-green-1));
+  --option-text: light-dark(
+    var(--mantine-color-green-8),
+    var(--mantine-color-green-1)
+  );
 }
 
-.optionPill[data-tone='red'] {
+.optionPill[data-tone="red"] {
   --option-bg: light-dark(var(--mantine-color-red-1), rgba(250, 82, 82, 0.2));
-  --option-text: light-dark(var(--mantine-color-red-8), var(--mantine-color-red-1));
+  --option-text: light-dark(
+    var(--mantine-color-red-8),
+    var(--mantine-color-red-1)
+  );
 }
 
-.optionPill[data-tone='yellow'] {
-  --option-bg: light-dark(var(--mantine-color-yellow-1), rgba(250, 176, 5, 0.18));
-  --option-text: light-dark(var(--mantine-color-yellow-9), var(--mantine-color-yellow-1));
+.optionPill[data-tone="yellow"] {
+  --option-bg: light-dark(
+    var(--mantine-color-yellow-1),
+    rgba(250, 176, 5, 0.18)
+  );
+  --option-text: light-dark(
+    var(--mantine-color-yellow-9),
+    var(--mantine-color-yellow-1)
+  );
 }
 
-.optionPill[data-tone='purple'],
-.optionPill[data-tone='pink'] {
-  --option-bg: light-dark(var(--mantine-color-violet-1), rgba(121, 80, 242, 0.2));
-  --option-text: light-dark(var(--mantine-color-violet-8), var(--mantine-color-violet-1));
+.optionPill[data-tone="purple"],
+.optionPill[data-tone="pink"] {
+  --option-bg: light-dark(
+    var(--mantine-color-violet-1),
+    rgba(121, 80, 242, 0.2)
+  );
+  --option-text: light-dark(
+    var(--mantine-color-violet-8),
+    var(--mantine-color-violet-1)
+  );
 }
 
 .optionDot {
@@ -1051,7 +1192,8 @@
   align-items: center;
   gap: 9px;
   padding: 4px 6px 8px;
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .viewSettingsList {
@@ -1085,7 +1227,8 @@
 }
 
 .dateSettings {
-  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-top: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   margin-top: 8px;
   padding-top: 6px;
 }
@@ -1116,7 +1259,10 @@
 
 .dateSettingRow:hover,
 .dateClearButton:hover {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-5)
+  );
 }
 
 .dateClearButton {
@@ -1133,16 +1279,23 @@
 .propertyMenu {
   width: 100%;
   padding: 10px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-7)
+  );
 }
 
 .propertyNameInputWrap {
   display: flex;
   align-items: center;
   gap: 9px;
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
   border-radius: 8px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-8));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-8)
+  );
   color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-gray-2));
   padding: 0 10px;
   height: 42px;
@@ -1186,7 +1339,10 @@
 }
 
 .propertyMenuItem:hover:not(:disabled) {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-5)
+  );
 }
 
 .propertyMenuItem:disabled {
@@ -1199,7 +1355,8 @@
 }
 
 .propertySeparator {
-  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-top: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   margin: 8px 0;
 }
 
@@ -1241,7 +1398,10 @@
 
 .propertyTypeButton:hover:not(:disabled),
 .propertyTypeButtonActive {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-5)
+  );
 }
 
 .propertyTypeButton:disabled {
@@ -1267,7 +1427,10 @@
 
 .optionEditorRow:hover,
 .optionAddRow:hover {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-5)
+  );
 }
 
 .optionEditorRow input,
@@ -1305,7 +1468,10 @@
 
 .optionEditorRow button:hover,
 .optionAddRow button:hover {
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-4));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-4)
+  );
   color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-0));
 }
 
@@ -1317,28 +1483,28 @@
   flex: 0 0 auto;
 }
 
-.optionColorDot[data-tone='gray'] {
+.optionColorDot[data-tone="gray"] {
   --option-dot-color: var(--mantine-color-gray-5);
 }
 
-.optionColorDot[data-tone='blue'] {
+.optionColorDot[data-tone="blue"] {
   --option-dot-color: var(--mantine-color-blue-6);
 }
 
-.optionColorDot[data-tone='green'] {
+.optionColorDot[data-tone="green"] {
   --option-dot-color: var(--mantine-color-green-6);
 }
 
-.optionColorDot[data-tone='red'] {
+.optionColorDot[data-tone="red"] {
   --option-dot-color: var(--mantine-color-red-6);
 }
 
-.optionColorDot[data-tone='yellow'] {
+.optionColorDot[data-tone="yellow"] {
   --option-dot-color: var(--mantine-color-yellow-6);
 }
 
-.optionColorDot[data-tone='purple'],
-.optionColorDot[data-tone='pink'] {
+.optionColorDot[data-tone="purple"],
+.optionColorDot[data-tone="pink"] {
   --option-dot-color: var(--mantine-color-violet-6);
 }
 
@@ -1355,9 +1521,13 @@
   right: 0;
   width: min(720px, 54vw);
   height: 100vh;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-8));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-8)
+  );
   color: light-dark(var(--mantine-color-gray-9), var(--mantine-color-gray-0));
-  border-left: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-left: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   box-shadow: none;
   overflow: auto;
 }
@@ -1459,7 +1629,8 @@
 .recordNativePage {
   margin-top: 38px;
   padding-top: 18px;
-  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-top: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .recordNativePage :global(.editor-container) {
@@ -1472,7 +1643,8 @@
 }
 
 .empty {
-  border: 1px dashed light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border: 1px dashed
+    light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
   border-radius: 8px;
   padding: 18px;
   text-align: center;
@@ -1491,9 +1663,13 @@
 
 .galleryCard {
   appearance: none;
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   border-radius: 10px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-6)
+  );
   color: inherit;
   text-align: left;
   padding: 12px;
@@ -1501,11 +1677,15 @@
 }
 
 .galleryCard:hover {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-5)
+  );
 }
 
 .calendarView {
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   border-radius: 10px;
   overflow: hidden;
 }
@@ -1515,7 +1695,8 @@
   display: flex;
   align-items: center;
   padding: 0 12px;
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-1));
   font-size: 14px;
   font-weight: 700;
@@ -1529,8 +1710,10 @@
 
 .calendarWeekday,
 .calendarCell {
-  border-right: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-right: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .calendarWeekday {
@@ -1538,7 +1721,10 @@
   display: flex;
   align-items: center;
   padding: 0 10px;
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-7)
+  );
   color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-2));
   font-size: 12px;
   font-weight: 650;
@@ -1547,11 +1733,17 @@
 .calendarCell {
   min-height: 112px;
   padding: 7px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-8));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-8)
+  );
 }
 
 .calendarCellMuted {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-7)
+  );
   color: light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
 }
 
@@ -1567,7 +1759,10 @@
   width: 100%;
   border: 0;
   border-radius: 5px;
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-5)
+  );
   color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-1));
   display: block;
   min-height: 24px;
@@ -1583,43 +1778,57 @@
   cursor: pointer;
 }
 
-.calendarRecord[data-tone='blue'] {
+.calendarRecord[data-tone="blue"] {
   background: light-dark(var(--mantine-color-blue-1), rgba(34, 139, 230, 0.22));
   color: light-dark(var(--mantine-color-blue-8), var(--mantine-color-blue-1));
 }
 
-.calendarRecord[data-tone='green'] {
+.calendarRecord[data-tone="green"] {
   background: light-dark(var(--mantine-color-green-1), rgba(64, 192, 87, 0.2));
   color: light-dark(var(--mantine-color-green-8), var(--mantine-color-green-1));
 }
 
-.calendarRecord[data-tone='red'] {
+.calendarRecord[data-tone="red"] {
   background: light-dark(var(--mantine-color-red-1), rgba(250, 82, 82, 0.2));
   color: light-dark(var(--mantine-color-red-8), var(--mantine-color-red-1));
 }
 
-.calendarRecord[data-tone='yellow'] {
-  background: light-dark(var(--mantine-color-yellow-1), rgba(250, 176, 5, 0.18));
-  color: light-dark(var(--mantine-color-yellow-9), var(--mantine-color-yellow-1));
+.calendarRecord[data-tone="yellow"] {
+  background: light-dark(
+    var(--mantine-color-yellow-1),
+    rgba(250, 176, 5, 0.18)
+  );
+  color: light-dark(
+    var(--mantine-color-yellow-9),
+    var(--mantine-color-yellow-1)
+  );
 }
 
-.calendarRecord[data-tone='purple'],
-.calendarRecord[data-tone='pink'] {
-  background: light-dark(var(--mantine-color-violet-1), rgba(121, 80, 242, 0.2));
-  color: light-dark(var(--mantine-color-violet-8), var(--mantine-color-violet-1));
+.calendarRecord[data-tone="purple"],
+.calendarRecord[data-tone="pink"] {
+  background: light-dark(
+    var(--mantine-color-violet-1),
+    rgba(121, 80, 242, 0.2)
+  );
+  color: light-dark(
+    var(--mantine-color-violet-8),
+    var(--mantine-color-violet-1)
+  );
 }
 
 .listView {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-top: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .listItem,
 .feedItem {
   appearance: none;
   border: 0;
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   background: transparent;
   color: inherit;
   display: flex;
@@ -1633,7 +1842,10 @@
 
 .listItem:hover,
 .feedItem:hover {
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-6)
+  );
 }
 
 .listItem:hover .inlineOpenButton {
@@ -1666,7 +1878,8 @@
 }
 
 .timelineView {
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   border-radius: 10px;
   overflow: hidden;
 }
@@ -1677,7 +1890,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 10px;
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .timelineGrid {
@@ -1691,8 +1905,12 @@
   min-height: 42px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-7)
+  );
   color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-1));
   font-size: 13px;
   font-weight: 650;
@@ -1700,7 +1918,8 @@
 
 .timelineRowsHeader {
   padding: 0 12px;
-  border-right: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-right: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .timelineMonths {
@@ -1713,7 +1932,8 @@
   display: flex;
   align-items: center;
   padding: 0 12px;
-  border-right: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-right: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .timelineRow {
@@ -1729,13 +1949,15 @@
   min-height: 46px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-bottom: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .timelineName {
   gap: 8px;
   padding: 0 12px;
-  border-right: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-right: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   font-weight: 650;
 }
 
@@ -1763,29 +1985,38 @@
   white-space: nowrap;
 }
 
-.timelineBar[data-tone='gray'] {
-  background: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+.timelineBar[data-tone="gray"] {
+  background: light-dark(
+    var(--mantine-color-gray-2),
+    var(--mantine-color-dark-5)
+  );
 }
 
-.timelineBar[data-tone='blue'] {
+.timelineBar[data-tone="blue"] {
   background: light-dark(var(--mantine-color-blue-2), rgba(34, 139, 230, 0.38));
 }
 
-.timelineBar[data-tone='green'] {
+.timelineBar[data-tone="green"] {
   background: light-dark(var(--mantine-color-green-2), rgba(64, 192, 87, 0.34));
 }
 
-.timelineBar[data-tone='yellow'] {
-  background: light-dark(var(--mantine-color-yellow-2), rgba(250, 176, 5, 0.34));
+.timelineBar[data-tone="yellow"] {
+  background: light-dark(
+    var(--mantine-color-yellow-2),
+    rgba(250, 176, 5, 0.34)
+  );
 }
 
-.timelineBar[data-tone='red'] {
+.timelineBar[data-tone="red"] {
   background: light-dark(var(--mantine-color-red-2), rgba(250, 82, 82, 0.34));
 }
 
-.timelineBar[data-tone='purple'],
-.timelineBar[data-tone='pink'] {
-  background: light-dark(var(--mantine-color-violet-2), rgba(121, 80, 242, 0.34));
+.timelineBar[data-tone="purple"],
+.timelineBar[data-tone="pink"] {
+  background: light-dark(
+    var(--mantine-color-violet-2),
+    rgba(121, 80, 242, 0.34)
+  );
 }
 
 .dashboardView {
@@ -1797,9 +2028,13 @@
 .metricCard,
 .chartCard,
 .formPreview {
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   border-radius: 12px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-6)
+  );
   padding: 18px;
 }
 
@@ -1835,19 +2070,19 @@
   background: var(--mantine-color-violet-5);
 }
 
-.chartCard span[data-tone='blue'] {
+.chartCard span[data-tone="blue"] {
   background: var(--mantine-color-blue-5);
 }
 
-.chartCard span[data-tone='green'] {
+.chartCard span[data-tone="green"] {
   background: var(--mantine-color-green-5);
 }
 
-.chartCard span[data-tone='yellow'] {
+.chartCard span[data-tone="yellow"] {
   background: var(--mantine-color-yellow-5);
 }
 
-.chartCard span[data-tone='red'] {
+.chartCard span[data-tone="red"] {
   background: var(--mantine-color-red-5);
 }
 
@@ -1904,10 +2139,14 @@
   min-height: 30px;
   margin: 10px 0 4px;
   padding: 3px 6px 3px 9px;
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   border-radius: 7px;
   color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-7)
+  );
   font-size: 13px;
 }
 
@@ -1939,7 +2178,10 @@
 
 .filterBar button:hover,
 .settingsInlineButton:hover {
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-5)
+  );
 }
 
 .settingsSection {
@@ -1947,7 +2189,8 @@
   flex-direction: column;
   gap: 7px;
   padding: 8px 0;
-  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-top: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 
 .settingsSection:first-of-type {
@@ -1968,9 +2211,13 @@
 .settingsSection input {
   width: 100%;
   min-height: 30px;
-  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border: 1px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   border-radius: 7px;
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  background: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-7)
+  );
   color: light-dark(var(--mantine-color-gray-9), var(--mantine-color-gray-0));
   padding: 0 9px;
   font: inherit;
@@ -1978,7 +2225,10 @@
 }
 
 .viewSettingsItemActive {
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-5)
+  );
   color: light-dark(var(--mantine-color-gray-9), var(--mantine-color-white));
 }
 
@@ -1989,7 +2239,10 @@
   min-height: 32px;
   padding: 0 8px;
   border-radius: 7px;
-  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  background: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-6)
+  );
   color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
   font-size: 13px;
 }

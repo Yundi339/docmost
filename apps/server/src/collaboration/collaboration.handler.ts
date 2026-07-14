@@ -88,7 +88,11 @@ export class CollaborationHandler {
         await this.withYdocConnection(
           hocuspocus,
           documentName,
-          { user },
+          {
+            user,
+            contentUpdateOrigin: 'direct',
+            propagateStoreErrors: true,
+          },
           (doc) => {
             const fragment = doc.getXmlFragment('default');
 
@@ -125,10 +129,29 @@ export class CollaborationHandler {
       documentName,
       context,
     );
+    let transactionError: unknown;
     try {
       await connection.transact(fn);
-    } finally {
-      await connection.disconnect();
+    } catch (error) {
+      transactionError = error;
     }
+
+    let disconnectError: unknown;
+    try {
+      await connection.disconnect();
+    } catch (error) {
+      disconnectError = error;
+    }
+
+    if (transactionError) {
+      if (disconnectError) {
+        this.logger.error(
+          `Failed to close direct collaboration connection ${documentName}`,
+          disconnectError,
+        );
+      }
+      throw transactionError;
+    }
+    if (disconnectError) throw disconnectError;
   }
 }
