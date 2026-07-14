@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
@@ -67,6 +68,8 @@ import {
   validateDatabaseRecordFields,
 } from './database-record-validator';
 import { PageOperationPolicyService } from '../page/policies/page-operation-policy.service';
+import { SystemDiagnosticsService } from '../system-status/system-diagnostics.service';
+import { SystemDiagnosticCode } from '../system-status/system-diagnostics.types';
 
 interface DatabaseMetadata {
   provider?: string;
@@ -106,6 +109,8 @@ export class DatabaseService {
     private readonly wsTreeService: WsTreeService,
     private readonly eventEmitter: EventEmitter2,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    @Optional()
+    private readonly systemDiagnosticsService?: SystemDiagnosticsService,
   ) {}
 
   async createDatabase(dto: CreateDatabaseDto, user: User) {
@@ -2713,7 +2718,7 @@ export class DatabaseService {
   }
 
   private async notifyDatabaseChanged(
-    database: Pick<DatabaseBlock, 'id' | 'pageId' | 'spaceId'>,
+    database: Pick<DatabaseBlock, 'id' | 'pageId' | 'spaceId' | 'workspaceId'>,
     changes: { info?: boolean; records?: boolean; treeMetadata?: boolean },
   ) {
     const invalidations = [];
@@ -2740,6 +2745,11 @@ export class DatabaseService {
       this.logger.error(
         `Failed to publish database invalidation for ${database.id}`,
         error,
+      );
+      void this.systemDiagnosticsService?.recordIncident(
+        database.workspaceId,
+        SystemDiagnosticCode.REALTIME_INVALIDATION_FAILURE,
+        { source: 'database_invalidation' },
       );
     }
   }

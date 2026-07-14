@@ -86,6 +86,7 @@ describe('DatabaseService', () => {
   };
   let eventEmitter: { emit: jest.Mock };
   let auditService: { log: jest.Mock };
+  let systemDiagnosticsService: { recordIncident: jest.Mock };
   let trx: Record<string, never>;
   let service: DatabaseService;
 
@@ -174,6 +175,9 @@ describe('DatabaseService', () => {
     };
     eventEmitter = { emit: jest.fn() };
     auditService = { log: jest.fn() };
+    systemDiagnosticsService = {
+      recordIncident: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new DatabaseService(
       databaseRepo as never,
@@ -186,6 +190,7 @@ describe('DatabaseService', () => {
       wsTreeService as never,
       eventEmitter as never,
       auditService as never,
+      systemDiagnosticsService as never,
     );
   });
 
@@ -1198,6 +1203,11 @@ describe('DatabaseService', () => {
 
     expect(auditService.log).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'database.deleted' }),
+    );
+    expect(systemDiagnosticsService.recordIncident).toHaveBeenCalledWith(
+      database.workspaceId,
+      'realtime_invalidation_failure',
+      { source: 'database_invalidation' },
     );
   });
 

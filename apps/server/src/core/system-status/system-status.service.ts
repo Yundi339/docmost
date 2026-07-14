@@ -4,6 +4,8 @@ import { sql } from 'kysely';
 import { Redis } from 'ioredis';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
+import { SystemDiagnosticsResponse } from './system-diagnostics.types';
+import { SystemDiagnosticsService } from './system-diagnostics.service';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const packageJson = require('../../../package.json');
 
@@ -33,6 +35,7 @@ export interface SystemStatusResponse {
     connectedClients: number | null;
     error?: string;
   };
+  diagnostics: SystemDiagnosticsResponse;
   timestamp: string;
 }
 
@@ -41,12 +44,14 @@ export class SystemStatusService {
   constructor(
     @InjectKysely() private readonly db: KyselyDB,
     private readonly environmentService: EnvironmentService,
+    private readonly systemDiagnosticsService: SystemDiagnosticsService,
   ) {}
 
-  async getStatus(): Promise<SystemStatusResponse> {
-    const [database, redis] = await Promise.all([
+  async getStatus(workspaceId: string): Promise<SystemStatusResponse> {
+    const [database, redis, diagnostics] = await Promise.all([
       this.getDatabaseStatus(),
       this.getRedisStatus(),
+      this.systemDiagnosticsService.getDiagnostics(workspaceId),
     ]);
 
     return {
@@ -62,6 +67,7 @@ export class SystemStatusService {
       },
       database,
       redis,
+      diagnostics,
       timestamp: new Date().toISOString(),
     };
   }

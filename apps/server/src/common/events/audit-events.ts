@@ -55,6 +55,11 @@ export const AuditEvent = {
   DATABASE_RECORD_MOVED: 'database.record_moved',
   DATABASE_RECORD_TRASHED: 'database.record_trashed',
 
+  // System diagnostics
+  SYSTEM_DIAGNOSTIC_DETECTED: 'system.diagnostic_detected',
+  SYSTEM_DIAGNOSTIC_RESOLVED: 'system.diagnostic_resolved',
+  SYSTEM_DIAGNOSTIC_OCCURRED: 'system.diagnostic_occurred',
+
   // Space
   SPACE_CREATED: 'space.created',
   SPACE_UPDATED: 'space.updated',

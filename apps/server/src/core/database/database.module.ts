@@ -9,9 +9,15 @@ import { DatabasePagePolicyContributor } from './database-page-policy.contributo
 import { DatabasePageLifecycleListener } from './database-page-lifecycle.listener';
 import { CollaborationModule } from '../../collaboration/collaboration.module';
 import { DatabaseContentLifecycleContributor } from './database-content-lifecycle.contributor';
+import { SystemStatusModule } from '../system-status/system-status.module';
 
 @Module({
-  imports: [PageAccessModule, PageModule, CollaborationModule],
+  imports: [
+    PageAccessModule,
+    PageModule,
+    CollaborationModule,
+    SystemStatusModule,
+  ],
   controllers: [DatabaseController],
   providers: [
     DatabaseService,

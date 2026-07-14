@@ -29,6 +29,6 @@ export class SystemStatusController {
     if (user.role !== UserRole.OWNER) {
       throw new ForbiddenException();
     }
-    return this.systemStatusService.getStatus();
+    return this.systemStatusService.getStatus(user.workspaceId);
   }
 }
