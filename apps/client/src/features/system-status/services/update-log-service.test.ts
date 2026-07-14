@@ -45,4 +45,21 @@ describe("parseUpdateLog", () => {
       }),
     ).toThrow();
   });
+
+  it("accepts an unlimited release history", () => {
+    const releases = Array.from({ length: 75 }, (_, index) => ({
+      version: `26.07.11.${index}`,
+      date: "2026-07-11",
+      title: `Release ${index}`,
+      changes: [{ type: "added" as const, text: `Change ${index}` }],
+    }));
+
+    const result = parseUpdateLog({
+      schemaVersion: 1,
+      updatedAt: "2026-07-11T22:14:49+08:00",
+      releases,
+    });
+
+    expect(result.releases).toHaveLength(75);
+  });
 });

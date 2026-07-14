@@ -21,7 +21,7 @@ const updateLogSchema = z
   .object({
     schemaVersion: z.literal(1),
     updatedAt: z.iso.datetime({ offset: true }),
-    releases: z.array(updateLogReleaseSchema).max(50),
+    releases: z.array(updateLogReleaseSchema),
   })
   .strict();
 
