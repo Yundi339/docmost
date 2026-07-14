@@ -1414,7 +1414,7 @@
   "Connections": "Connections",
   "Connected clients": "Connected clients",
   "Memory used": "Memory used",
-  "Auto-refreshes every 5 seconds.": "Auto-refreshes every 5 seconds.",
+  "Auto-refreshes every 10 seconds.": "Auto-refreshes every 10 seconds.",
   "Last updated": "Last updated",
   "Failed to load system status.": "Failed to load system status.",
   "AI is only available in the Docmost enterprise edition. Contact sales@docmost.com.": "AI is only available in the Docmost enterprise edition. Contact sales@docmost.com.",

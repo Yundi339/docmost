@@ -187,7 +187,7 @@ export default function SystemStatus() {
       <Group gap="xs" mb="md" c="dimmed">
         <IconCircleDashed size={14} />
         <Text size="xs">
-          {t("Auto-refreshes every 5 seconds.")}
+          {t("Auto-refreshes every 10 seconds.")}
           {dataUpdatedAt > 0 && (
             <>
               {" "}
