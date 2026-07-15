@@ -20,6 +20,10 @@ import {
 import { buildPageUrl } from "@/features/page/page.utils.ts";
 import { getSpaceUrl } from "@/lib/config.ts";
 import { useQueryEmit } from "@/features/websocket/use-query-emit.ts";
+import {
+  getSpaceTree,
+  replaceSpaceTree,
+} from "@/features/page/tree/utils";
 
 export type UseTreeMutation = {
   handleMove: (sourceId: string, op: DropOp) => Promise<void>;
@@ -44,7 +48,8 @@ export function useTreeMutation(spaceId: string): UseTreeMutation {
 
   const handleMove = useCallback(
     async (sourceId: string, op: DropOp) => {
-      const before = store.get(treeDataAtom);
+      const allBefore = store.get(treeDataAtom);
+      const before = getSpaceTree(allBefore, spaceId);
       const { tree: after, result } = treeModel.move(before, sourceId, op);
       if (after === before) return;
 
@@ -79,12 +84,12 @@ export function useTreeMutation(spaceId: string): UseTreeMutation {
         } as Partial<SpaceTreeNode>);
       }
 
-      setData(optimistic);
+      setData((current) => replaceSpaceTree(current, spaceId, optimistic));
 
       try {
         await movePageMutation.mutateAsync(payload);
       } catch {
-        setData(before);
+        setData((current) => replaceSpaceTree(current, spaceId, before));
         notifications.show({
           message: t("Failed to move page"),
           color: "red",
@@ -154,7 +159,7 @@ export function useTreeMutation(spaceId: string): UseTreeMutation {
 
       // Read latest tree at call time so lastIndex is computed against the
       // current sidebar state.
-      const current = store.get(treeDataAtom);
+      const current = getSpaceTree(store.get(treeDataAtom), spaceId);
       let lastIndex: number;
       if (parentId === null) {
         lastIndex = current.length;
@@ -165,7 +170,14 @@ export function useTreeMutation(spaceId: string): UseTreeMutation {
 
       setData((prev) => {
         if (treeModel.find(prev, newNode.id)) return prev;
-        return treeModel.insert(prev, parentId, newNode, lastIndex);
+        const spaceTree = getSpaceTree(prev, spaceId);
+        const nextSpaceTree = treeModel.insert(
+          spaceTree,
+          parentId,
+          newNode,
+          lastIndex,
+        );
+        return replaceSpaceTree(prev, spaceId, nextSpaceTree);
       });
 
       setTimeout(() => {

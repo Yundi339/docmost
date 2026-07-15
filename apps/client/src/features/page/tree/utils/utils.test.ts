@@ -5,6 +5,8 @@ import {
   buildTree,
   buildTreeWithChildren,
   expandOpenStateForPath,
+  getSpaceTree,
+  replaceSpaceTree,
   setTreeNodeOpenState,
 } from "./utils";
 import type { IPage } from "@/features/page/types/page.types";
@@ -136,5 +138,28 @@ describe("tree open state", () => {
     expect(expandOpenStateForPath(openState, [root.children[0]])).toBe(
       openState,
     );
+  });
+});
+
+describe("space tree isolation", () => {
+  it("extracts only roots belonging to the requested space", () => {
+    const otherSpace = { ...node("other", "A"), spaceId: "space-2" };
+    const tree = [otherSpace, node("one", "A"), node("two", "B")];
+
+    expect(getSpaceTree(tree, "space-1").map((item) => item.id)).toEqual([
+      "one",
+      "two",
+    ]);
+  });
+
+  it("replaces one space without moving or modifying other spaces", () => {
+    const otherBefore = { ...node("other-before", "A"), spaceId: "space-2" };
+    const otherAfter = { ...node("other-after", "B"), spaceId: "space-3" };
+    const tree = [otherBefore, node("old-one", "A"), node("old-two", "B"), otherAfter];
+    const replacement = [node("new-first", "A"), node("new-second", "B")];
+
+    expect(
+      replaceSpaceTree(tree, "space-1", replacement).map((item) => item.id),
+    ).toEqual(["other-before", "new-first", "new-second", "other-after"]);
   });
 });

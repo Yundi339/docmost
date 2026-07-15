@@ -48,6 +48,23 @@ describe('dropOpToMovePayload', () => {
     expect(p).toEqual({ pageId: 'b', parentPageId: null, position: 'START|A' });
   });
 
+  it('reorder-before at root ignores position keys from other spaces', () => {
+    const currentSpace = [
+      n('first', 'a22gG'),
+      n('source', 'aB1s6'),
+    ];
+    const p = dropOpToMovePayload(currentSpace, 'source', {
+      kind: 'reorder-before',
+      targetId: 'first',
+    });
+
+    expect(p).toEqual({
+      pageId: 'source',
+      parentPageId: null,
+      position: 'START|a22gG',
+    });
+  });
+
   it('reparent to root sends parentPageId null and a root-level position', () => {
     const p = dropOpToMovePayload(tree, 'a2', {
       kind: 'reparent',

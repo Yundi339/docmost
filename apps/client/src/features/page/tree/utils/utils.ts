@@ -11,6 +11,33 @@ export function sortPositionKeys(keys: any[]) {
   });
 }
 
+export function getSpaceTree(
+  tree: SpaceTreeNode[],
+  spaceId: string,
+): SpaceTreeNode[] {
+  return tree.filter((node) => node.spaceId === spaceId);
+}
+
+export function replaceSpaceTree(
+  tree: SpaceTreeNode[],
+  spaceId: string,
+  replacement: SpaceTreeNode[],
+): SpaceTreeNode[] {
+  const firstIndex = tree.findIndex((node) => node.spaceId === spaceId);
+  const withoutSpace = tree.filter((node) => node.spaceId !== spaceId);
+
+  if (firstIndex === -1) return [...withoutSpace, ...replacement];
+
+  const insertionIndex = tree
+    .slice(0, firstIndex)
+    .filter((node) => node.spaceId !== spaceId).length;
+  return [
+    ...withoutSpace.slice(0, insertionIndex),
+    ...replacement,
+    ...withoutSpace.slice(insertionIndex),
+  ];
+}
+
 export function buildTree(pages: IPage[]): SpaceTreeNode[] {
   const pageMap: Record<string, SpaceTreeNode> = {};
 

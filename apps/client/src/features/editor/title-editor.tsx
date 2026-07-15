@@ -125,29 +125,33 @@ export function TitleEditor({
       return;
     }
 
-    updateTitlePageMutationAsync({
+    void updateTitlePageMutationAsync({
       pageId: pageId,
       title: titleEditor.getText(),
-    }).then((page) => {
-      const event: UpdateEvent = {
-        operation: "updateOne",
-        spaceId: page.spaceId,
-        entity: ["pages"],
-        id: page.id,
-        payload: {
-          title: page.title,
-          slugId: page.slugId,
-          parentPageId: page.parentPageId,
-          icon: page.icon,
-        },
-      };
+    })
+      .then((page) => {
+        const event: UpdateEvent = {
+          operation: "updateOne",
+          spaceId: page.spaceId,
+          entity: ["pages"],
+          id: page.id,
+          payload: {
+            title: page.title,
+            slugId: page.slugId,
+            parentPageId: page.parentPageId,
+            icon: page.icon,
+          },
+        };
 
-      if (page.title !== titleEditor.getText()) return;
+        if (page.title !== titleEditor.getText()) return;
 
-      updatePageData(page);
+        updatePageData(page);
 
-      localEmitter.emit("message", event);
-    });
+        localEmitter.emit("message", event);
+      })
+      .catch((error) => {
+        console.error("Error updating page title:", error);
+      });
   }, [pageId, title, titleEditor]);
 
   const debounceUpdate = useDebouncedCallback(saveTitle, 500);

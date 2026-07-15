@@ -7,6 +7,10 @@ import { SpaceTreeNode } from "@/features/page/tree/types.ts";
 import { useQueryClient } from "@tanstack/react-query";
 import { treeModel } from "@/features/page/tree/model/tree-model";
 import localEmitter from "@/lib/local-emitter.ts";
+import {
+  getSpaceTree,
+  replaceSpaceTree,
+} from "@/features/page/tree/utils";
 
 export const useTreeSocket = () => {
   const [socket] = useAtom(socketAtom);
@@ -62,9 +66,10 @@ export const useTreeSocket = () => {
           invalidateTreeMetadata(event.spaceId);
           setTreeData((prev) => {
             if (treeModel.find(prev, event.payload.data.id)) return prev;
+            const spaceTree = getSpaceTree(prev, event.spaceId);
             const newParentId = event.payload.parentId as string | null;
-            let next = treeModel.insert(
-              prev,
+            let nextSpaceTree = treeModel.insert(
+              spaceTree,
               newParentId,
               event.payload.data,
               event.payload.index,
@@ -72,23 +77,27 @@ export const useTreeSocket = () => {
             // Mirror the emitter: flip new parent's hasChildren to true so
             // the chevron renders on the receiver.
             if (newParentId) {
-              next = treeModel.update(next, newParentId, {
+              nextSpaceTree = treeModel.update(nextSpaceTree, newParentId, {
                 hasChildren: true,
               } as Partial<SpaceTreeNode>);
             }
-            return next;
+            return replaceSpaceTree(prev, event.spaceId, nextSpaceTree);
           });
           break;
         case "moveTreeNode":
           invalidateTreeMetadata(event.spaceId);
           setTreeData((prev) => {
-            const sourceBefore = treeModel.find(prev, event.payload.id);
+            const spaceTree = getSpaceTree(prev, event.spaceId);
+            const sourceBefore = treeModel.find(
+              spaceTree,
+              event.payload.id,
+            );
             if (!sourceBefore) return prev;
             const oldParentId =
               (sourceBefore as SpaceTreeNode).parentPageId ?? null;
             const newParentId = event.payload.parentId as string | null;
 
-            const placed = treeModel.place(prev, event.payload.id, {
+            const placed = treeModel.place(spaceTree, event.payload.id, {
               parentId: newParentId,
               index: event.payload.index,
             });
@@ -96,8 +105,12 @@ export const useTreeSocket = () => {
             // parent is not available locally. Falling back to removing the
             // source keeps the UI consistent until the full tree refetch
             // restores the server-confirmed location.
-            if (placed === prev) {
-              return treeModel.remove(prev, event.payload.id);
+            if (placed === spaceTree) {
+              return replaceSpaceTree(
+                prev,
+                event.spaceId,
+                treeModel.remove(spaceTree, event.payload.id),
+              );
             }
 
             let next = treeModel.update(placed, event.payload.id, {
@@ -121,7 +134,7 @@ export const useTreeSocket = () => {
               } as Partial<SpaceTreeNode>);
             }
 
-            return next;
+            return replaceSpaceTree(prev, event.spaceId, next);
           });
           break;
         case "deleteTreeNode":
