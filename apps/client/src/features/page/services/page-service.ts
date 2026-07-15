@@ -6,6 +6,7 @@ import {
   IMovePageUnder,
   IMovePageToSpace,
   IPage,
+  IPageBatchOperationResult,
   IPageInput,
   SidebarPagesParams,
 } from '@/features/page/types/page.types';
@@ -47,6 +48,26 @@ export async function getDeletedPages(
 
 export async function restorePage(pageId: string): Promise<IPage> {
   const response = await api.post<IPage>("/pages/restore", { pageId });
+  return response.data;
+}
+
+export async function restorePages(
+  pageIds: string[],
+): Promise<IPageBatchOperationResult> {
+  const response = await api.post<IPageBatchOperationResult>(
+    "/pages/batch-restore",
+    { pageIds },
+  );
+  return response.data;
+}
+
+export async function permanentlyDeletePages(
+  pageIds: string[],
+): Promise<IPageBatchOperationResult> {
+  const response = await api.post<IPageBatchOperationResult>(
+    "/pages/batch-delete",
+    { pageIds, confirm: true },
+  );
   return response.data;
 }
 

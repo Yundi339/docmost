@@ -1,4 +1,9 @@
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  Equals,
+  IsArray,
   IsBoolean,
   IsIn,
   IsNotEmpty,
@@ -75,4 +80,19 @@ export class DeletePageDto extends PageIdDto {
   @IsOptional()
   @IsBoolean()
   permanentlyDelete?: boolean;
+}
+
+export class BatchPageIdsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ArrayUnique()
+  @IsUUID(undefined, { each: true })
+  pageIds: string[];
+}
+
+export class BatchDeletePagesDto extends BatchPageIdsDto {
+  @IsBoolean()
+  @Equals(true, { message: 'confirm must be true' })
+  confirm: boolean;
 }

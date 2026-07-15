@@ -27,7 +27,10 @@ describe('PageLifecycleService', () => {
       findById: jest.fn().mockResolvedValue(page),
       restorePage: jest.fn().mockResolvedValue([page.id]),
     };
-    pageService = { removePage: jest.fn().mockResolvedValue(undefined) };
+    pageService = {
+      removePage: jest.fn().mockResolvedValue(undefined),
+      forceDelete: jest.fn().mockResolvedValue([page.id]),
+    };
     pageAccessService = {
       validateCanEdit: jest.fn().mockResolvedValue(undefined),
     };
@@ -193,5 +196,67 @@ describe('PageLifecycleService', () => {
       withLock: true,
       trx: { id: 'trx' },
     });
+  });
+
+  it('permanently deletes only pages already in trash as a space admin', async () => {
+    const deleted = { ...page, deletedAt: new Date() };
+    pageRepo.findById.mockResolvedValue(deleted);
+
+    await expect(
+      service.permanentlyDeletePage(page.id, user, workspace),
+    ).resolves.toBe(deleted);
+
+    expect(pageService.forceDelete).toHaveBeenCalledWith(page.id, workspace.id);
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'page.deleted', resourceId: page.id }),
+    );
+  });
+
+  it('rejects permanent deletion of an active page', async () => {
+    await expect(
+      service.permanentlyDeletePage(page.id, user, workspace),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(spaceAbility.createForUser).not.toHaveBeenCalled();
+    expect(pageService.forceDelete).not.toHaveBeenCalled();
+  });
+
+  it('requires space admin permission for permanent deletion', async () => {
+    pageRepo.findById.mockResolvedValue({ ...page, deletedAt: new Date() });
+    spaceAbility.createForUser.mockResolvedValue({
+      cannot: jest.fn().mockReturnValue(true),
+    });
+
+    await expect(
+      service.permanentlyDeletePage(page.id, user, workspace),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(pageService.forceDelete).not.toHaveBeenCalled();
+  });
+
+  it('does not audit a permanent deletion that loses a restore race', async () => {
+    pageRepo.findById.mockResolvedValue({ ...page, deletedAt: new Date() });
+    pageService.forceDelete.mockResolvedValue([]);
+
+    await expect(
+      service.permanentlyDeletePage(page.id, user, workspace),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(auditService.log).not.toHaveBeenCalled();
+  });
+
+  it('returns explicit partial results for batch restore without duplicate work', async () => {
+    const restore = jest
+      .spyOn(service, 'restorePage')
+      .mockResolvedValueOnce(page)
+      .mockRejectedValueOnce(new ForbiddenException());
+
+    await expect(
+      service.restorePages([page.id, page.id, 'other-page'], user, workspace),
+    ).resolves.toEqual({
+      succeededPageIds: [page.id],
+      failedPageIds: ['other-page'],
+    });
+    expect(restore).toHaveBeenCalledTimes(2);
   });
 });

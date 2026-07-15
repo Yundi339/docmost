@@ -21,6 +21,8 @@ import {
   MovePageUnderDto,
 } from './dto/move-page.dto';
 import {
+  BatchDeletePagesDto,
+  BatchPageIdsDto,
   DeletePageDto,
   PageHistoryIdDto,
   PageIdDto,
@@ -327,40 +329,33 @@ export class PageController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    const page = await this.pageRepo.findById(deletePageDto.pageId);
-
-    if (!page || page.workspaceId !== workspace.id) {
-      throw new NotFoundException('Page not found');
-    }
-
-    const ability = await this.spaceAbility.createForUser(user, page.spaceId);
-
     if (deletePageDto.permanentlyDelete) {
-      // Permanent deletion requires space admin permissions
-      if (ability.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)) {
-        throw new ForbiddenException(
-          'Only space admins can permanently delete pages',
-        );
-      }
-      await this.pageService.forceDelete(deletePageDto.pageId, workspace.id);
-
-      this.auditService.log({
-        event: AuditEvent.PAGE_DELETED,
-        resourceType: AuditResource.PAGE,
-        resourceId: page.id,
-        spaceId: page.spaceId,
-        changes: {
-          before: {
-            pageId: page.id,
-            slugId: page.slugId,
-            title: getPageTitle(page.title),
-            spaceId: page.spaceId,
-          },
-        },
-      });
+      await this.pageLifecycleService.permanentlyDeletePage(
+        deletePageDto.pageId,
+        user,
+        workspace,
+      );
     } else {
-      await this.pageLifecycleService.trashPage(page.id, user, workspace);
+      await this.pageLifecycleService.trashPage(
+        deletePageDto.pageId,
+        user,
+        workspace,
+      );
     }
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('batch-delete')
+  async batchDelete(
+    @Body() dto: BatchDeletePagesDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.pageLifecycleService.permanentlyDeletePages(
+      dto.pageIds,
+      user,
+      workspace,
+    );
   }
 
   @HttpCode(HttpStatus.OK)
@@ -375,6 +370,16 @@ export class PageController {
       user,
       workspace,
     );
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('batch-restore')
+  async batchRestore(
+    @Body() dto: BatchPageIdsDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.pageLifecycleService.restorePages(dto.pageIds, user, workspace);
   }
 
   @HttpCode(HttpStatus.OK)
@@ -453,6 +458,7 @@ export class PageController {
         deletedPageDto.spaceId,
         user.id,
         pagination,
+        ability.can(SpaceCaslAction.Manage, SpaceCaslSubject.Settings),
       );
     }
   }

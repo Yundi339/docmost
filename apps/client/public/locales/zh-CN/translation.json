@@ -2061,5 +2061,18 @@
   "Previous record ID": "前一条记录 ID",
   "Next record ID": "后一条记录 ID",
   "Template": "模板",
-  "Page title": "页面标题"
+  "Page title": "页面标题",
+  "Restore selected": "恢复所选",
+  "Delete selected": "删除所选",
+  "Select page": "选择页面",
+  "Restore selected pages?": "恢复所选页面？",
+  "Restore {{count}} selected pages?": "确定恢复所选的 {{count}} 个页面吗？",
+  "Permanently delete selected pages?": "永久删除所选页面？",
+  "Are you sure you want to permanently delete {{count}} selected pages? This action cannot be undone.": "确定永久删除所选的 {{count}} 个页面吗？此操作无法撤销。",
+  "{{count}} pages permanently deleted": "已永久删除 {{count}} 个页面",
+  "Permanently deleted {{successCount}} pages; {{failureCount}} failed": "已永久删除 {{successCount}} 个页面，{{failureCount}} 个失败",
+  "Failed to permanently delete selected pages": "永久删除所选页面失败",
+  "{{count}} pages restored": "已恢复 {{count}} 个页面",
+  "Restored {{successCount}} pages; {{failureCount}} failed": "已恢复 {{successCount}} 个页面，{{failureCount}} 个失败",
+  "Failed to restore selected pages": "恢复所选页面失败"
 }

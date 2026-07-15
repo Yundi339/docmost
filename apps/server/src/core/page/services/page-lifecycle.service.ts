@@ -1,7 +1,9 @@
 import {
   ForbiddenException,
+  HttpException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
@@ -26,8 +28,15 @@ import { executeTx } from '@docmost/db/utils';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventName } from '../../../common/events/event.contants';
 
+export type PageBatchOperationResult = {
+  succeededPageIds: string[];
+  failedPageIds: string[];
+};
+
 @Injectable()
 export class PageLifecycleService {
+  private readonly logger = new Logger(PageLifecycleService.name);
+
   constructor(
     private readonly pageRepo: PageRepo,
     private readonly pageService: PageService,
@@ -148,6 +157,95 @@ export class PageLifecycleService {
       throw new NotFoundException('Page not found');
     }
     return restored;
+  }
+
+  async restorePages(
+    pageIds: string[],
+    user: User,
+    workspace: Workspace,
+  ): Promise<PageBatchOperationResult> {
+    return this.runBatchOperation('restore', pageIds, (pageId) =>
+      this.restorePage(pageId, user, workspace),
+    );
+  }
+
+  async permanentlyDeletePage(
+    pageId: string,
+    user: User,
+    workspace: Workspace,
+  ): Promise<Page> {
+    const page = await this.findWorkspacePage(pageId, workspace.id);
+    if (!page.deletedAt) {
+      throw new NotFoundException('Page not found');
+    }
+
+    const ability = await this.spaceAbility.createForUser(user, page.spaceId);
+    if (ability.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)) {
+      throw new ForbiddenException(
+        'Only space admins can permanently delete pages',
+      );
+    }
+
+    const deletedPageIds = await this.pageService.forceDelete(
+      page.id,
+      workspace.id,
+    );
+    if (!deletedPageIds.includes(page.id)) {
+      throw new NotFoundException('Page not found');
+    }
+
+    this.auditService.log({
+      event: AuditEvent.PAGE_DELETED,
+      resourceType: AuditResource.PAGE,
+      resourceId: page.id,
+      spaceId: page.spaceId,
+      changes: {
+        before: {
+          pageId: page.id,
+          slugId: page.slugId,
+          title: getPageTitle(page.title),
+          spaceId: page.spaceId,
+        },
+      },
+    });
+
+    return page;
+  }
+
+  async permanentlyDeletePages(
+    pageIds: string[],
+    user: User,
+    workspace: Workspace,
+  ): Promise<PageBatchOperationResult> {
+    return this.runBatchOperation('permanently delete', pageIds, (pageId) =>
+      this.permanentlyDeletePage(pageId, user, workspace),
+    );
+  }
+
+  private async runBatchOperation(
+    operation: string,
+    pageIds: string[],
+    handler: (pageId: string) => Promise<Page>,
+  ): Promise<PageBatchOperationResult> {
+    const succeededPageIds: string[] = [];
+    const failedPageIds: string[] = [];
+
+    for (const pageId of new Set(pageIds)) {
+      try {
+        await handler(pageId);
+        succeededPageIds.push(pageId);
+      } catch (error) {
+        failedPageIds.push(pageId);
+        if (!(error instanceof HttpException)) {
+          this.logger.error(
+            `Failed to ${operation} page ${pageId}`,
+            error instanceof Error ? error.stack : undefined,
+          );
+        }
+      }
+    }
+
+    return { succeededPageIds, failedPageIds };
   }
 
   private async findWorkspacePage(

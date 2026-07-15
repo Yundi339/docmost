@@ -61,6 +61,13 @@ import { PageOperationPolicyService } from '../policies/page-operation-policy.se
 import { PageContentLifecycleService } from '../../../collaboration/services/page-content-lifecycle.service';
 import { PageAccessService } from '../page-access/page-access.service';
 
+export type DeletedPageListItem = Page & {
+  trashCapabilities: {
+    canRestore: boolean;
+    canPermanentlyDelete: boolean;
+  };
+};
+
 @Injectable()
 export class PageService {
   private readonly logger = new Logger(PageService.name);
@@ -1282,73 +1289,109 @@ export class PageService {
     spaceId: string,
     userId: string,
     pagination: PaginationOptions,
-  ): Promise<CursorPaginationResult<Page>> {
+    canPermanentlyDelete: boolean,
+  ): Promise<CursorPaginationResult<DeletedPageListItem>> {
     const result = await this.pageRepo.getDeletedPagesInSpace(
       spaceId,
       pagination,
     );
 
-    if (result.items.length > 0) {
-      const pageIds = result.items.map((p) => p.id);
-      const accessibleIds =
-        await this.pagePermissionRepo.filterAccessiblePageIds({
-          pageIds,
-          userId,
-          spaceId,
-        });
-      const accessibleSet = new Set(accessibleIds);
-      result.items = result.items.filter((p) => accessibleSet.has(p.id));
+    if (result.items.length === 0) {
+      return { ...result, items: [] };
     }
 
-    return result;
+    const pagePermissions =
+      await this.pagePermissionRepo.filterAccessiblePageIdsWithPermissions(
+        result.items.map((page) => page.id),
+        userId,
+      );
+    const permissionByPageId = new Map(
+      pagePermissions.map((permission) => [permission.id, permission.canEdit]),
+    );
+
+    const items = result.items.flatMap((page) => {
+      const canRestore = permissionByPageId.get(page.id);
+      if (canRestore === undefined) return [];
+
+      return [
+        {
+          ...page,
+          trashCapabilities: { canRestore, canPermanentlyDelete },
+        },
+      ];
+    });
+
+    return { ...result, items };
   }
 
-  async forceDelete(pageId: string, workspaceId: string): Promise<void> {
-    // Get all descendant IDs (including the page itself) using recursive CTE
-    const descendants = await this.db
-      .withRecursive('page_descendants', (db) =>
-        db
-          .selectFrom('pages')
-          .select(['id'])
-          .where('id', '=', pageId)
-          .unionAll((exp) =>
-            exp
-              .selectFrom('pages as p')
-              .select(['p.id'])
-              .innerJoin('page_descendants as pd', 'pd.id', 'p.parentPageId'),
-          ),
-      )
-      .selectFrom('page_descendants')
-      .selectAll()
-      .execute();
+  async forceDelete(pageId: string, workspaceId: string): Promise<string[]> {
+    let pageIds: string[] = [];
 
-    const pageIds = descendants.map((d) => d.id);
+    await executeTx(this.db, async (trx) => {
+      const rootPage = await trx
+        .selectFrom('pages')
+        .select('id')
+        .where('id', '=', pageId)
+        .where('workspaceId', '=', workspaceId)
+        .where('deletedAt', 'is not', null)
+        .forUpdate()
+        .executeTakeFirst();
 
-    // Queue attachment deletion for all pages with unique job IDs to prevent duplicates
-    for (const id of pageIds) {
-      await this.attachmentQueue.add(
-        QueueJob.DELETE_PAGE_ATTACHMENTS,
-        {
-          pageId: id,
-        },
-        {
-          jobId: `delete-page-attachments-${id}`,
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 5000,
+      if (!rootPage) return;
+
+      const descendants = await trx
+        .withRecursive('page_descendants', (db) =>
+          db
+            .selectFrom('pages')
+            .select(['id'])
+            .where('id', '=', rootPage.id)
+            .where('workspaceId', '=', workspaceId)
+            .unionAll((exp) =>
+              exp
+                .selectFrom('pages as p')
+                .select(['p.id'])
+                .innerJoin('page_descendants as pd', 'pd.id', 'p.parentPageId')
+                .where('p.workspaceId', '=', workspaceId),
+            ),
+        )
+        .selectFrom('page_descendants')
+        .selectAll()
+        .execute();
+
+      pageIds = descendants.map((descendant) => descendant.id);
+
+      for (const id of pageIds) {
+        await this.attachmentQueue.add(
+          QueueJob.DELETE_PAGE_ATTACHMENTS,
+          { pageId: id },
+          {
+            jobId: `delete-page-attachments-${id}`,
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 5000,
+            },
           },
-        },
-      );
-    }
+        );
+      }
+
+      if (pageIds.length > 0) {
+        await trx
+          .deleteFrom('pages')
+          .where('id', 'in', pageIds)
+          .where('workspaceId', '=', workspaceId)
+          .execute();
+      }
+    });
 
     if (pageIds.length > 0) {
-      await this.db.deleteFrom('pages').where('id', 'in', pageIds).execute();
       this.eventEmitter.emit(EventName.PAGE_DELETED, {
-        pageIds: pageIds,
+        pageIds,
         workspaceId,
       });
     }
+
+    return pageIds;
   }
 
   async removePage(

@@ -1888,5 +1888,18 @@
   "Previous record ID": "Previous record ID",
   "Next record ID": "Next record ID",
   "Template": "Template",
-  "Page title": "Page title"
+  "Page title": "Page title",
+  "Restore selected": "Restore selected",
+  "Delete selected": "Delete selected",
+  "Select page": "Select page",
+  "Restore selected pages?": "Restore selected pages?",
+  "Restore {{count}} selected pages?": "Restore {{count}} selected pages?",
+  "Permanently delete selected pages?": "Permanently delete selected pages?",
+  "Are you sure you want to permanently delete {{count}} selected pages? This action cannot be undone.": "Are you sure you want to permanently delete {{count}} selected pages? This action cannot be undone.",
+  "{{count}} pages permanently deleted": "{{count}} pages permanently deleted",
+  "Permanently deleted {{successCount}} pages; {{failureCount}} failed": "Permanently deleted {{successCount}} pages; {{failureCount}} failed",
+  "Failed to permanently delete selected pages": "Failed to permanently delete selected pages",
+  "{{count}} pages restored": "{{count}} pages restored",
+  "Restored {{successCount}} pages; {{failureCount}} failed": "Restored {{successCount}} pages; {{failureCount}} failed",
+  "Failed to restore selected pages": "Failed to restore selected pages"
 }

@@ -21,7 +21,9 @@ import {
   getCreatedByPages,
   getAllSidebarPages,
   getDeletedPages,
+  permanentlyDeletePages,
   restorePage,
+  restorePages,
 } from "@/features/page/services/page-service";
 import {
   IMovePage,
@@ -172,6 +174,43 @@ export function useDeletePageMutation() {
   });
 }
 
+export function useBatchDeletePagesMutation() {
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: ({ pageIds }: { pageIds: string[]; spaceId: string }) =>
+      permanentlyDeletePages(pageIds),
+    onSuccess: (result, { spaceId }) => {
+      const successCount = result.succeededPageIds.length;
+      const failureCount = result.failedPageIds.length;
+
+      notifications.show({
+        message:
+          failureCount > 0
+            ? t(
+                "Permanently deleted {{successCount}} pages; {{failureCount}} failed",
+                { successCount, failureCount },
+              )
+            : t("{{count}} pages permanently deleted", {
+                count: successCount,
+              }),
+        color: failureCount > 0 ? "orange" : undefined,
+      });
+
+      for (const pageId of result.succeededPageIds) {
+        queryClient.removeQueries({ queryKey: ["pages", pageId] });
+      }
+      void queryClient.invalidateQueries({ queryKey: ["trash-list", spaceId] });
+    },
+    onError: () => {
+      notifications.show({
+        message: t("Failed to permanently delete selected pages"),
+        color: "red",
+      });
+    },
+  });
+}
+
 export function useMovePageMutation() {
   return useMutation<void, Error, IMovePage>({
     mutationFn: (data) => movePage(data),
@@ -267,6 +306,44 @@ export function useRestorePageMutation() {
     },
     onError: (error) => {
       notifications.show({ message: t("Failed to restore page"), color: "red" });
+    },
+  });
+}
+
+export function useBatchRestorePagesMutation() {
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: ({ pageIds }: { pageIds: string[]; spaceId: string }) =>
+      restorePages(pageIds),
+    onSuccess: (result, { spaceId }) => {
+      const successCount = result.succeededPageIds.length;
+      const failureCount = result.failedPageIds.length;
+
+      notifications.show({
+        message:
+          failureCount > 0
+            ? t("Restored {{successCount}} pages; {{failureCount}} failed", {
+                successCount,
+                failureCount,
+              })
+            : t("{{count}} pages restored", { count: successCount }),
+        color: failureCount > 0 ? "orange" : undefined,
+      });
+
+      void queryClient.invalidateQueries({
+        queryKey: ["trash-list", spaceId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: fullSidebarTreeQueryKey(spaceId),
+      });
+      void queryClient.invalidateQueries({ queryKey: ["pages"] });
+    },
+    onError: () => {
+      notifications.show({
+        message: t("Failed to restore selected pages"),
+        color: "red",
+      });
     },
   });
 }

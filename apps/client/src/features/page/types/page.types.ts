@@ -43,8 +43,17 @@ export interface IPage {
     canEdit: boolean;
     hasRestriction: boolean;
   };
+  trashCapabilities?: {
+    canRestore: boolean;
+    canPermanentlyDelete: boolean;
+  };
   extensions?: IPageExtension[];
   capabilities?: IPageCapabilities;
+}
+
+export interface IPageBatchOperationResult {
+  succeededPageIds: string[];
+  failedPageIds: string[];
 }
 
 export interface IContributor {

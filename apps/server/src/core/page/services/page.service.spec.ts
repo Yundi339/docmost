@@ -68,6 +68,10 @@ function createService() {
     updatePage: jest.fn(),
     updatePages: jest.fn(),
     getPageAndDescendants: jest.fn(),
+    getDeletedPagesInSpace: jest.fn(),
+  };
+  const pagePermissionRepo = {
+    filterAccessiblePageIdsWithPermissions: jest.fn(),
   };
   const generalQueue = {
     add: jest.fn().mockResolvedValue(undefined),
@@ -106,7 +110,7 @@ function createService() {
 
   const service = new PageService(
     pageRepo as any,
-    {} as any,
+    pagePermissionRepo as any,
     {} as any,
     db as any,
     {} as any,
@@ -133,6 +137,7 @@ function createService() {
     eventEmitter,
     generalQueue,
     pageRepo,
+    pagePermissionRepo,
     pageContentLifecycle,
     pageAccessService,
     pageOperationPolicy,
@@ -141,6 +146,57 @@ function createService() {
     wsTreeService,
   };
 }
+
+describe('PageService.getDeletedSpacePages', () => {
+  const meta = {
+    limit: 50,
+    hasNextPage: false,
+    hasPrevPage: false,
+    nextCursor: null,
+    prevCursor: null,
+  };
+
+  it('returns only accessible pages with explicit trash capabilities', async () => {
+    const { pagePermissionRepo, pageRepo, service } = createService();
+    const editable = page({ id: 'editable', deletedAt: new Date() });
+    const readOnly = page({ id: 'read-only', deletedAt: new Date() });
+    const inaccessible = page({ id: 'inaccessible', deletedAt: new Date() });
+    pageRepo.getDeletedPagesInSpace.mockResolvedValue({
+      items: [editable, readOnly, inaccessible],
+      meta,
+    });
+    pagePermissionRepo.filterAccessiblePageIdsWithPermissions.mockResolvedValue(
+      [
+        { id: editable.id, canEdit: true },
+        { id: readOnly.id, canEdit: false },
+      ],
+    );
+
+    const result = await service.getDeletedSpacePages(
+      editable.spaceId,
+      'user-id',
+      { limit: 50 } as any,
+      true,
+    );
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: editable.id,
+        trashCapabilities: {
+          canRestore: true,
+          canPermanentlyDelete: true,
+        },
+      }),
+      expect.objectContaining({
+        id: readOnly.id,
+        trashCapabilities: {
+          canRestore: false,
+          canPermanentlyDelete: true,
+        },
+      }),
+    ]);
+  });
+});
 
 describe('PageService.create', () => {
   it('persists pages through the repository lifecycle event source', async () => {
