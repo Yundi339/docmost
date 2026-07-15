@@ -13,6 +13,7 @@ import {
 } from "../page/queries/page-query";
 import { RQ_KEY } from "../comment/queries/comment-query";
 import { IComment } from "@/features/comment/types/comment.types";
+import { applyQueryCacheEvent } from "./query-cache-event";
 
 export const useQuerySubscription = () => {
   const queryClient = useQueryClient();
@@ -27,9 +28,8 @@ export const useQuerySubscription = () => {
 
       switch (data.operation) {
         case "invalidate":
-          queryClient.invalidateQueries({
-            queryKey: [...data.entity, data.id].filter(Boolean),
-          });
+        case "removeQuery":
+          applyQueryCacheEvent(queryClient, data);
           break;
         case "commentCreated": {
           const createCache = queryClient.getQueryData(

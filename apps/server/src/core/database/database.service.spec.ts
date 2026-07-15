@@ -1059,8 +1059,8 @@ describe('DatabaseService', () => {
     expect(wsTreeService.notifyPageQueriesInvalidated).toHaveBeenCalledWith(
       { id: database.pageId, spaceId: database.spaceId },
       [
-        { entity: 'database', id: database.id },
-        { entity: 'database-records', id: database.id },
+        { entity: 'database', id: database.id, mode: 'remove' },
+        { entity: 'database-records', id: database.id, mode: 'remove' },
         { entity: 'sidebar-full-tree', id: database.spaceId },
       ],
     );

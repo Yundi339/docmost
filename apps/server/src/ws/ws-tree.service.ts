@@ -16,6 +16,7 @@ type TreePage = Pick<
 type PageQueryInvalidation = {
   entity: string;
   id?: string;
+  mode?: 'invalidate' | 'remove';
 };
 
 @Injectable()
@@ -179,7 +180,8 @@ export class WsTreeService {
   ): Promise<void> {
     for (const invalidation of invalidations) {
       await this.wsService.emitPageEvent(page.spaceId, page.id, {
-        operation: 'invalidate',
+        operation:
+          invalidation.mode === 'remove' ? 'removeQuery' : 'invalidate',
         spaceId: page.spaceId,
         entity: [invalidation.entity],
         id: invalidation.id,

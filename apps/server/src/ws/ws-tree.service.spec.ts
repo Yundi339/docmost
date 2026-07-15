@@ -127,4 +127,23 @@ describe('WsTreeService.notifyPageQueriesInvalidated', () => {
       expect.objectContaining({ entity: ['database-records'] }),
     );
   });
+
+  it('removes deleted resource queries without refetching them', async () => {
+    const { service, wsService } = createService([]);
+
+    await service.notifyPageQueriesInvalidated(page(), [
+      { entity: 'database', id: 'database-id', mode: 'remove' },
+    ]);
+
+    expect(wsService.emitPageEvent).toHaveBeenCalledWith(
+      'space-id',
+      'page-id',
+      {
+        operation: 'removeQuery',
+        spaceId: 'space-id',
+        entity: ['database'],
+        id: 'database-id',
+      },
+    );
+  });
 });

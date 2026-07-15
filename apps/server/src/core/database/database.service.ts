@@ -1996,6 +1996,7 @@ export class DatabaseService {
         info: true,
         records: true,
         treeMetadata: true,
+        removed: true,
       });
     } catch (error) {
       this.logger.error('Failed to publish database deletion', error);
@@ -2719,14 +2720,32 @@ export class DatabaseService {
 
   private async notifyDatabaseChanged(
     database: Pick<DatabaseBlock, 'id' | 'pageId' | 'spaceId' | 'workspaceId'>,
-    changes: { info?: boolean; records?: boolean; treeMetadata?: boolean },
+    changes: {
+      info?: boolean;
+      records?: boolean;
+      treeMetadata?: boolean;
+      removed?: boolean;
+    },
   ) {
-    const invalidations = [];
+    const invalidations: Array<{
+      entity: string;
+      id?: string;
+      mode?: 'invalidate' | 'remove';
+    }> = [];
+    const dataQueryMode = changes.removed ? ('remove' as const) : undefined;
     if (changes.info) {
-      invalidations.push({ entity: 'database', id: database.id });
+      invalidations.push({
+        entity: 'database',
+        id: database.id,
+        ...(dataQueryMode ? { mode: dataQueryMode } : {}),
+      });
     }
     if (changes.records) {
-      invalidations.push({ entity: 'database-records', id: database.id });
+      invalidations.push({
+        entity: 'database-records',
+        id: database.id,
+        ...(dataQueryMode ? { mode: dataQueryMode } : {}),
+      });
     }
     if (changes.treeMetadata) {
       invalidations.push({

@@ -9,6 +9,13 @@ export type InvalidateEvent = {
   id?: string;
 };
 
+export type RemoveQueryEvent = {
+  operation: "removeQuery";
+  spaceId: string;
+  entity: Array<string>;
+  id?: string;
+};
+
 export type CommentCreatedEvent = {
   operation: "commentCreated";
   pageId: string;
@@ -92,6 +99,7 @@ export type VerificationUpdatedEvent = {
 
 export type WebSocketEvent =
   | InvalidateEvent
+  | RemoveQueryEvent
   | CommentCreatedEvent
   | CommentUpdatedEvent
   | CommentDeletedEvent
