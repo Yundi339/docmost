@@ -3,6 +3,7 @@ import {
   formatAuditPrimitive,
   getAuditFieldLabel,
   getMcpToolLabel,
+  getVisibleAuditChangeKeys,
   getVisibleAuditMetadataEntries,
 } from "./audit-display";
 import { getEventLabel } from "./audit-event-labels";
@@ -89,5 +90,38 @@ describe("audit display formatting", () => {
         apiKeyId: "key-id",
       }),
     ).toContainEqual(["credentialId", "session-credential"]);
+  });
+
+  it("hides page identity fields already represented by readable resource details", () => {
+    expect(
+      getVisibleAuditChangeKeys(
+        {
+          before: {
+            title: "Meeting notes",
+            pageId: "page-id",
+            slugId: "slug-id",
+            spaceId: "space-id",
+          },
+        },
+        {
+          id: "page-id",
+          type: "page",
+          slugId: "slug-id",
+          spaceName: "Engineering",
+        },
+      ),
+    ).toEqual(["title"]);
+  });
+
+  it("keeps space IDs when they describe an actual cross-space move", () => {
+    expect(
+      getVisibleAuditChangeKeys(
+        {
+          before: { spaceId: "old-space" },
+          after: { spaceId: "new-space" },
+        },
+        { id: "page-id", type: "page", spaceName: "New space" },
+      ),
+    ).toEqual(["spaceId"]);
   });
 });

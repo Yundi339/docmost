@@ -170,7 +170,12 @@ export class AuditRepo {
   ): Promise<AuditResourceDetails | null> {
     const metadata = asRecord(entry.metadata);
     const snapshot = asResourceDetails(metadata.resourceSnapshot);
-    if (snapshot) return snapshot;
+    const auditSpaceId = getAuditSpaceId(entry);
+    const needsPageSnapshotBackfill =
+      snapshot?.type === 'page' &&
+      !snapshot.spaceName &&
+      !!auditSpaceId;
+    if (snapshot && !needsPageSnapshotBackfill) return snapshot;
 
     if (entry.resourceType === 'mcp_tool' && metadata.success === false) {
       return null;
@@ -184,7 +189,10 @@ export class AuditRepo {
     let pageId = getString(target.pageId);
     const parentPageId = getString(target.parentPageId);
     let commentId = getString(target.commentId);
-    let spaceId = getString(target.spaceId) ?? getString(result.spaceId);
+    let spaceId =
+      getString(target.spaceId) ??
+      getString(result.spaceId) ??
+      auditSpaceId;
 
     if (entry.resourceType === 'page') pageId ??= entry.resourceId ?? undefined;
     if (entry.resourceType === 'comment')
@@ -264,10 +272,34 @@ export class AuditRepo {
     }
 
     if (pageId) {
+      if (needsPageSnapshotBackfill) {
+        const backfilledSnapshot = await this.resolveDeletedPageResource(
+          entry,
+          pageId,
+          spaceId,
+          workspaceId,
+          cache,
+          snapshot,
+        );
+        if (backfilledSnapshot) return backfilledSnapshot;
+      }
+
       const page = await this.cached(cache, `page:${pageId}`, () =>
         this.resolvePageResource(pageId!, workspaceId),
       );
       if (page) return page;
+
+      if (entry.resourceType === 'page' || snapshot?.type === 'page') {
+        const deletedPage = await this.resolveDeletedPageResource(
+          entry,
+          pageId,
+          spaceId,
+          workspaceId,
+          cache,
+          snapshot,
+        );
+        if (deletedPage) return deletedPage;
+      }
     }
 
     if (spaceId) {
@@ -381,6 +413,46 @@ export class AuditRepo {
       spaceName,
       spaceSlug: row.spaceSlug,
       deleted: !!row.deletedAt,
+    };
+  }
+
+  private async resolveDeletedPageResource(
+    entry: Audit,
+    pageId: string,
+    spaceId: string | undefined,
+    workspaceId: string,
+    cache: ResourceCache,
+    snapshot: AuditResourceDetails | null,
+  ): Promise<AuditResourceDetails | null> {
+    const name = snapshot?.name ?? getAuditFallbackName(entry);
+    if (!name) return snapshot;
+
+    const space = spaceId
+      ? await this.resolveNamedResource(
+          cache,
+          'space',
+          spaceId,
+          workspaceId,
+        )
+      : null;
+    const resolvedSpaceName = space?.spaceName ?? snapshot?.spaceName;
+    const resolvedSpaceSlug = space?.spaceSlug ?? snapshot?.spaceSlug;
+
+    return {
+      ...snapshot,
+      id: pageId,
+      type: 'page',
+      name,
+      slugId: snapshot?.slugId ?? getAuditSlugId(entry),
+      path: resolvedSpaceName
+        ? `${resolvedSpaceName} / ${name}`
+        : snapshot?.path,
+      spaceId: spaceId ?? snapshot?.spaceId,
+      spaceName: resolvedSpaceName,
+      spaceSlug: resolvedSpaceSlug,
+      deleted: snapshot
+        ? (snapshot.deleted ?? entry.event === 'page.deleted')
+        : true,
     };
   }
 
@@ -516,4 +588,22 @@ function getAuditFallbackName(entry: Audit): string | undefined {
   ]
     .map(getString)
     .find(Boolean);
+}
+
+function getAuditSpaceId(entry: Audit): string | undefined {
+  const changes = asRecord(entry.changes);
+  const before = asRecord(changes.before);
+  const after = asRecord(changes.after);
+  return (
+    getString(entry.spaceId) ??
+    getString(after.spaceId) ??
+    getString(before.spaceId)
+  );
+}
+
+function getAuditSlugId(entry: Audit): string | undefined {
+  const changes = asRecord(entry.changes);
+  const before = asRecord(changes.before);
+  const after = asRecord(changes.after);
+  return getString(after.slugId) ?? getString(before.slugId);
 }

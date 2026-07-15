@@ -27,6 +27,7 @@ import {
   formatAuditPrimitive,
   getAuditFieldLabel,
   getMcpToolLabel,
+  getVisibleAuditChangeKeys,
   getVisibleAuditMetadataEntries,
 } from "@/ee/audit/lib/audit-display";
 
@@ -182,24 +183,22 @@ function AuditValue({
   );
 }
 
-function ChangesDiff({ changes }: { changes: IAuditLog["changes"] }) {
+function ChangesDiff({ entry }: { entry: IAuditLog }) {
   const { t } = useTranslation();
+  const changes = entry.changes;
   if (!changes) return null;
 
   const { before, after } = changes;
-  const allKeys = new Set([
-    ...Object.keys(before ?? {}),
-    ...Object.keys(after ?? {}),
-  ]);
+  const allKeys = getVisibleAuditChangeKeys(changes, entry.resource);
 
-  if (allKeys.size === 0) return null;
+  if (allKeys.length === 0) return null;
 
   return (
     <Box>
       <Text fz="xs" fw={600} mb={4}>
         {t("Changes")}
       </Text>
-      {[...allKeys].map((key) => {
+      {allKeys.map((key) => {
         const hasBefore = before && key in before;
         const hasAfter = after && key in after;
 
@@ -539,7 +538,7 @@ export default function AuditLogsTable({
                           >
                             <Group gap="xl" align="flex-start">
                               {entry.changes && (
-                                <ChangesDiff changes={entry.changes} />
+                                <ChangesDiff entry={entry} />
                               )}
                               {entry.metadata && (
                                 <MetadataDisplay metadata={entry.metadata} />

@@ -167,6 +167,38 @@ export function getVisibleAuditMetadataEntries(
   );
 }
 
+export function getVisibleAuditChangeKeys(
+  changes: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  },
+  resource?: {
+    id: string;
+    type?: string;
+    slugId?: string;
+    spaceName?: string;
+  },
+): string[] {
+  const keys = new Set([
+    ...Object.keys(changes.before ?? {}),
+    ...Object.keys(changes.after ?? {}),
+  ]);
+  if (resource?.type !== 'page') return [...keys];
+
+  keys.delete('pageId');
+  keys.delete('slugId');
+
+  const beforeSpaceId = changes.before?.spaceId;
+  const afterSpaceId = changes.after?.spaceId;
+  const isSpaceTransition =
+    typeof beforeSpaceId === 'string' &&
+    typeof afterSpaceId === 'string' &&
+    beforeSpaceId !== afterSpaceId;
+  if (resource.spaceName && !isSpaceTransition) keys.delete('spaceId');
+
+  return [...keys];
+}
+
 export function formatAuditPrimitive(
   value: unknown,
   fieldKey: string,

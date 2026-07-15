@@ -128,4 +128,95 @@ describe('AuditRepo resource enrichment', () => {
     });
     expect(resolvePageResource).not.toHaveBeenCalled();
   });
+
+  it('backfills the space name for a permanently deleted page snapshot', async () => {
+    const { repo, resolvePageResource } = createRepo();
+    resolvePageResource.mockResolvedValue(null);
+    jest.spyOn(repo as any, 'resolveNamedResource').mockResolvedValue({
+      id: 'space-id',
+      type: 'space',
+      name: 'Engineering',
+      spaceId: 'space-id',
+      spaceName: 'Engineering',
+      spaceSlug: 'engineering',
+    });
+
+    const result = await (repo as any).resolveAuditResource(
+      {
+        event: 'page.deleted',
+        resourceType: 'page',
+        resourceId: createdPageId,
+        spaceId: 'space-id',
+        changes: {
+          before: {
+            title: 'Deleted page',
+            slugId: 'deleted-page',
+            spaceId: 'space-id',
+          },
+        },
+        metadata: {
+          resourceSnapshot: {
+            id: createdPageId,
+            type: 'page',
+            name: 'Deleted page',
+          },
+        },
+      },
+      workspaceId,
+      new Map(),
+    );
+
+    expect(result).toEqual({
+      id: createdPageId,
+      type: 'page',
+      name: 'Deleted page',
+      slugId: 'deleted-page',
+      path: 'Engineering / Deleted page',
+      spaceId: 'space-id',
+      spaceName: 'Engineering',
+      spaceSlug: 'engineering',
+      deleted: true,
+    });
+  });
+
+  it('uses the changes space ID when an older audit row has no snapshot space', async () => {
+    const { repo, resolvePageResource } = createRepo();
+    resolvePageResource.mockResolvedValue(null);
+    const resolveNamedResource = jest
+      .spyOn(repo as any, 'resolveNamedResource')
+      .mockResolvedValue({
+        id: 'space-id',
+        type: 'space',
+        name: 'Operations',
+        spaceId: 'space-id',
+        spaceName: 'Operations',
+        spaceSlug: 'operations',
+      });
+
+    const result = await (repo as any).resolveAuditResource(
+      {
+        resourceType: 'page',
+        resourceId: createdPageId,
+        changes: {
+          before: { title: 'Old page', spaceId: 'space-id' },
+        },
+        metadata: null,
+      },
+      workspaceId,
+      new Map(),
+    );
+
+    expect(resolveNamedResource).toHaveBeenCalledWith(
+      expect.any(Map),
+      'space',
+      'space-id',
+      workspaceId,
+    );
+    expect(result).toMatchObject({
+      name: 'Old page',
+      path: 'Operations / Old page',
+      spaceName: 'Operations',
+      deleted: true,
+    });
+  });
 });
