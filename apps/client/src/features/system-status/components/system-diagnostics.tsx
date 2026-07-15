@@ -2,6 +2,7 @@ import {
   Alert,
   Badge,
   Box,
+  Button,
   Group,
   Table,
   Tabs,
@@ -11,9 +12,11 @@ import {
 import {
   IconAlertTriangle,
   IconCheck,
+  IconDatabase,
   IconInfoCircle,
   IconStethoscope,
 } from "@tabler/icons-react";
+import { useDisclosure } from "@mantine/hooks";
 import { useTranslation } from "react-i18next";
 import {
   ISystemDiagnosticCheck,
@@ -21,6 +24,7 @@ import {
   ISystemDiagnostics,
   SystemDiagnosticCode,
 } from "@/features/system-status/types/system-status.types";
+import DiagnosticDataSourcesModal from "@/features/system-status/components/diagnostic-data-sources-modal";
 
 const diagnosticLabels: Record<SystemDiagnosticCode, string> = {
   external_apitable_active: "External APITable data sources",
@@ -157,6 +161,7 @@ export default function SystemDiagnostics({
   const attentionCount = data.checks.filter(
     (check) => check.status === "attention" && check.severity !== "info",
   ).length;
+  const [dataSourcesOpened, dataSourcesModal] = useDisclosure(false);
 
   return (
     <Box component="section" mt="xl" aria-labelledby="system-diagnostics-title">
@@ -167,16 +172,26 @@ export default function SystemDiagnostics({
             {t("System diagnostics")}
           </Title>
         </Group>
-        {data.status === "up" && (
-          <Badge
-            color={attentionCount > 0 ? "yellow" : "green"}
+        <Group gap="xs">
+          <Button
             variant="light"
+            size="xs"
+            leftSection={<IconDatabase size={15} />}
+            onClick={dataSourcesModal.open}
           >
-            {attentionCount > 0
-              ? t("{{count}} items need attention", { count: attentionCount })
-              : t("No active warnings")}
-          </Badge>
-        )}
+            {t("View data sources")}
+          </Button>
+          {data.status === "up" && (
+            <Badge
+              color={attentionCount > 0 ? "yellow" : "green"}
+              variant="light"
+            >
+              {attentionCount > 0
+                ? t("{{count}} items need attention", { count: attentionCount })
+                : t("No active warnings")}
+            </Badge>
+          )}
+        </Group>
       </Group>
 
       {data.status === "down" ? (
@@ -269,6 +284,10 @@ export default function SystemDiagnostics({
           </Tabs.Panel>
         </Tabs>
       )}
+      <DiagnosticDataSourcesModal
+        opened={dataSourcesOpened}
+        onClose={dataSourcesModal.close}
+      />
     </Box>
   );
 }

@@ -17,8 +17,11 @@ describe('SystemDiagnosticsService', () => {
     findLatestTransition: jest.Mock;
     listHistory: jest.Mock;
     listWorkspaceIds: jest.Mock;
+    listDataSources: jest.Mock;
   };
   let auditRepo: { insertAudit: jest.Mock };
+  let pageRepo: { findByIds: jest.Mock };
+  let pageAccessService: { filterViewablePagesWithPermissions: jest.Mock };
   let service: SystemDiagnosticsService;
 
   beforeEach(() => {
@@ -27,12 +30,70 @@ describe('SystemDiagnosticsService', () => {
       findLatestTransition: jest.fn().mockResolvedValue(undefined),
       listHistory: jest.fn().mockResolvedValue([]),
       listWorkspaceIds: jest.fn().mockResolvedValue([]),
+      listDataSources: jest.fn().mockResolvedValue({
+        items: [],
+        nextCursor: null,
+      }),
     };
     auditRepo = { insertAudit: jest.fn().mockResolvedValue(undefined) };
+    pageRepo = { findByIds: jest.fn().mockResolvedValue([]) };
+    pageAccessService = {
+      filterViewablePagesWithPermissions: jest.fn().mockResolvedValue([]),
+    };
     service = new SystemDiagnosticsService(
       diagnosticsRepo as any,
       auditRepo as any,
+      pageRepo as any,
+      pageAccessService as any,
     );
+  });
+
+  it('delegates owner data-source inspection with workspace scope', async () => {
+    const options = { filter: 'issues', limit: 50 } as any;
+    const user = { workspaceId: 'workspace-1', id: 'user-1' } as any;
+
+    await expect(service.listDataSources(user, options)).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    });
+    expect(diagnosticsRepo.listDataSources).toHaveBeenCalledWith(
+      'workspace-1',
+      options,
+    );
+  });
+
+  it('hides host page metadata when the owner cannot view the page', async () => {
+    diagnosticsRepo.listDataSources.mockResolvedValue({
+      items: [
+        {
+          id: 'database-1',
+          hostPage: { id: 'page-1', title: 'Private page' },
+          space: { id: 'space-1', name: 'Private', slug: 'private' },
+        },
+      ],
+      nextCursor: null,
+    });
+    pageRepo.findByIds.mockResolvedValue([
+      { id: 'page-1', workspaceId: 'workspace-1', spaceId: 'space-1' },
+    ]);
+    const user = { workspaceId: 'workspace-1', id: 'user-1' } as any;
+
+    const result = await service.listDataSources(user, {
+      filter: 'issues',
+      limit: 50,
+    } as any);
+
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({
+        title: null,
+        recordCount: null,
+        hostPage: null,
+        space: null,
+      }),
+    );
+    expect(
+      pageAccessService.filterViewablePagesWithPermissions,
+    ).toHaveBeenCalledWith([expect.objectContaining({ id: 'page-1' })], user);
   });
 
   it('maps signals and only audits newly detected transition checks', async () => {

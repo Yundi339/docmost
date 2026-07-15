@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { AuditRepo } from '@docmost/db/repos/audit/audit.repo';
+import { PageRepo } from '@docmost/db/repos/page/page.repo';
+import { User } from '@docmost/db/types/entity.types';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
+import { PageAccessService } from '../page/page-access/page-access.service';
 import {
   LARGE_BOARD_RECORD_THRESHOLD,
   SystemDiagnosticAuditRow,
@@ -16,6 +19,7 @@ import {
   SystemDiagnosticsResponse,
   SystemDiagnosticSeverity,
 } from './system-diagnostics.types';
+import { ListSystemDiagnosticDataSourcesDto } from './system-diagnostics.dto';
 
 const CACHE_TTL_MS = 60_000;
 const INCIDENT_THROTTLE_MS = 5 * 60_000;
@@ -49,6 +53,8 @@ export class SystemDiagnosticsService {
   constructor(
     private readonly diagnosticsRepo: SystemDiagnosticsRepo,
     private readonly auditRepo: AuditRepo,
+    private readonly pageRepo: PageRepo,
+    private readonly pageAccessService: PageAccessService,
   ) {}
 
   async getDiagnostics(
@@ -80,6 +86,51 @@ export class SystemDiagnosticsService {
         error: 'System diagnostics are temporarily unavailable',
       };
     }
+  }
+
+  async listDataSources(
+    user: User,
+    options: ListSystemDiagnosticDataSourcesDto,
+  ) {
+    const result = await this.diagnosticsRepo.listDataSources(
+      user.workspaceId,
+      options,
+    );
+    const pageIds = [
+      ...new Set(
+        result.items.flatMap((item) =>
+          item.hostPage ? [item.hostPage.id] : [],
+        ),
+      ),
+    ];
+    if (pageIds.length === 0) return result;
+
+    const pages = (await this.pageRepo.findByIds(pageIds)).filter(
+      (page) => page.workspaceId === user.workspaceId,
+    );
+    const visiblePageIds = new Set(
+      (
+        await this.pageAccessService.filterViewablePagesWithPermissions(
+          pages,
+          user,
+        )
+      ).map(({ page }) => page.id),
+    );
+
+    return {
+      ...result,
+      items: result.items.map((item) =>
+        item.hostPage && visiblePageIds.has(item.hostPage.id)
+          ? item
+          : {
+              ...item,
+              title: null,
+              recordCount: null,
+              hostPage: null,
+              space: null,
+            },
+      ),
+    };
   }
 
   @Interval('system-diagnostics-scan', SCAN_INTERVAL_MS)

@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   ForbiddenException,
   HttpCode,
@@ -13,6 +14,7 @@ import { ApiKeyScope } from '../api-key/api-key-scopes';
 import { User } from '@docmost/db/types/entity.types';
 import { UserRole } from '../../common/helpers/types/permission';
 import { SystemStatusService } from './system-status.service';
+import { ListSystemDiagnosticDataSourcesDto } from './system-diagnostics.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('system-status')
@@ -26,9 +28,22 @@ export class SystemStatusController {
     // Owner-only. Admins are NOT allowed to read infrastructure metrics —
     // this matches the sidebar gating (role: "owner") and avoids leaking
     // database size / version / connection counts to non-owner admins.
-    if (user.role !== UserRole.OWNER) {
-      throw new ForbiddenException();
-    }
+    this.assertOwner(user);
     return this.systemStatusService.getStatus(user.workspaceId);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @RequireApiKeyScopes(ApiKeyScope.REST_READ)
+  @Post('diagnostics/data-sources')
+  async listDiagnosticDataSources(
+    @Body() dto: ListSystemDiagnosticDataSourcesDto,
+    @AuthUser() user: User,
+  ) {
+    this.assertOwner(user);
+    return this.systemStatusService.listDiagnosticDataSources(user, dto);
+  }
+
+  private assertOwner(user: User): void {
+    if (user.role !== UserRole.OWNER) throw new ForbiddenException();
   }
 }

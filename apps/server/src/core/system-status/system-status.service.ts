@@ -3,9 +3,11 @@ import { InjectKysely } from 'nestjs-kysely';
 import { sql } from 'kysely';
 import { Redis } from 'ioredis';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
+import { User } from '@docmost/db/types/entity.types';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { SystemDiagnosticsResponse } from './system-diagnostics.types';
 import { SystemDiagnosticsService } from './system-diagnostics.service';
+import { ListSystemDiagnosticDataSourcesDto } from './system-diagnostics.dto';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const packageJson = require('../../../package.json');
 
@@ -70,6 +72,13 @@ export class SystemStatusService {
       diagnostics,
       timestamp: new Date().toISOString(),
     };
+  }
+
+  async listDiagnosticDataSources(
+    user: User,
+    options: ListSystemDiagnosticDataSourcesDto,
+  ) {
+    return this.systemDiagnosticsService.listDataSources(user, options);
   }
 
   private async getDatabaseStatus(): Promise<SystemStatusResponse['database']> {

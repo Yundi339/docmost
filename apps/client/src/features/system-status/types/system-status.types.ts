@@ -62,6 +62,44 @@ export interface ISystemDiagnostics {
   error?: string;
 }
 
+export type SystemDiagnosticDataSourceState =
+  | "healthy"
+  | "pending"
+  | "orphaned"
+  | "trashed";
+
+export type SystemDiagnosticDataSourceIssue =
+  | "missing_host_page"
+  | "workspace_mismatch"
+  | "space_mismatch"
+  | "database_block_missing";
+
+export interface ISystemDiagnosticDataSource {
+  id: string;
+  title: string | null;
+  provider: string;
+  state: SystemDiagnosticDataSourceState;
+  issue: SystemDiagnosticDataSourceIssue | null;
+  recordCount: number | null;
+  createdAt: string;
+  hostPage: {
+    id: string;
+    title: string | null;
+    slugId: string;
+    deletedAt: string | null;
+  } | null;
+  space: {
+    id: string;
+    name: string | null;
+    slug: string;
+  } | null;
+}
+
+export interface ISystemDiagnosticDataSourceList {
+  items: ISystemDiagnosticDataSource[];
+  nextCursor: string | null;
+}
+
 export interface ISystemStatus {
   app: ISystemStatusApp;
   database: ISystemStatusDatabase;
