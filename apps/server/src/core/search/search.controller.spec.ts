@@ -6,7 +6,7 @@ import {
 } from '@nestjs/throttler/dist/throttler.constants';
 import { DIRECTORY_THROTTLER } from '../../integrations/throttle/throttler-names';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
-import { UserThrottlerGuard } from '../../integrations/throttle/user-throttler.guard';
+import { DirectoryThrottlerGuard } from '../../integrations/throttle/directory-throttler.guard';
 
 describe('SearchController', () => {
   let controller: SearchController;
@@ -28,7 +28,7 @@ describe('SearchController', () => {
   it('applies the dedicated directory enumeration limit', () => {
     expect(
       Reflect.getMetadata(GUARDS_METADATA, controller.searchSuggestions),
-    ).toContain(UserThrottlerGuard);
+    ).toContain(DirectoryThrottlerGuard);
     expect(
       Reflect.getMetadata(
         THROTTLER_LIMIT + DIRECTORY_THROTTLER,

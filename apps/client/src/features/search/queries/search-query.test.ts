@@ -1,5 +1,9 @@
+import { AxiosError } from "axios";
 import { describe, expect, it } from "vitest";
-import { getSearchSuggestionsQueryKey } from "./search-query";
+import {
+  getSearchSuggestionsQueryKey,
+  shouldRetrySearchSuggestions,
+} from "./search-query";
 
 describe("getSearchSuggestionsQueryKey", () => {
   const base = {
@@ -32,5 +36,31 @@ describe("getSearchSuggestionsQueryKey", () => {
       "search-suggestion",
       base,
     ]);
+  });
+});
+
+describe("shouldRetrySearchSuggestions", () => {
+  it.each([400, 401, 403, 404, 429])(
+    "does not retry an HTTP %s response",
+    (status) => {
+      const error = new AxiosError(
+        "request failed",
+        undefined,
+        undefined,
+        undefined,
+        { status } as never,
+      );
+
+      expect(shouldRetrySearchSuggestions(0, error)).toBe(false);
+    },
+  );
+
+  it("retries a transient failure only once", () => {
+    expect(shouldRetrySearchSuggestions(0, new Error("network error"))).toBe(
+      true,
+    );
+    expect(shouldRetrySearchSuggestions(1, new Error("network error"))).toBe(
+      false,
+    );
   });
 });

@@ -20,6 +20,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { DatePicker } from "@mantine/dates";
+import { useDebouncedValue } from "@mantine/hooks";
 import {
   IconAdjustmentsHorizontal,
   IconAlignLeft,
@@ -945,15 +946,6 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const trashRecordPageMutation =
     useTrashDatabaseRecordPageMutation(databaseId);
   const restorePageMutation = useRestorePageMutation();
-  const userSuggestionsQuery = useSearchSuggestionsQuery({
-    query: userSearch,
-    includeUsers: true,
-    context: "database-person",
-    pageId: hostPageId,
-    limit: 50,
-    preload: true,
-    enabled: Boolean(hostPageId),
-  });
 
   const database = databaseQuery.data;
   const hasVerifiedOwnership = isDatabaseBlockOwnerContext(
@@ -996,6 +988,28 @@ export default function DatabaseBlockView(props: NodeViewProps) {
   const fields = database?.fields?.length
     ? database.fields
     : [{ name: TITLE_FIELD, type: "text" as const }];
+  const hasPersonField = fields.some(
+    (field) =>
+      field.name === "Assignee" ||
+      field.type === "user" ||
+      field.type === "person",
+  );
+  const [debouncedUserSearch] = useDebouncedValue(userSearch, 300);
+  const userSuggestionsQuery = useSearchSuggestionsQuery({
+    query: debouncedUserSearch,
+    includeUsers: true,
+    context: "database-person",
+    pageId: hostPageId,
+    limit: 50,
+    preload: true,
+    enabled: Boolean(
+      hostPageId &&
+      database &&
+      canEditDatabase &&
+      hasPersonField &&
+      !deleteDatabaseMutation.isPending,
+    ),
+  });
   const statusField = getKanbanGroupField(fields, activeView);
   const statusFieldName = statusField?.name ?? "Status";
   const statuses = statusField?.options?.length

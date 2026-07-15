@@ -16,6 +16,19 @@ import {
   ISuggestionResult,
   SearchSuggestionParams,
 } from "@/features/search/types/search.types";
+import { isAxiosError } from "axios";
+
+export function shouldRetrySearchSuggestions(
+  failureCount: number,
+  error: Error,
+) {
+  if (isAxiosError(error)) {
+    const status = error.response?.status;
+    if (status && status >= 400 && status < 500) return false;
+  }
+
+  return failureCount < 1;
+}
 
 export function getSearchSuggestionsQueryKey(params: SearchSuggestionParams) {
   return ["search-suggestion", params] as const;
@@ -37,10 +50,12 @@ export function useSearchSuggestionsQuery(
   const { preload, enabled = true, ...queryParams } = params;
   return useQuery({
     queryKey: getSearchSuggestionsQueryKey(queryParams),
-    staleTime: 60 * 1000, // 1min
+    staleTime: preload && !queryParams.query.trim() ? 5 * 60 * 1000 : 60 * 1000,
     queryFn: () => searchSuggestions(queryParams),
-    enabled: enabled && (preload || !!params.query),
+    enabled: enabled && (preload || Boolean(queryParams.query.trim())),
     placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+    retry: shouldRetrySearchSuggestions,
   });
 }
 
