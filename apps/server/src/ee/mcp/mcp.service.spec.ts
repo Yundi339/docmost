@@ -812,6 +812,28 @@ describe('McpService access control', () => {
     );
   });
 
+  it('keeps sessions with an active HTTP request', async () => {
+    const close = jest.fn().mockResolvedValue(undefined);
+    (service as any).sessions.set('streaming-session-id', {
+      sessionId: 'streaming-session-id',
+      userId: 'user-id',
+      workspaceId: 'workspace-id',
+      authType: 'api_key',
+      credentialId: 'api-key-id',
+      mode: 'read-write',
+      scopes: [ApiKeyScope.MCP_WRITE],
+      context: context('read-write', [ApiKeyScope.MCP_WRITE]),
+      lastActivityAt: 0,
+      activeRequests: 1,
+      transport: { close },
+    });
+
+    await (service as any).pruneExpiredSessions();
+
+    expect(close).not.toHaveBeenCalled();
+    expect((service as any).sessions.has('streaming-session-id')).toBe(true);
+  });
+
   it('rejects new sessions when the active session limit is reached', async () => {
     const end = jest.fn();
     const res = {
@@ -881,6 +903,7 @@ describe('McpService access control', () => {
       mode: 'read-write',
       server,
       transport,
+      activeRequests: 0,
     });
     expect(server.connect).toHaveBeenCalledWith(transport);
     expect(transport.handleRequest).toHaveBeenCalledWith(req, res, body);

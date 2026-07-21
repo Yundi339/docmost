@@ -26,8 +26,8 @@ export type { McpMode, McpRequestContext } from './mcp.types';
 const packageJson = require('../../../package.json');
 
 const DEFAULT_MAX_MCP_SESSIONS = 500;
-const DEFAULT_MAX_MCP_SESSIONS_PER_CREDENTIAL = 10;
-const DEFAULT_MCP_SESSION_IDLE_TTL_SECONDS = 60 * 60;
+const DEFAULT_MAX_MCP_SESSIONS_PER_CREDENTIAL = 30;
+const DEFAULT_MCP_SESSION_IDLE_TTL_SECONDS = 5 * 60;
 
 interface McpSession {
   sessionId: string;
@@ -42,6 +42,7 @@ interface McpSession {
   permissionRevision: string;
   context: McpRequestContext;
   lastActivityAt: number;
+  activeRequests: number;
 }
 
 @Injectable()
@@ -155,8 +156,7 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
         );
         return;
       }
-      session.lastActivityAt = Date.now();
-      await session.transport.handleRequest(req, res, body);
+      await this.handleSessionRequest(session, req, res, body);
       return;
     }
 
@@ -199,6 +199,7 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
           permissionRevision: getPermissionRevision(context),
           context: { ...context, scopes: [...context.scopes] },
           lastActivityAt: Date.now(),
+          activeRequests: 1,
         };
         this.sessions.set(sessionId, session);
         this.auditMcpSessionEvent(session, AuditEvent.MCP_SESSION_STARTED);
@@ -211,7 +212,13 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     };
 
     await server.connect(transport);
-    await transport.handleRequest(req, res, body);
+    try {
+      await transport.handleRequest(req, res, body);
+    } finally {
+      if (sid) {
+        this.finishRequest(sid);
+      }
+    }
   }
 
   async handleDelete(
@@ -264,10 +271,37 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     return credentialSessions < this.maxSessionsPerCredential;
   }
 
+  private async handleSessionRequest(
+    session: McpSession,
+    req: IncomingMessage,
+    res: ServerResponse,
+    body: unknown,
+  ) {
+    session.lastActivityAt = Date.now();
+    session.activeRequests = (session.activeRequests ?? 0) + 1;
+    try {
+      await session.transport.handleRequest(req, res, body);
+    } finally {
+      this.finishRequest(session.sessionId);
+    }
+  }
+
+  private finishRequest(sessionId: string) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    session.activeRequests = Math.max(0, session.activeRequests - 1);
+    session.lastActivityAt = Date.now();
+  }
+
   private async pruneExpiredSessions() {
     const expiresBefore = Date.now() - this.sessionIdleTtlMs;
     const expiredSessionIds = [...this.sessions.values()]
-      .filter((session) => session.lastActivityAt <= expiresBefore)
+      .filter(
+        (session) =>
+          (session.activeRequests ?? 0) === 0 &&
+          session.lastActivityAt <= expiresBefore,
+      )
       .map((session) => session.sessionId);
 
     await Promise.all(
