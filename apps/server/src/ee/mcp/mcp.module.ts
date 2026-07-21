@@ -19,6 +19,7 @@ import { McpCommentToolProvider } from './tools/comment.tools';
 import { McpSpaceToolProvider } from './tools/space.tools';
 import { McpSearchToolProvider } from './tools/search.tools';
 import { McpMemberToolProvider } from './tools/member.tools';
+import { McpSessionAdminController } from './mcp-session-admin.controller';
 
 @Module({
   imports: [
@@ -32,7 +33,7 @@ import { McpMemberToolProvider } from './tools/member.tools';
     TokenModule,
     PageAccessModule,
   ],
-  controllers: [McpController],
+  controllers: [McpController, McpSessionAdminController],
   providers: [
     McpService,
     McpAuthGuard,

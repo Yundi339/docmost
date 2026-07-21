@@ -26,6 +26,55 @@ export interface ISystemStatusRedis {
   error?: string;
 }
 
+export interface IMcpSessionStatus {
+  limits: {
+    global: number;
+    perCredential: number;
+    idleTimeoutSeconds: number;
+  };
+  summary: {
+    globalSessions: number;
+    workspaceSessions: number;
+    busySessions: number;
+    idleSessions: number;
+    users: number;
+    credentials: number;
+  };
+  users: Array<{
+    userId: string;
+    name: string | null;
+    email: string;
+    sessions: number;
+    busySessions: number;
+    idleSessions: number;
+    credentials: number;
+    lastActivityAt: string;
+  }>;
+  sessions: Array<{
+    sessionId: string;
+    userId: string;
+    userName: string | null;
+    userEmail: string;
+    authType: "api_key" | "oauth";
+    credentialId: string;
+    mode: "off" | "read-only" | "read-write";
+    scopes: string[];
+    spaceAccessMode: string;
+    effectiveSpaceCount: number;
+    status: "busy" | "idle";
+    activeOperations: number;
+    idleSeconds: number;
+    createdAt: string;
+    lastActivityAt: string;
+    expiresAt: string | null;
+    userAgent: string | null;
+  }>;
+}
+
+export type ReleaseMcpSessionsInput =
+  | { sessionId: string; idleOnly?: never }
+  | { sessionId?: never; idleOnly: true };
+
 export type SystemDiagnosticCode =
   | "external_apitable_active"
   | "large_board"

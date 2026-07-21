@@ -890,6 +890,131 @@ describe('McpService access control', () => {
     );
   });
 
+  it('summarizes MCP session occupancy for one workspace', async () => {
+    const now = Date.now();
+    (service as any).sessions.set('idle-session-id', {
+      sessionId: 'idle-session-id',
+      userId: 'user-id',
+      userName: 'User One',
+      userEmail: 'user@example.com',
+      workspaceId: 'workspace-id',
+      authType: 'api_key',
+      credentialId: 'api-key-id',
+      mode: 'read-write',
+      scopes: [ApiKeyScope.MCP_WRITE],
+      context: context('read-write', [ApiKeyScope.MCP_WRITE]),
+      createdAt: now - 10_000,
+      lastActivityAt: now - 3_000,
+      activeOperations: 0,
+      transport: { close: jest.fn() },
+    });
+    (service as any).sessions.set('other-workspace-session-id', {
+      sessionId: 'other-workspace-session-id',
+      userId: 'other-user-id',
+      userName: 'Other User',
+      userEmail: 'other@example.com',
+      workspaceId: 'other-workspace-id',
+      authType: 'api_key',
+      credentialId: 'other-api-key-id',
+      mode: 'read-only',
+      scopes: [ApiKeyScope.MCP_READ],
+      context: context('read-only', [ApiKeyScope.MCP_READ]),
+      createdAt: now,
+      lastActivityAt: now,
+      activeOperations: 1,
+      transport: { close: jest.fn() },
+    });
+
+    const result = await service.getSessionDiagnostics('workspace-id');
+
+    expect(result.summary).toMatchObject({
+      globalSessions: 2,
+      workspaceSessions: 1,
+      busySessions: 0,
+      idleSessions: 1,
+      users: 1,
+      credentials: 1,
+    });
+    expect(result.users).toEqual([
+      expect.objectContaining({
+        userId: 'user-id',
+        sessions: 1,
+        idleSessions: 1,
+      }),
+    ]);
+    expect(result.sessions).toEqual([
+      expect.objectContaining({
+        sessionId: 'idle-session-id',
+        status: 'idle',
+        userEmail: 'user@example.com',
+      }),
+    ]);
+  });
+
+  it('lets an owner release only idle sessions in their workspace', async () => {
+    const now = Date.now();
+    const makeSession = (
+      sessionId: string,
+      workspaceId: string,
+      activeOperations: number,
+    ) => ({
+      sessionId,
+      userId: 'user-id',
+      userName: 'User One',
+      userEmail: 'user@example.com',
+      workspaceId,
+      authType: 'api_key',
+      credentialId: 'api-key-id',
+      mode: 'read-write',
+      scopes: [ApiKeyScope.MCP_WRITE],
+      context: context('read-write', [ApiKeyScope.MCP_WRITE]),
+      createdAt: now,
+      lastActivityAt: now,
+      activeOperations,
+      transport: { close: jest.fn().mockResolvedValue(undefined) },
+    });
+    (service as any).sessions.set(
+      'idle-session-id',
+      makeSession('idle-session-id', 'workspace-id', 0),
+    );
+    (service as any).sessions.set(
+      'busy-session-id',
+      makeSession('busy-session-id', 'workspace-id', 1),
+    );
+    (service as any).sessions.set(
+      'other-session-id',
+      makeSession('other-session-id', 'other-workspace-id', 0),
+    );
+
+    await expect(
+      service.releaseSessions(
+        'workspace-id',
+        { idleOnly: true },
+        { userId: 'owner-id', ipAddress: '203.0.113.10' },
+      ),
+    ).resolves.toEqual({ releasedCount: 1 });
+
+    const sessions = (service as any).sessions as Map<string, any>;
+    expect(sessions.has('idle-session-id')).toBe(false);
+    expect(sessions.has('busy-session-id')).toBe(true);
+    expect(sessions.has('other-session-id')).toBe(true);
+    expect(auditService.logWithContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'mcp.session_closed',
+        metadata: expect.objectContaining({
+          reason: 'owner_released',
+          sessionUserId: 'user-id',
+          releasedByUserId: 'owner-id',
+        }),
+      }),
+      expect.objectContaining({
+        actorId: 'owner-id',
+        actorType: 'user',
+        ipAddress: '203.0.113.10',
+      }),
+    );
+  });
+
   it('stores new sessions when the streamable HTTP transport initializes them', async () => {
     const body = { jsonrpc: '2.0', id: 1, method: 'initialize' };
     const req = { headers: {} };

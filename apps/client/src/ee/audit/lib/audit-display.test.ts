@@ -21,6 +21,7 @@ const t = (key: string) =>
       MCP: "MCP",
       "All spaces": "所有空间",
       "Selected spaces": "指定空间",
+      "Released by owner": "由所有者释放",
     }) as Record<string, string>
   )[key] ?? key;
 
@@ -61,6 +62,8 @@ describe("audit display formatting", () => {
     expect(getAuditFieldLabel("effectiveSpaceCount")).toBe(
       "Effective space count",
     );
+    expect(getAuditFieldLabel("sessionUserId")).toBe("Session user ID");
+    expect(getAuditFieldLabel("releasedByUserId")).toBe("Released by user ID");
     expect(getAuditFieldLabel("futureAuditField")).toBe("Future Audit Field");
   });
 
@@ -88,6 +91,9 @@ describe("audit display formatting", () => {
     );
     expect(formatAuditPrimitive("selected", "spaceAccessMode", t as any)).toBe(
       "指定空间",
+    );
+    expect(formatAuditPrimitive("owner_released", "reason", t as any)).toBe(
+      "由所有者释放",
     );
     expect(formatAuditPrimitive("future", "keyType", t as any)).toBe("future");
   });

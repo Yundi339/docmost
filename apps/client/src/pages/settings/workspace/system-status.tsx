@@ -30,6 +30,7 @@ import {
 } from "@/features/system-status/types/system-status.types";
 import UpdateLog from "@/features/system-status/components/update-log";
 import SystemDiagnostics from "@/features/system-status/components/system-diagnostics";
+import McpSessionMonitor from "@/features/system-status/components/mcp-session-monitor";
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -230,6 +231,7 @@ export default function SystemStatus() {
             <DatabaseCard data={data.database} />
             <RedisCard data={data.redis} />
           </SimpleGrid>
+          <McpSessionMonitor />
           <SystemDiagnostics data={data.diagnostics} />
         </>
       )}

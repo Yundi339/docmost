@@ -41,8 +41,61 @@ interface McpSession {
   mode: McpMode;
   permissionRevision: string;
   context: McpRequestContext;
+  userName: string | null;
+  userEmail: string;
+  createdAt: number;
   lastActivityAt: number;
   activeOperations: number;
+}
+
+export interface McpSessionDiagnostics {
+  limits: {
+    global: number;
+    perCredential: number;
+    idleTimeoutSeconds: number;
+  };
+  summary: {
+    globalSessions: number;
+    workspaceSessions: number;
+    busySessions: number;
+    idleSessions: number;
+    users: number;
+    credentials: number;
+  };
+  users: Array<{
+    userId: string;
+    name: string | null;
+    email: string;
+    sessions: number;
+    busySessions: number;
+    idleSessions: number;
+    credentials: number;
+    lastActivityAt: string;
+  }>;
+  sessions: Array<{
+    sessionId: string;
+    userId: string;
+    userName: string | null;
+    userEmail: string;
+    authType: 'api_key' | 'oauth';
+    credentialId: string;
+    mode: McpMode;
+    scopes: string[];
+    spaceAccessMode: string;
+    effectiveSpaceCount: number;
+    status: 'busy' | 'idle';
+    activeOperations: number;
+    idleSeconds: number;
+    createdAt: string;
+    lastActivityAt: string;
+    expiresAt: string | null;
+    userAgent: string | null;
+  }>;
+}
+
+interface McpSessionReleaseActor {
+  userId: string;
+  ipAddress?: string;
 }
 
 @Injectable()
@@ -199,6 +252,9 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
           mode: context.mode,
           permissionRevision: getPermissionRevision(context),
           context: { ...context, scopes: [...context.scopes] },
+          userName: user.name,
+          userEmail: user.email,
+          createdAt: Date.now(),
           lastActivityAt: Date.now(),
           activeOperations: tracksActivity ? 1 : 0,
         };
@@ -253,6 +309,135 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     } else {
       res.writeHead(404).end();
     }
+  }
+
+  async getSessionDiagnostics(
+    workspaceId: string,
+  ): Promise<McpSessionDiagnostics> {
+    await this.pruneExpiredSessions();
+    const now = Date.now();
+    const sessions = [...this.sessions.values()]
+      .filter((session) => session.workspaceId === workspaceId)
+      .sort((left, right) => right.lastActivityAt - left.lastActivityAt);
+    const credentialIds = new Set(
+      sessions.map((session) => `${session.authType}:${session.credentialId}`),
+    );
+    const userSummaries = new Map<
+      string,
+      McpSessionDiagnostics['users'][number] & {
+        credentialIds: Set<string>;
+      }
+    >();
+
+    for (const session of sessions) {
+      const summary = userSummaries.get(session.userId) ?? {
+        userId: session.userId,
+        name: session.userName,
+        email: session.userEmail,
+        sessions: 0,
+        busySessions: 0,
+        idleSessions: 0,
+        credentials: 0,
+        lastActivityAt: new Date(session.lastActivityAt).toISOString(),
+        credentialIds: new Set<string>(),
+      };
+      summary.sessions += 1;
+      if (session.activeOperations > 0) summary.busySessions += 1;
+      else summary.idleSessions += 1;
+      summary.credentialIds.add(`${session.authType}:${session.credentialId}`);
+      if (session.lastActivityAt > Date.parse(summary.lastActivityAt)) {
+        summary.lastActivityAt = new Date(session.lastActivityAt).toISOString();
+      }
+      userSummaries.set(session.userId, summary);
+    }
+
+    return {
+      limits: {
+        global: this.maxSessions,
+        perCredential: this.maxSessionsPerCredential,
+        idleTimeoutSeconds: Math.floor(this.sessionIdleTtlMs / 1000),
+      },
+      summary: {
+        globalSessions: this.sessions.size,
+        workspaceSessions: sessions.length,
+        busySessions: sessions.filter((session) => session.activeOperations > 0)
+          .length,
+        idleSessions: sessions.filter(
+          (session) => session.activeOperations === 0,
+        ).length,
+        users: userSummaries.size,
+        credentials: credentialIds.size,
+      },
+      users: [...userSummaries.values()]
+        .map(({ credentialIds: ids, ...summary }) => ({
+          ...summary,
+          credentials: ids.size,
+        }))
+        .sort(
+          (left, right) =>
+            right.sessions - left.sessions ||
+            left.email.localeCompare(right.email),
+        ),
+      sessions: sessions.map((session) => {
+        const idleSeconds = Math.max(
+          0,
+          Math.floor((now - session.lastActivityAt) / 1000),
+        );
+        const busy = session.activeOperations > 0;
+        return {
+          sessionId: session.sessionId,
+          userId: session.userId,
+          userName: session.userName,
+          userEmail: session.userEmail,
+          authType: session.authType,
+          credentialId: session.credentialId,
+          mode: session.mode,
+          scopes: [...session.scopes],
+          spaceAccessMode: session.context.spaceAccess.mode,
+          effectiveSpaceCount:
+            session.context.spaceAccess.effectiveSpaceIds.length,
+          status: busy ? ('busy' as const) : ('idle' as const),
+          activeOperations: session.activeOperations,
+          idleSeconds,
+          createdAt: new Date(session.createdAt).toISOString(),
+          lastActivityAt: new Date(session.lastActivityAt).toISOString(),
+          expiresAt: busy
+            ? null
+            : new Date(
+                session.lastActivityAt + this.sessionIdleTtlMs,
+              ).toISOString(),
+          userAgent: session.context.userAgent ?? null,
+        };
+      }),
+    };
+  }
+
+  async releaseSessions(
+    workspaceId: string,
+    target: { sessionId?: string; idleOnly?: boolean },
+    actor: McpSessionReleaseActor,
+  ) {
+    await this.pruneExpiredSessions();
+    const matchingSessionIds = [...this.sessions.values()]
+      .filter((session) => session.workspaceId === workspaceId)
+      .filter((session) =>
+        target.sessionId
+          ? session.sessionId === target.sessionId
+          : target.idleOnly && session.activeOperations === 0,
+      )
+      .map((session) => session.sessionId);
+
+    await Promise.all(
+      matchingSessionIds.map((sessionId) =>
+        this.closeSession(
+          sessionId,
+          AuditEvent.MCP_SESSION_CLOSED,
+          'owner_released',
+          actor,
+        ),
+      ),
+    );
+    return { releasedCount: matchingSessionIds.length };
   }
 
   private hasSessionCapacity(context: McpRequestContext) {
@@ -327,8 +512,9 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
       | typeof AuditEvent.MCP_SESSION_CLOSED
       | typeof AuditEvent.MCP_SESSION_EXPIRED,
     reason: string,
+    actor?: McpSessionReleaseActor,
   ) {
-    const session = this.finishSession(sessionId, event, reason);
+    const session = this.finishSession(sessionId, event, reason, actor);
     if (!session) {
       return false;
     }
@@ -343,6 +529,7 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
       | typeof AuditEvent.MCP_SESSION_CLOSED
       | typeof AuditEvent.MCP_SESSION_EXPIRED,
     reason: string,
+    actor?: McpSessionReleaseActor,
   ) {
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -350,7 +537,7 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.sessions.delete(sessionId);
-    this.auditMcpSessionEvent(session, event, reason);
+    this.auditMcpSessionEvent(session, event, reason, actor);
     this.logger.debug(`MCP session ${sessionId} ${reason}`);
     return session;
   }
@@ -362,6 +549,7 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
       | typeof AuditEvent.MCP_SESSION_CLOSED
       | typeof AuditEvent.MCP_SESSION_EXPIRED,
     reason?: string,
+    actor?: McpSessionReleaseActor,
   ) {
     const context = session.context;
     this.auditService.logWithContext(
@@ -383,14 +571,16 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
           spaceAccessMode: context.spaceAccess?.mode,
           selectedSpaceCount: context.spaceAccess?.selectedSpaceIds.length,
           effectiveSpaceCount: context.spaceAccess?.effectiveSpaceIds.length,
+          sessionUserId: session.userId,
+          releasedByUserId: actor?.userId,
           userAgent: truncateString(context.userAgent, 1000),
         },
       },
       {
         workspaceId: session.workspaceId,
-        actorId: session.userId,
-        actorType: context.authType,
-        ipAddress: context.ipAddress,
+        actorId: actor?.userId ?? session.userId,
+        actorType: actor ? 'user' : context.authType,
+        ipAddress: actor?.ipAddress ?? context.ipAddress,
       },
     );
   }
