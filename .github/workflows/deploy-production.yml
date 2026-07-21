@@ -89,7 +89,8 @@ jobs:
           context: .
           file: docker/aio/Dockerfile
           platforms: linux/amd64
-          push: true
+          # Keep the private Registry compatible across BuildKit default changes.
+          outputs: type=registry,oci-mediatypes=false
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.metadata.outputs.tag }}
           labels: |
             org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
