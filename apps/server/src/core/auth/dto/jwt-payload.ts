@@ -13,12 +13,13 @@ export type JwtPayload = {
   email: string;
   workspaceId: string;
   type: 'access';
-  sessionId?: string;
+  sessionId: string;
 };
 
 export type JwtCollabPayload = {
   sub: string;
   workspaceId: string;
+  sessionId: string;
   type: 'collab';
 };
 

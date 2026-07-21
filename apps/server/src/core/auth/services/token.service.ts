@@ -45,9 +45,15 @@ export class TokenService {
       throw new ForbiddenException();
     }
 
+    const sessionId = (user as User & { sessionId?: string }).sessionId;
+    if (!sessionId) {
+      throw new UnauthorizedException('An active session is required');
+    }
+
     const payload: JwtCollabPayload = {
       sub: user.id,
       workspaceId,
+      sessionId,
       type: JwtType.COLLAB,
     };
     const expiresIn = '24h';

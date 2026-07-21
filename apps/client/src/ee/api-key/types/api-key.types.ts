@@ -3,6 +3,9 @@ import {
   ISpaceAccess,
   SpaceAccessInput,
 } from "@/ee/space-access/types/space-access.types";
+import type { QueryParams } from "@/lib/types";
+
+export type ApiKeyType = "rest" | "mcp";
 
 export type ApiKeyScope =
   | "rest:read"
@@ -17,6 +20,7 @@ export interface IApiKey {
   token?: string;
   creatorId: string;
   workspaceId: string;
+  keyType: ApiKeyType;
   scopes: ApiKeyScope[];
   spaceAccess: ISpaceAccess;
   expiresAt: string | null;
@@ -30,8 +34,13 @@ export interface IApiKey {
 export interface ICreateApiKeyRequest {
   name: string;
   expiresAt: string;
+  keyType: ApiKeyType;
   scopes?: ApiKeyScope[];
   spaceAccess: SpaceAccessInput;
+}
+
+export interface IApiKeyListParams extends QueryParams {
+  keyType: ApiKeyType;
 }
 
 export interface IUpdateApiKeyRequest {

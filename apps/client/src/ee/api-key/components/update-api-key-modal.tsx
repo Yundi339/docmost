@@ -1,16 +1,13 @@
 import { Button, Group, Modal, Stack, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { zod4Resolver } from "mantine-form-zod-resolver";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { z } from "zod/v4";
 import { IApiKey } from "@/ee/api-key";
 import { ApiKeyScopeSelector } from "@/ee/api-key/components/api-key-scope-selector";
 import {
+  getDefaultApiKeyScopes,
   getApiKeyConfigurationError,
-  getApiKeyScopePresetValue,
-  resolveApiKeyScopes,
-  restrictApiKeyScopesToMcp,
+  restrictApiKeyScopesToType,
 } from "@/ee/api-key/lib/api-key-scopes";
 import { useUpdateApiKeyMutation } from "@/ee/api-key/queries/api-key-query";
 import { ApiKeyScope } from "@/ee/api-key/types/api-key.types";
@@ -23,10 +20,9 @@ import {
 } from "@/ee/space-access";
 import { SpaceAccessInput } from "@/ee/space-access/types/space-access.types";
 
-const formSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-});
-type FormValues = z.infer<typeof formSchema>;
+interface FormValues {
+  name: string;
+}
 
 interface UpdateApiKeyModalProps {
   opened: boolean;
@@ -44,9 +40,10 @@ export function UpdateApiKeyModal({
   const { t } = useTranslation();
   const updateApiKeyMutation = useUpdateApiKeyMutation();
   const { data: selectableSpaces = [], isLoading: spacesLoading } =
-    useSelectableSpaceOptionsQuery({ enabled: opened && !nameOnly });
-  const [scopePreset, setScopePreset] = useState("full");
-  const [customScopes, setCustomScopes] = useState<ApiKeyScope[]>([]);
+    useSelectableSpaceOptionsQuery({
+      enabled: opened && !nameOnly && apiKey?.keyType === "mcp",
+    });
+  const [scopes, setScopes] = useState<ApiKeyScope[]>([]);
   const [spaceAccess, setSpaceAccess] = useState<SpaceAccessInput>({
     mode: "all",
   });
@@ -54,7 +51,9 @@ export function UpdateApiKeyModal({
   const [scopeError, setScopeError] = useState<string>();
 
   const form = useForm<FormValues>({
-    validate: zod4Resolver(formSchema),
+    validate: {
+      name: (value) => (value.trim() ? null : t("Name is required")),
+    },
     initialValues: {
       name: "",
     },
@@ -65,33 +64,21 @@ export function UpdateApiKeyModal({
       return;
     }
 
-    const nextSpaceAccess = toSpaceAccessInput(apiKey.spaceAccess);
-    const nextScopes =
-      nextSpaceAccess.mode === "selected"
-        ? restrictApiKeyScopesToMcp(apiKey.scopes || [])
-        : apiKey.scopes || [];
+    const nextSpaceAccess =
+      apiKey.keyType === "rest"
+        ? ({ mode: "all" } as const)
+        : toSpaceAccessInput(apiKey.spaceAccess);
+    const nextScopes = restrictApiKeyScopesToType(
+      apiKey.keyType,
+      apiKey.scopes || getDefaultApiKeyScopes(apiKey.keyType),
+    );
 
     form.setValues({ name: apiKey.name });
     setSpaceAccess(nextSpaceAccess);
-    setCustomScopes(nextScopes);
-    setScopePreset(getApiKeyScopePresetValue(nextScopes));
+    setScopes(nextScopes);
     setSpaceAccessError(undefined);
     setScopeError(undefined);
   }, [opened, apiKey]);
-
-  const getScopes = () => resolveApiKeyScopes(scopePreset, customScopes);
-
-  const handleSpaceAccessChange = (value: SpaceAccessInput) => {
-    setSpaceAccess(value);
-    setSpaceAccessError(undefined);
-    setScopeError(undefined);
-
-    if (value.mode === "selected") {
-      const mcpScopes = restrictApiKeyScopesToMcp(getScopes());
-      setCustomScopes(mcpScopes);
-      setScopePreset(getApiKeyScopePresetValue(mcpScopes));
-    }
-  };
 
   const handleSubmit = async (data: FormValues) => {
     if (!apiKey) {
@@ -114,8 +101,11 @@ export function UpdateApiKeyModal({
       return;
     }
 
-    const scopes = getScopes();
-    const configurationError = getApiKeyConfigurationError(scopes, spaceAccess);
+    const configurationError = getApiKeyConfigurationError(
+      apiKey.keyType,
+      scopes,
+      spaceAccess,
+    );
     if (configurationError === "missing_space") {
       setSpaceAccessError(t("Select at least one space."));
       return;
@@ -124,12 +114,11 @@ export function UpdateApiKeyModal({
       setScopeError(t("Select at least one scope."));
       return;
     }
-    if (configurationError === "rest_scope_with_selected_spaces") {
-      setScopeError(
-        t(
-          "REST scopes cannot be used when access is limited to specific spaces.",
-        ),
-      );
+    if (
+      configurationError === "invalid_scope" ||
+      configurationError === "rest_space_access"
+    ) {
+      setScopeError(t("The selected access is invalid for this API key type."));
       return;
     }
 
@@ -172,28 +161,30 @@ export function UpdateApiKeyModal({
 
           {!nameOnly && (
             <>
-              <SpaceAccessSelector
-                value={spaceAccess}
-                onChange={handleSpaceAccessChange}
-                spaces={availableSpaces}
-                loading={spacesLoading}
-                error={spaceAccessError}
-              />
+              {apiKey?.keyType === "mcp" && (
+                <SpaceAccessSelector
+                  value={spaceAccess}
+                  onChange={(value) => {
+                    setSpaceAccess(value);
+                    setSpaceAccessError(undefined);
+                  }}
+                  spaces={availableSpaces}
+                  loading={spacesLoading}
+                  error={spaceAccessError}
+                />
+              )}
 
-              <ApiKeyScopeSelector
-                scopePreset={scopePreset}
-                customScopes={customScopes}
-                mcpOnly={spaceAccess.mode === "selected"}
-                error={scopeError}
-                onScopePresetChange={(value) => {
-                  setScopePreset(value);
-                  setScopeError(undefined);
-                }}
-                onCustomScopesChange={(value) => {
-                  setCustomScopes(value);
-                  setScopeError(undefined);
-                }}
-              />
+              {apiKey && (
+                <ApiKeyScopeSelector
+                  keyType={apiKey.keyType}
+                  scopes={scopes}
+                  error={scopeError}
+                  onChange={(value) => {
+                    setScopes(value);
+                    setScopeError(undefined);
+                  }}
+                />
+              )}
             </>
           )}
 

@@ -17,6 +17,10 @@ import { notifications } from "@mantine/notifications";
 import { getAppUrl } from "@/lib/config.ts";
 import { IconCheck, IconCopy } from "@tabler/icons-react";
 import { CopyButton } from "@/components/common/copy-button.tsx";
+import {
+  McpMode,
+  resolveMcpMode,
+} from "@/features/workspace/lib/mcp-mode";
 
 export default function McpSettings() {
   const { t } = useTranslation();
@@ -135,20 +139,4 @@ export default function McpSettings() {
       )}
     </Stack>
   );
-}
-
-type McpMode = "off" | "read-only" | "read-write";
-
-function resolveMcpMode(aiSettings: any): McpMode {
-  if (
-    aiSettings?.mcpMode === "read-only" ||
-    aiSettings?.mcpMode === "read-write"
-  ) {
-    return aiSettings.mcpMode;
-  }
-  if (aiSettings?.mcpMode === "off") {
-    return "off";
-  }
-
-  return aiSettings?.mcp === true ? "read-write" : "off";
 }

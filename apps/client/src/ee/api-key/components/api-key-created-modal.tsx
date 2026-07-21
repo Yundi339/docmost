@@ -15,7 +15,7 @@ import CopyTextButton from "@/components/common/copy.tsx";
 interface ApiKeyCreatedModalProps {
   opened: boolean;
   onClose: () => void;
-  apiKey: IApiKey;
+  apiKey: IApiKey | null;
 }
 
 export function ApiKeyCreatedModal({
@@ -31,7 +31,9 @@ export function ApiKeyCreatedModal({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={t("API key created")}
+      title={t(
+        apiKey.keyType === "rest" ? "REST API key created" : "MCP key created",
+      )}
       size="lg"
       closeButtonProps={{ "aria-label": t("Close") }}
     >

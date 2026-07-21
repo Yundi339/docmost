@@ -51,6 +51,8 @@ import {
 } from '../../../integrations/audit/audit.service';
 import { SsoEnforcementService } from '../../auth/services/sso-enforcement.service';
 import { CredentialRevocationService } from '../../credential-space-access/credential-revocation.service';
+import { SecurityEventService } from '../../../common/events/security-event.service';
+import { resolveMcpMode } from '../../../common/helpers/mcp-mode';
 
 @Injectable()
 export class WorkspaceService {
@@ -77,6 +79,7 @@ export class WorkspaceService {
     private userSessionRepo: UserSessionRepo,
     private readonly ssoEnforcement: SsoEnforcementService,
     private readonly credentialRevocation: CredentialRevocationService,
+    private readonly securityEvents: SecurityEventService,
   ) {}
 
   async findById(workspaceId: string) {
@@ -810,6 +813,12 @@ export class WorkspaceService {
       await this.credentialRevocation.revokeForUser(userId, workspaceId, trx);
     });
 
+    await this.securityEvents.publish({
+      type: 'user.access-revoked',
+      userId,
+      workspaceId,
+    });
+
     this.auditService.log({
       event: AuditEvent.USER_DEACTIVATED,
       resourceType: AuditResource.USER,
@@ -931,6 +940,12 @@ export class WorkspaceService {
       await this.credentialRevocation.revokeForUser(userId, workspaceId, trx);
     });
 
+    await this.securityEvents.publish({
+      type: 'user.access-revoked',
+      userId,
+      workspaceId,
+    });
+
     this.auditService.log({
       event: AuditEvent.USER_DELETED,
       resourceType: AuditResource.USER,
@@ -950,18 +965,4 @@ export class WorkspaceService {
       // empty
     }
   }
-}
-
-function resolveMcpMode(aiSettings: any): 'off' | 'read-only' | 'read-write' {
-  if (
-    aiSettings?.mcpMode === 'read-only' ||
-    aiSettings?.mcpMode === 'read-write'
-  ) {
-    return aiSettings.mcpMode;
-  }
-  if (aiSettings?.mcpMode === 'off') {
-    return 'off';
-  }
-
-  return aiSettings?.mcp === true ? 'read-write' : 'off';
 }

@@ -10,21 +10,35 @@ export type ApiKeyScope = (typeof ApiKeyScope)[keyof typeof ApiKeyScope];
 
 export const API_KEY_SCOPES = Object.values(ApiKeyScope);
 
-export const DEFAULT_API_KEY_SCOPES: ApiKeyScope[] = [
+export const ApiKeyType = {
+  REST: 'rest',
+  MCP: 'mcp',
+} as const;
+
+export type ApiKeyType = (typeof ApiKeyType)[keyof typeof ApiKeyType];
+
+export const API_KEY_TYPES = Object.values(ApiKeyType);
+
+export const REST_API_KEY_SCOPES: ApiKeyScope[] = [
   ApiKeyScope.REST_READ,
   ApiKeyScope.REST_WRITE,
-  ApiKeyScope.MCP_READ,
-  ApiKeyScope.MCP_WRITE,
 ];
 
-export const LEGACY_API_KEY_SCOPES: ApiKeyScope[] = [
-  ApiKeyScope.REST_READ,
-  ApiKeyScope.REST_WRITE,
+export const MCP_API_KEY_SCOPES: ApiKeyScope[] = [
+  ApiKeyScope.MCP_READ,
+  ApiKeyScope.MCP_WRITE,
+  ApiKeyScope.MCP_DESTRUCTIVE,
 ];
+
+export const DEFAULT_REST_API_KEY_SCOPES: ApiKeyScope[] = [
+  ApiKeyScope.REST_READ,
+];
+
+export const DEFAULT_MCP_API_KEY_SCOPES: ApiKeyScope[] = [ApiKeyScope.MCP_READ];
 
 export function normalizeApiKeyScopes(
   scopes?: string[] | null,
-  fallback: ApiKeyScope[] = DEFAULT_API_KEY_SCOPES,
+  fallback: ApiKeyScope[] = DEFAULT_REST_API_KEY_SCOPES,
 ): ApiKeyScope[] {
   const source = scopes?.length ? scopes : fallback;
   const normalized = new Set(
@@ -47,9 +61,43 @@ export function normalizeApiKeyScopes(
   return API_KEY_SCOPES.filter((scope) => normalized.has(scope));
 }
 
+export function normalizeApiKeyScopesForType(
+  keyType: ApiKeyType,
+  scopes?: string[] | null,
+): ApiKeyScope[] | undefined {
+  if (scopes === null) {
+    return undefined;
+  }
+
+  const allowedScopes =
+    keyType === ApiKeyType.REST ? REST_API_KEY_SCOPES : MCP_API_KEY_SCOPES;
+  const defaultScopes =
+    keyType === ApiKeyType.REST
+      ? DEFAULT_REST_API_KEY_SCOPES
+      : DEFAULT_MCP_API_KEY_SCOPES;
+  const source = scopes ?? defaultScopes;
+
+  if (
+    source.length === 0 ||
+    source.some((scope) => !allowedScopes.includes(scope as ApiKeyScope))
+  ) {
+    return undefined;
+  }
+
+  return normalizeApiKeyScopes(source, defaultScopes);
+}
+
+export function isApiKeyType(value: unknown): value is ApiKeyType {
+  return API_KEY_TYPES.includes(value as ApiKeyType);
+}
+
 export function hasApiKeyScope(
   scopes: string[] | null | undefined,
   scope: ApiKeyScope,
 ) {
-  return normalizeApiKeyScopes(scopes, LEGACY_API_KEY_SCOPES).includes(scope);
+  if (!scopes?.length) {
+    return false;
+  }
+
+  return normalizeApiKeyScopes(scopes, []).includes(scope);
 }

@@ -1,6 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+import { Injectable } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { dbOrTx } from '@docmost/db/utils';
@@ -11,7 +9,7 @@ import {
   PagePermission,
 } from '@docmost/db/types/entity.types';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
-import { ExpressionBuilder, sql, SqlBool } from 'kysely';
+import { ExpressionBuilder, RawBuilder, sql, SqlBool } from 'kysely';
 import { GroupRepo } from '@docmost/db/repos/group/group.repo';
 import { DB } from '@docmost/db/types/db';
 import {
@@ -19,11 +17,6 @@ import {
   executeWithCursorPagination,
 } from '@docmost/db/pagination/cursor-pagination';
 import { PagePermissionMember } from './types/page-permission.types';
-import { withCache } from '../../../common/helpers/with-cache';
-import {
-  CacheKey,
-  PERMISSION_CACHE_TTL_MS,
-} from '../../../common/helpers/cache-keys';
 
 export { PagePermissionMember } from './types/page-permission.types';
 
@@ -32,7 +25,6 @@ export class PagePermissionRepo {
   constructor(
     @InjectKysely() private readonly db: KyselyDB,
     private readonly groupRepo: GroupRepo,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
   async findPageAccessByPageId(
@@ -388,15 +380,10 @@ export class PagePermissionRepo {
     canAccess: boolean;
     canEdit: boolean;
   }> {
-    return withCache(
-      this.cacheManager,
-      CacheKey.PAGE_CAN_EDIT(userId, pageId),
-      PERMISSION_CACHE_TTL_MS,
-      async () => {
-        const result = await sql<{
-          canAccess: boolean | null;
-          canEdit: boolean | null;
-        }>`
+    const result = await sql<{
+      canAccess: boolean | null;
+      canEdit: boolean | null;
+    }>`
           WITH RECURSIVE ancestors AS (
             SELECT id AS ancestor_id, parent_page_id, 0 AS depth
             FROM pages
@@ -421,17 +408,15 @@ export class PagePermissionRepo {
             )
         `.execute(this.db);
 
-        const row = result.rows[0];
-        if (!row || row.canAccess === null) {
-          return { hasAnyRestriction: false, canAccess: true, canEdit: true };
-        }
-        return {
-          hasAnyRestriction: true,
-          canAccess: row.canAccess,
-          canEdit: row.canAccess && (row.canEdit ?? false),
-        };
-      },
-    );
+    const row = result.rows[0];
+    if (!row || row.canAccess === null) {
+      return { hasAnyRestriction: false, canAccess: true, canEdit: true };
+    }
+    return {
+      hasAnyRestriction: true,
+      canAccess: row.canAccess,
+      canEdit: row.canAccess && (row.canEdit ?? false),
+    };
   }
 
   /**
@@ -854,6 +839,38 @@ export class PagePermissionRepo {
       .execute();
 
     return results.map((r) => ({ id: r.id, canEdit: Boolean(r.canEdit) }));
+  }
+
+  userCanAccessPagePredicate(
+    userId: string,
+    pageId: RawBuilder<unknown>,
+  ): RawBuilder<SqlBool> {
+    return sql<SqlBool>`
+      NOT EXISTS (
+        WITH RECURSIVE ancestors AS (
+          SELECT candidate.id AS ancestor_id, candidate.parent_page_id
+          FROM pages AS candidate
+          WHERE candidate.id = ${pageId}
+          UNION ALL
+          SELECT parent.id, parent.parent_page_id
+          FROM pages AS parent
+          JOIN ancestors ON ancestors.parent_page_id = parent.id
+        )
+        SELECT 1
+        FROM ancestors
+        JOIN page_access ON page_access.page_id = ancestors.ancestor_id
+        LEFT JOIN page_permissions ON page_permissions.page_access_id = page_access.id
+          AND (
+            page_permissions.user_id = ${userId}::uuid
+            OR page_permissions.group_id IN (
+              SELECT group_users.group_id
+              FROM group_users
+              WHERE group_users.user_id = ${userId}::uuid
+            )
+          )
+        WHERE page_permissions.id IS NULL
+      )
+    `;
   }
 
   /**

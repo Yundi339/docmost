@@ -30,7 +30,7 @@ export class PageVerificationController {
     return this.pageVerificationService.getVerificationInfo(
       body.pageId,
       workspace.id,
-      user.id,
+      user,
     );
   }
 
@@ -44,7 +44,7 @@ export class PageVerificationController {
     return this.pageVerificationService.setupVerification(
       body,
       workspace.id,
-      user.id,
+      user,
     );
   }
 
@@ -58,7 +58,7 @@ export class PageVerificationController {
     return this.pageVerificationService.updateVerification(
       body,
       workspace.id,
-      user.id,
+      user,
     );
   }
 
@@ -66,11 +66,13 @@ export class PageVerificationController {
   @Post('delete-verification')
   async removeVerification(
     @Body() body: { pageId: string },
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
     return this.pageVerificationService.removeVerification(
       body.pageId,
       workspace.id,
+      user,
     );
   }
 
@@ -84,7 +86,7 @@ export class PageVerificationController {
     return this.pageVerificationService.verifyPage(
       body.pageId,
       workspace.id,
-      user.id,
+      user,
     );
   }
 
@@ -98,7 +100,7 @@ export class PageVerificationController {
     return this.pageVerificationService.submitForApproval(
       body.pageId,
       workspace.id,
-      user.id,
+      user,
     );
   }
 
@@ -112,7 +114,7 @@ export class PageVerificationController {
     return this.pageVerificationService.rejectApproval(
       body.pageId,
       workspace.id,
-      user.id,
+      user,
       body.comment,
     );
   }
@@ -127,7 +129,7 @@ export class PageVerificationController {
     return this.pageVerificationService.markObsolete(
       body.pageId,
       workspace.id,
-      user.id,
+      user,
     );
   }
 
@@ -136,8 +138,13 @@ export class PageVerificationController {
   @Post('verifications')
   async getVerificationList(
     @Body() body: any,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.pageVerificationService.getVerificationList(workspace.id, body);
+    return this.pageVerificationService.getVerificationList(
+      workspace.id,
+      user,
+      body,
+    );
   }
 }

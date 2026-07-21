@@ -10,7 +10,11 @@ import { Reflector } from '@nestjs/core';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { addDays } from 'date-fns';
 import { JwtType } from '../../core/auth/dto/jwt-payload';
-import { ApiKeyScope, hasApiKeyScope } from '../../core/api-key/api-key-scopes';
+import {
+  ApiKeyScope,
+  ApiKeyType,
+  hasApiKeyScope,
+} from '../../core/api-key/api-key-scopes';
 import { API_KEY_SCOPES_KEY } from '../decorators/api-key-scope.decorator';
 
 @Injectable()
@@ -49,6 +53,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const req = ctx.switchToHttp().getRequest();
     if (req.raw?.authType !== JwtType.API_KEY) {
       return;
+    }
+
+    if (req.raw?.apiKey?.keyType !== ApiKeyType.REST) {
+      throw new ForbiddenException('Invalid API key type for REST');
     }
 
     const requiredScopes = this.reflector.getAllAndOverride<ApiKeyScope[]>(

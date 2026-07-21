@@ -11,7 +11,10 @@ describe('PersistenceExtension', () => {
       }),
     };
 
-    return new PersistenceExtension(
+    const authenticationExtension = {
+      validateStoreContext: jest.fn().mockResolvedValue(undefined),
+    };
+    const extension = new PersistenceExtension(
       {} as any,
       db as any,
       {} as any,
@@ -19,7 +22,9 @@ describe('PersistenceExtension', () => {
       {} as any,
       {} as any,
       {} as any,
+      authenticationExtension as any,
     );
+    return { authenticationExtension, extension };
   };
 
   const createPayload = (propagateStoreErrors: boolean) => {
@@ -38,7 +43,7 @@ describe('PersistenceExtension', () => {
 
   it('rethrows failed direct writes so REST and MCP callers see the failure', async () => {
     const saveError = new Error('save rejected');
-    const extension = createExtension(saveError);
+    const { extension } = createExtension(saveError);
 
     await expect(extension.onStoreDocument(createPayload(true))).rejects.toBe(
       saveError,
@@ -46,10 +51,25 @@ describe('PersistenceExtension', () => {
   });
 
   it('retains websocket persistence error isolation by default', async () => {
-    const extension = createExtension(new Error('save rejected'));
+    const { extension } = createExtension(new Error('save rejected'));
 
     await expect(
       extension.onStoreDocument(createPayload(false)),
     ).resolves.toBeUndefined();
+  });
+
+  it('always forces authorization before persistence', async () => {
+    const { authenticationExtension, extension } = createExtension(
+      new Error('save rejected'),
+    );
+    const payload = createPayload(false);
+
+    await extension.onStoreDocument(payload);
+
+    expect(authenticationExtension.validateStoreContext).toHaveBeenCalledWith(
+      payload.documentName,
+      payload.context,
+      payload.socketId,
+    );
   });
 });

@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
-import { KyselyDB } from '@docmost/db/types/kysely.types';
+import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { executeTx } from '@docmost/db/utils';
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
@@ -15,6 +15,7 @@ import {
   SpaceCaslAction,
   SpaceCaslSubject,
 } from '../../core/casl/interfaces/space-ability.type';
+import { SecurityEventService } from '../../common/events/security-event.service';
 
 type RoleValue = 'reader' | 'writer';
 
@@ -26,6 +27,7 @@ export class PagePermissionService {
     private readonly pageRepo: PageRepo,
     private readonly pageAccessService: PageAccessService,
     private readonly spaceAbility: SpaceAbilityFactory,
+    private readonly securityEvents: SecurityEventService,
   ) {}
 
   private async getPageOrThrow(pageId: string, workspaceId: string) {
@@ -51,7 +53,9 @@ export class PagePermissionService {
       this.spaceAbility.createForUser(user, page.spaceId),
     ]);
 
-    let inheritedFrom: { id: string; slugId: string; title: string } | undefined;
+    let inheritedFrom:
+      | { id: string; slugId: string; title: string }
+      | undefined;
     if (access.hasInheritedRestriction && restrictedAncestor) {
       // nearest restricted ancestor (depth > 0 since inherited)
       const ancestorPageId = restrictedAncestor.pageId;
@@ -100,7 +104,12 @@ export class PagePermissionService {
     if (!pageAccess) {
       return {
         items: [],
-        meta: { hasNextPage: false, hasPrevPage: false, nextCursor: null, prevCursor: null },
+        meta: {
+          hasNextPage: false,
+          hasPrevPage: false,
+          nextCursor: null,
+          prevCursor: null,
+        },
       };
     }
 
@@ -115,12 +124,12 @@ export class PagePermissionService {
     const page = await this.getPageOrThrow(pageId, workspaceId);
     await this.pageAccessService.validateCanEdit(page, user);
 
-    await executeTx(this.db, async (trx) => {
+    const changed = await executeTx(this.db, async (trx) => {
       const existing = await this.pagePermissionRepo.findPageAccessByPageId(
         pageId,
         trx,
       );
-      if (existing) return;
+      if (existing) return false;
 
       const pageAccess = await this.pagePermissionRepo.insertPageAccess(
         {
@@ -145,7 +154,9 @@ export class PagePermissionService {
         ],
         trx,
       );
+      return true;
     });
+    if (changed) await this.publishPermissionChanged(page);
   }
 
   async unrestrictPage(pageId: string, user: User, workspaceId: string) {
@@ -153,6 +164,7 @@ export class PagePermissionService {
     await this.pageAccessService.validateCanEdit(page, user);
 
     await this.pagePermissionRepo.deletePageAccess(pageId);
+    await this.publishPermissionChanged(page);
   }
 
   async addPermissions(
@@ -178,7 +190,16 @@ export class PagePermissionService {
       throw new BadRequestException('No members provided');
     }
 
-    await executeTx(this.db, async (trx) => {
+    const changed = await executeTx(this.db, async (trx) => {
+      const userIds = [...new Set(data.userIds ?? [])];
+      const groupIds = [...new Set(data.groupIds ?? [])];
+      await this.validatePermissionSubjects(
+        workspaceId,
+        userIds,
+        groupIds,
+        trx,
+      );
+
       const pageAccess = await this.pagePermissionRepo.findPageAccessByPageId(
         data.pageId,
         trx,
@@ -189,8 +210,8 @@ export class PagePermissionService {
 
       const rows = [] as any[];
 
-      if (data.userIds?.length) {
-        for (const userId of data.userIds) {
+      if (userIds.length) {
+        for (const userId of userIds) {
           const existing =
             await this.pagePermissionRepo.findPagePermissionByUserId(
               pageAccess.id,
@@ -207,8 +228,8 @@ export class PagePermissionService {
         }
       }
 
-      if (data.groupIds?.length) {
-        for (const groupId of data.groupIds) {
+      if (groupIds.length) {
+        for (const groupId of groupIds) {
           const existing =
             await this.pagePermissionRepo.findPagePermissionByGroupId(
               pageAccess.id,
@@ -228,7 +249,9 @@ export class PagePermissionService {
       if (rows.length) {
         await this.pagePermissionRepo.insertPagePermissions(rows, trx);
       }
+      return rows.length > 0;
     });
+    if (changed) await this.publishPermissionChanged(page);
   }
 
   async removePermissions(
@@ -243,27 +266,42 @@ export class PagePermissionService {
     const page = await this.getPageOrThrow(data.pageId, workspaceId);
     await this.pageAccessService.validateCanEdit(page, user);
 
-    const pageAccess = await this.pagePermissionRepo.findPageAccessByPageId(
-      data.pageId,
-    );
-    if (!pageAccess) return;
+    const userIds = [...new Set(data.userIds ?? [])];
+    const groupIds = [...new Set(data.groupIds ?? [])];
+    if (userIds.length === 0 && groupIds.length === 0) {
+      throw new BadRequestException('No members provided');
+    }
 
-    await executeTx(this.db, async (trx) => {
-      if (data.userIds?.length) {
+    const changed = await executeTx(this.db, async (trx) => {
+      await this.validatePermissionSubjects(
+        workspaceId,
+        userIds,
+        groupIds,
+        trx,
+      );
+      const pageAccess = await this.pagePermissionRepo.findPageAccessByPageId(
+        data.pageId,
+        trx,
+      );
+      if (!pageAccess) return false;
+
+      if (userIds.length) {
         await this.pagePermissionRepo.deletePagePermissionsByUserIds(
           pageAccess.id,
-          data.userIds,
+          userIds,
           trx,
         );
       }
-      if (data.groupIds?.length) {
+      if (groupIds.length) {
         await this.pagePermissionRepo.deletePagePermissionsByGroupIds(
           pageAccess.id,
-          data.groupIds,
+          groupIds,
           trx,
         );
       }
+      return true;
     });
+    if (changed) await this.publishPermissionChanged(page);
   }
 
   async updatePermissionRole(
@@ -283,22 +321,78 @@ export class PagePermissionService {
       throw new BadRequestException('Invalid role');
     }
 
-    if (!data.userId && !data.groupId) {
+    if ((!data.userId && !data.groupId) || (data.userId && data.groupId)) {
       throw new BadRequestException('userId or groupId required');
     }
 
-    const pageAccess = await this.pagePermissionRepo.findPageAccessByPageId(
-      data.pageId,
-    );
-    if (!pageAccess) {
-      throw new NotFoundException('Page is not restricted');
+    await executeTx(this.db, async (trx) => {
+      await this.validatePermissionSubjects(
+        workspaceId,
+        data.userId ? [data.userId] : [],
+        data.groupId ? [data.groupId] : [],
+        trx,
+      );
+      const pageAccess = await this.pagePermissionRepo.findPageAccessByPageId(
+        data.pageId,
+        trx,
+      );
+      if (!pageAccess) {
+        throw new NotFoundException('Page is not restricted');
+      }
+
+      await this.pagePermissionRepo.updatePagePermissionRole(
+        pageAccess.id,
+        data.role,
+        { userId: data.userId, groupId: data.groupId },
+        trx,
+      );
+    });
+    await this.publishPermissionChanged(page);
+  }
+
+  private async validatePermissionSubjects(
+    workspaceId: string,
+    userIds: string[],
+    groupIds: string[],
+    trx: KyselyTransaction,
+  ) {
+    if (userIds.length > 0) {
+      const validUsers = await trx
+        .selectFrom('users')
+        .select('id')
+        .where('id', 'in', userIds)
+        .where('workspaceId', '=', workspaceId)
+        .where('deactivatedAt', 'is', null)
+        .where('deletedAt', 'is', null)
+        .execute();
+      if (validUsers.length !== userIds.length) {
+        throw new NotFoundException('Permission subject not found');
+      }
     }
 
-    await this.pagePermissionRepo.updatePagePermissionRole(
-      pageAccess.id,
-      data.role,
-      { userId: data.userId, groupId: data.groupId },
-    );
+    if (groupIds.length > 0) {
+      const validGroups = await trx
+        .selectFrom('groups')
+        .select('id')
+        .where('id', 'in', groupIds)
+        .where('workspaceId', '=', workspaceId)
+        .where('deletedAt', 'is', null)
+        .execute();
+      if (validGroups.length !== groupIds.length) {
+        throw new NotFoundException('Permission subject not found');
+      }
+    }
+  }
+
+  private async publishPermissionChanged(page: {
+    id: string;
+    spaceId: string;
+  }): Promise<void> {
+    await this.securityEvents.publish({
+      type: 'page.permission-changed',
+      pageId: page.id,
+      spaceId: page.spaceId,
+    });
   }
 
   private isValidRole(role: string): role is RoleValue {

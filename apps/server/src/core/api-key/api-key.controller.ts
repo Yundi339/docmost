@@ -11,12 +11,12 @@ import {
   CreateApiKeyDto,
   UpdateApiKeyDto,
   ApiKeyIdDto,
+  FindApiKeysDto,
 } from './dto/api-key.dto';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SessionAuthGuard } from '../../common/guards/session-auth.guard';
-import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 
 @UseGuards(JwtAuthGuard, SessionAuthGuard)
@@ -36,7 +36,7 @@ export class ApiKeyController {
   @HttpCode(HttpStatus.OK)
   @Post('/')
   async findApiKeys(
-    @Body() pagination: PaginationOptions,
+    @Body() pagination: FindApiKeysDto,
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {

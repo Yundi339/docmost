@@ -1,71 +1,82 @@
-import { Alert, MultiSelect, Select, Stack } from "@mantine/core";
-import { IconInfoCircle } from "@tabler/icons-react";
-import React from "react";
+import { SegmentedControl, Stack, Switch, Text } from "@mantine/core";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  API_KEY_SCOPE_OPTIONS,
-  API_KEY_SCOPE_PRESETS,
-} from "@/ee/api-key/lib/api-key-scopes";
-import { ApiKeyScope } from "@/ee/api-key/types/api-key.types";
+import type { ApiKeyScope, ApiKeyType } from "@/ee/api-key/types/api-key.types";
 
 interface ApiKeyScopeSelectorProps {
-  scopePreset: string;
-  customScopes: ApiKeyScope[];
-  onScopePresetChange: (value: string) => void;
-  onCustomScopesChange: (value: ApiKeyScope[]) => void;
-  mcpOnly?: boolean;
-  error?: React.ReactNode;
+  keyType: ApiKeyType;
+  scopes: ApiKeyScope[];
+  onChange: (value: ApiKeyScope[]) => void;
+  error?: ReactNode;
+  allowWrite?: boolean;
 }
 
 export function ApiKeyScopeSelector({
-  scopePreset,
-  customScopes,
-  onScopePresetChange,
-  onCustomScopesChange,
-  mcpOnly = false,
+  keyType,
+  scopes,
+  onChange,
   error,
+  allowWrite = true,
 }: ApiKeyScopeSelectorProps) {
   const { t } = useTranslation();
-  const presets = API_KEY_SCOPE_PRESETS.filter(
-    (preset) =>
-      !mcpOnly ||
-      preset.value === "custom" ||
-      preset.scopes.every((scope) => scope.startsWith("mcp:")),
-  );
-  const scopeOptions = API_KEY_SCOPE_OPTIONS.filter(
-    (scope) => !mcpOnly || scope.value.startsWith("mcp:"),
-  );
+  const canWrite = scopes.includes(`${keyType}:write` as ApiKeyScope);
+  const destructiveEnabled = scopes.includes("mcp:destructive");
+
+  const updateAccess = (access: string) => {
+    if (access === "read-write") {
+      onChange([
+        `${keyType}:read` as ApiKeyScope,
+        `${keyType}:write` as ApiKeyScope,
+      ]);
+      return;
+    }
+
+    onChange([`${keyType}:read` as ApiKeyScope]);
+  };
 
   return (
     <Stack gap="sm">
-      {mcpOnly && (
-        <Alert variant="light" color="blue" icon={<IconInfoCircle />} p="sm">
-          {t(
-            "Space-restricted access supports MCP scopes only. REST scopes are unavailable.",
+      <div>
+        <Text size="sm" fw={500} mb={6}>
+          {t("Access")}
+        </Text>
+        <SegmentedControl
+          value={canWrite ? "read-write" : "read-only"}
+          onChange={updateAccess}
+          data={[
+            { label: t("Read only"), value: "read-only" },
+            {
+              label: t("Read and write"),
+              value: "read-write",
+              disabled: !allowWrite,
+            },
+          ]}
+          withItemsBorders={false}
+          fullWidth
+          aria-label={t("API key access")}
+        />
+        {error && (
+          <Text c="red" size="xs" mt={4}>
+            {error}
+          </Text>
+        )}
+      </div>
+
+      {keyType === "mcp" && (
+        <Switch
+          checked={destructiveEnabled}
+          disabled={!canWrite || !allowWrite}
+          label={t("Destructive MCP tools")}
+          description={t(
+            "Allow explicitly confirmed page trash operations through MCP.",
           )}
-        </Alert>
-      )}
-
-      <Select
-        label={t("Usage type")}
-        data={presets.map((preset) => ({
-          value: preset.value,
-          label: t(preset.label),
-        }))}
-        value={scopePreset}
-        onChange={(value) => onScopePresetChange(value || "mcp-read")}
-        allowDeselect={false}
-        error={scopePreset === "custom" ? undefined : error}
-      />
-
-      {scopePreset === "custom" && (
-        <MultiSelect
-          label={t("Scopes")}
-          data={scopeOptions}
-          value={customScopes}
-          onChange={(value) => onCustomScopesChange(value as ApiKeyScope[])}
-          required
-          error={error}
+          onChange={(event) =>
+            onChange(
+              event.currentTarget.checked
+                ? ["mcp:read", "mcp:write", "mcp:destructive"]
+                : ["mcp:read", "mcp:write"],
+            )
+          }
         />
       )}
     </Stack>

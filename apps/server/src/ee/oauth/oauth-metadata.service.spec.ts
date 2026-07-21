@@ -21,36 +21,40 @@ describe('OAuthMetadataService', () => {
 
   it('uses workspace already attached to the raw request', async () => {
     const workspaceRepo = {
-      findFirst: jest.fn(),
-      findByHostname: jest.fn(),
+      findActiveById: jest.fn().mockResolvedValue(workspace),
+      findActiveFirst: jest.fn(),
+      findActiveByHostname: jest.fn(),
     };
     const service = createService({ workspaceRepo });
 
     await expect(
       service.resolveWorkspaceFromRequest({ raw: { workspace } } as any),
     ).resolves.toBe(workspace);
-    expect(workspaceRepo.findFirst).not.toHaveBeenCalled();
-    expect(workspaceRepo.findByHostname).not.toHaveBeenCalled();
+    expect(workspaceRepo.findActiveById).toHaveBeenCalledWith(workspace.id);
+    expect(workspaceRepo.findActiveFirst).not.toHaveBeenCalled();
+    expect(workspaceRepo.findActiveByHostname).not.toHaveBeenCalled();
   });
 
   it('falls back to the first workspace only in self-hosted mode', async () => {
     const workspaceRepo = {
-      findFirst: jest.fn().mockResolvedValue(workspace),
-      findByHostname: jest.fn(),
+      findActiveById: jest.fn(),
+      findActiveFirst: jest.fn().mockResolvedValue(workspace),
+      findActiveByHostname: jest.fn(),
     };
     const service = createService({ workspaceRepo });
 
     await expect(
       service.resolveWorkspaceFromRequest({ headers: {} } as any),
     ).resolves.toBe(workspace);
-    expect(workspaceRepo.findFirst).toHaveBeenCalledTimes(1);
-    expect(workspaceRepo.findByHostname).not.toHaveBeenCalled();
+    expect(workspaceRepo.findActiveFirst).toHaveBeenCalledTimes(1);
+    expect(workspaceRepo.findActiveByHostname).not.toHaveBeenCalled();
   });
 
   it('uses request host for cloud workspace lookup without trusting forwarded host', async () => {
     const workspaceRepo = {
-      findFirst: jest.fn(),
-      findByHostname: jest.fn().mockResolvedValue(workspace),
+      findActiveById: jest.fn(),
+      findActiveFirst: jest.fn(),
+      findActiveByHostname: jest.fn().mockResolvedValue(workspace),
     };
     const service = createService({
       workspaceRepo,
@@ -68,7 +72,22 @@ describe('OAuthMetadataService', () => {
         },
       } as any),
     ).resolves.toBe(workspace);
-    expect(workspaceRepo.findByHostname).toHaveBeenCalledWith('workspace');
+    expect(workspaceRepo.findActiveByHostname).toHaveBeenCalledWith(
+      'workspace',
+    );
+  });
+
+  it('does not expose OAuth metadata for an inactive request workspace', async () => {
+    const workspaceRepo = {
+      findActiveById: jest.fn().mockResolvedValue(undefined),
+      findActiveFirst: jest.fn(),
+      findActiveByHostname: jest.fn(),
+    };
+    const service = createService({ workspaceRepo });
+
+    await expect(
+      service.resolveWorkspaceFromRequest({ raw: { workspace } } as any),
+    ).resolves.toBeUndefined();
   });
 
   it('uses the configured canonical origin for all public metadata', () => {
@@ -88,6 +107,8 @@ describe('OAuthMetadataService', () => {
     expect(service.getProtectedResourceMetadata(workspace, req)).toMatchObject({
       resource: 'https://docs.example.test:23000/mcp',
       authorization_servers: ['https://docs.example.test:23000'],
+      resource_documentation:
+        'https://docs.example.test:23000/settings/account/mcp/oauth',
     });
     expect(
       service.getAuthorizationServerMetadata(workspace, req),
@@ -95,6 +116,8 @@ describe('OAuthMetadataService', () => {
       issuer: 'https://docs.example.test:23000',
       registration_endpoint:
         'https://docs.example.test:23000/api/oauth/register',
+      resource_documentation:
+        'https://docs.example.test:23000/settings/account/mcp/oauth',
     });
     expect(service.getWwwAuthenticateHeader(workspace, undefined, req)).toBe(
       'Bearer resource_metadata="https://docs.example.test:23000/.well-known/oauth-protected-resource/mcp", scope="mcp:read"',

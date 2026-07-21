@@ -9,9 +9,12 @@ import { ApiKeyRepo } from '@docmost/db/repos/api-key/api-key.repo';
 import { TokenService } from '../auth/services/token.service';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
-import { CreateApiKeyDto, UpdateApiKeyDto } from './dto/api-key.dto';
+import {
+  CreateApiKeyDto,
+  FindApiKeysDto,
+  UpdateApiKeyDto,
+} from './dto/api-key.dto';
 import { User, Workspace } from '@docmost/db/types/entity.types';
-import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { JwtApiKeyPayload } from '../auth/dto/jwt-payload';
 import {
   AUDIT_SERVICE,
@@ -22,15 +25,16 @@ import { UserRole } from '../../common/helpers/types/permission';
 import { isUserDisabled } from '../../common/helpers';
 import {
   ApiKeyScope,
-  DEFAULT_API_KEY_SCOPES,
-  LEGACY_API_KEY_SCOPES,
-  normalizeApiKeyScopes,
+  ApiKeyType,
+  isApiKeyType,
+  normalizeApiKeyScopesForType,
 } from './api-key-scopes';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { CredentialSpaceAccessService } from '../credential-space-access/credential-space-access.service';
 import { CredentialSpaceAccessMode } from '../credential-space-access/credential-space-access.types';
 import { CredentialRevocationService } from '../credential-space-access/credential-revocation.service';
+import { resolveMcpMode } from '../../common/helpers/mcp-mode';
 
 export type ApiKeyAuthMetadata = {
   ipAddress?: string;
@@ -52,7 +56,7 @@ export class ApiKeyService {
 
   async findApiKeys(
     workspace: Workspace,
-    pagination: PaginationOptions,
+    pagination: FindApiKeysDto,
     user: User,
   ) {
     if (pagination.adminView) {
@@ -62,6 +66,7 @@ export class ApiKeyService {
       const result = await this.apiKeyRepo.findApiKeys(
         workspace.id,
         pagination,
+        { keyType: pagination.keyType },
       );
       result.items = await this.credentialSpaceAccess.addApiKeyViews(
         result.items,
@@ -69,11 +74,10 @@ export class ApiKeyService {
       return result;
     }
 
-    const result = await this.apiKeyRepo.findApiKeys(
-      workspace.id,
-      pagination,
-      user.id,
-    );
+    const result = await this.apiKeyRepo.findApiKeys(workspace.id, pagination, {
+      creatorId: user.id,
+      keyType: pagination.keyType,
+    });
     result.items = await this.credentialSpaceAccess.addApiKeyViews(
       result.items,
     );
@@ -95,14 +99,15 @@ export class ApiKeyService {
       throw new ForbiddenException('API key creation is restricted to admins');
     }
 
-    const scopes = normalizeApiKeyScopes(dto.scopes, DEFAULT_API_KEY_SCOPES);
+    const scopes = this.prepareScopes(dto.keyType, dto.scopes);
+    this.assertMcpIssuanceAllowed(workspace, dto.keyType, scopes);
     const expiresAt = this.parseExpirationDate(dto.expiresAt);
     const selection = await this.credentialSpaceAccess.normalizeSelection(
       dto.spaceAccess as any,
       user.id,
       workspace.id,
     );
-    this.assertScopeCompatibility(selection.mode, scopes);
+    this.assertConfiguration(dto.keyType, selection.mode);
 
     const apiKey = await this.db.transaction().execute(async (trx) => {
       const activeUser =
@@ -120,6 +125,7 @@ export class ApiKeyService {
           creatorId: user.id,
           workspaceId: workspace.id,
           expiresAt,
+          keyType: dto.keyType,
           scopes,
           spaceAccessMode: selection.mode,
         },
@@ -151,6 +157,7 @@ export class ApiKeyService {
       resourceType: AuditResource.API_KEY,
       resourceId: apiKey.id,
       metadata: {
+        keyType: dto.keyType,
         scopes,
         spaceAccessMode: selection.mode,
         selectedSpaceCount: selection.spaceIds.length,
@@ -171,9 +178,14 @@ export class ApiKeyService {
     if (apiKey.creatorId !== user.id && !this.canManageWorkspaceApiKeys(user)) {
       throw new ForbiddenException();
     }
+    if (dto.keyType !== undefined && dto.keyType !== apiKey.keyType) {
+      throw new BadRequestException('API key type cannot be changed');
+    }
     if (
       apiKey.creatorId !== user.id &&
-      (dto.scopes !== undefined || dto.spaceAccess !== undefined)
+      (dto.keyType !== undefined ||
+        dto.scopes !== undefined ||
+        dto.spaceAccess !== undefined)
     ) {
       throw new ForbiddenException(
         'Only the API key owner can change scopes or space access',
@@ -187,9 +199,13 @@ export class ApiKeyService {
     if (!creator || isUserDisabled(creator)) {
       throw new BadRequestException('API key owner is no longer active');
     }
-    const scopes = dto.scopes
-      ? normalizeApiKeyScopes(dto.scopes, DEFAULT_API_KEY_SCOPES)
-      : normalizeApiKeyScopes(apiKey.scopes, LEGACY_API_KEY_SCOPES);
+    const scopes = this.prepareScopes(
+      apiKey.keyType,
+      dto.scopes ?? apiKey.scopes,
+    );
+    if (dto.scopes !== undefined) {
+      this.assertMcpIssuanceAllowed(workspace, apiKey.keyType, scopes);
+    }
     const selection = dto.spaceAccess
       ? await this.credentialSpaceAccess.normalizeSelection(
           dto.spaceAccess as any,
@@ -198,10 +214,8 @@ export class ApiKeyService {
         )
       : undefined;
     const mode = (selection?.mode ??
-      (apiKey.spaceAccessMode === 'selected'
-        ? 'selected'
-        : 'all')) as CredentialSpaceAccessMode;
-    this.assertScopeCompatibility(mode, scopes);
+      apiKey.spaceAccessMode) as CredentialSpaceAccessMode;
+    this.assertConfiguration(apiKey.keyType, mode);
 
     await this.db.transaction().execute(async (trx) => {
       await this.apiKeyRepo.updateApiKey(
@@ -225,6 +239,7 @@ export class ApiKeyService {
       resourceId: apiKey.id,
       metadata: {
         creatorId: apiKey.creatorId,
+        keyType: apiKey.keyType,
         renamedByAdmin: apiKey.creatorId !== user.id,
         scopes,
         spaceAccessMode: mode,
@@ -254,6 +269,7 @@ export class ApiKeyService {
       resourceId: apiKey.id,
       metadata: {
         creatorId: apiKey.creatorId,
+        keyType: apiKey.keyType,
         revokedByAdmin: apiKey.creatorId !== user.id,
       },
     });
@@ -280,7 +296,9 @@ export class ApiKeyService {
       throw new ForbiddenException('API key expired');
     }
 
-    const workspace = await this.workspaceRepo.findById(payload.workspaceId);
+    const workspace = await this.workspaceRepo.findActiveById(
+      payload.workspaceId,
+    );
     if (!workspace) {
       throw new ForbiddenException('Workspace not found');
     }
@@ -290,10 +308,12 @@ export class ApiKeyService {
       throw new ForbiddenException('User not found');
     }
 
-    const scopes = normalizeApiKeyScopes(apiKey.scopes, LEGACY_API_KEY_SCOPES);
-    const mode =
-      apiKey.spaceAccessMode === 'selected' ? 'selected' : ('all' as const);
-    if (!this.hasCompatibleScopes(mode, scopes)) {
+    if (!isApiKeyType(apiKey.keyType)) {
+      throw new ForbiddenException('Invalid API key type configuration');
+    }
+    const scopes = normalizeApiKeyScopesForType(apiKey.keyType, apiKey.scopes);
+    const mode = apiKey.spaceAccessMode as CredentialSpaceAccessMode;
+    if (!scopes || !this.hasCompatibleConfiguration(apiKey.keyType, mode)) {
       throw new ForbiddenException('Invalid API key scope configuration');
     }
     const spaceAccess =
@@ -307,6 +327,7 @@ export class ApiKeyService {
       apiKey: {
         id: apiKey.id,
         creatorId: apiKey.creatorId,
+        keyType: apiKey.keyType,
         scopes,
         spaceAccess,
       },
@@ -317,26 +338,61 @@ export class ApiKeyService {
     return isWorkspaceOwner(user);
   }
 
-  private assertScopeCompatibility(
-    mode: CredentialSpaceAccessMode,
-    scopes: string[],
-  ) {
-    if (!this.hasCompatibleScopes(mode, scopes)) {
+  private prepareScopes(keyType: unknown, scopes?: string[] | null) {
+    if (!isApiKeyType(keyType)) {
+      throw new BadRequestException('Invalid API key type');
+    }
+
+    const normalized = normalizeApiKeyScopesForType(keyType, scopes);
+    if (!normalized) {
       throw new BadRequestException(
-        'Selected-space API keys can only use MCP scopes',
+        'API key scopes must match the selected key type',
+      );
+    }
+
+    return normalized;
+  }
+
+  private assertConfiguration(
+    keyType: ApiKeyType,
+    mode: CredentialSpaceAccessMode,
+  ) {
+    if (!this.hasCompatibleConfiguration(keyType, mode)) {
+      throw new BadRequestException(
+        'REST API keys require all-space access; MCP API keys require a valid space mode',
       );
     }
   }
 
-  private hasCompatibleScopes(
+  private hasCompatibleConfiguration(
+    keyType: ApiKeyType,
     mode: CredentialSpaceAccessMode,
-    scopes: string[],
   ) {
-    return !(
-      mode === 'selected' &&
-      (scopes.includes(ApiKeyScope.REST_READ) ||
-        scopes.includes(ApiKeyScope.REST_WRITE))
-    );
+    if (mode !== 'all' && mode !== 'selected') {
+      return false;
+    }
+
+    return keyType === ApiKeyType.MCP || mode === 'all';
+  }
+
+  private assertMcpIssuanceAllowed(
+    workspace: Workspace,
+    keyType: ApiKeyType,
+    scopes: readonly ApiKeyScope[],
+  ) {
+    if (keyType !== ApiKeyType.MCP) return;
+
+    const mode = resolveMcpMode((workspace.settings as any)?.ai);
+    if (mode === 'off') {
+      throw new ForbiddenException('MCP is not enabled for this workspace');
+    }
+    if (
+      mode === 'read-only' &&
+      (scopes.includes(ApiKeyScope.MCP_WRITE) ||
+        scopes.includes(ApiKeyScope.MCP_DESTRUCTIVE))
+    ) {
+      throw new ForbiddenException('MCP is enabled in read-only mode');
+    }
   }
 
   private parseExpirationDate(expiresAt: string | undefined) {

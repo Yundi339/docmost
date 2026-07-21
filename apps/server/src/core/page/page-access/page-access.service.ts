@@ -140,6 +140,34 @@ export class PageAccessService {
     return result;
   }
 
+  async validateCanViewPages(pages: Page[], user: User): Promise<void> {
+    const expectedPageIds = new Set(pages.map((page) => page.id));
+    const viewable = await this.filterViewablePagesWithPermissions(pages, user);
+    const viewablePageIds = new Set(viewable.map(({ page }) => page.id));
+
+    if (
+      viewablePageIds.size !== expectedPageIds.size ||
+      [...expectedPageIds].some((pageId) => !viewablePageIds.has(pageId))
+    ) {
+      throw new ForbiddenException();
+    }
+  }
+
+  async validateCanEditPages(pages: Page[], user: User): Promise<void> {
+    const expectedPageIds = new Set(pages.map((page) => page.id));
+    const viewable = await this.filterViewablePagesWithPermissions(pages, user);
+    const editablePageIds = new Set(
+      viewable.filter(({ canEdit }) => canEdit).map(({ page }) => page.id),
+    );
+
+    if (
+      editablePageIds.size !== expectedPageIds.size ||
+      [...expectedPageIds].some((pageId) => !editablePageIds.has(pageId))
+    ) {
+      throw new ForbiddenException();
+    }
+  }
+
   async validateCanComment(
     page: Page,
     user: User,

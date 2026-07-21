@@ -35,11 +35,12 @@ export interface ApiKeys {
   deletedAt: Timestamp | null;
   expiresAt: Timestamp | null;
   id: Generated<string>;
+  keyType: 'rest' | 'mcp';
   lastUsedAt: Timestamp | null;
   lastUsedIp: string | null;
   lastUsedUserAgent: string | null;
   name: string | null;
-  scopes: Generated<string[]>;
+  scopes: string[];
   spaceAccessMode: Generated<string>;
   updatedAt: Generated<Timestamp>;
   creatorId: string;
@@ -707,6 +708,20 @@ export interface PageVerifiers {
   createdAt: Generated<Timestamp>;
 }
 
+export interface QueueOutbox {
+  attempts: Generated<number>;
+  availableAt: Generated<Timestamp>;
+  createdAt: Generated<Timestamp>;
+  dispatchedAt: Timestamp | null;
+  id: Generated<string>;
+  jobId: string;
+  jobName: string;
+  lastError: string | null;
+  payload: Json;
+  queueName: string;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface Templates {
   id: Generated<string>;
   title: string | null;
@@ -815,6 +830,7 @@ export interface DB {
   pageVerifiers: PageVerifiers;
   pageVisitors: PageVisitors;
   pages: Pages;
+  queueOutbox: QueueOutbox;
   shares: Shares;
   spaceMembers: SpaceMembers;
   spaces: Spaces;

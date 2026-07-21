@@ -1,43 +1,81 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildApiKeyCreateRequest,
   getApiKeyConfigurationError,
-  restrictApiKeyScopesToMcp,
+  getDefaultApiKeyScopes,
+  restrictApiKeyScopesToType,
 } from "./api-key-scopes";
 
-describe("API key scopes with space access", () => {
-  it("rejects REST scopes for selected-space access", () => {
+describe("API key type scopes", () => {
+  it("defaults both key types to read-only access", () => {
+    expect(getDefaultApiKeyScopes("rest")).toEqual(["rest:read"]);
+    expect(getDefaultApiKeyScopes("mcp")).toEqual(["mcp:read"]);
+  });
+
+  it("restricts scopes to the immutable key type", () => {
     expect(
-      getApiKeyConfigurationError(["rest:read", "mcp:read"], {
+      restrictApiKeyScopesToType("rest", [
+        "rest:read",
+        "rest:write",
+        "mcp:destructive",
+      ]),
+    ).toEqual(["rest:read", "rest:write"]);
+    expect(
+      restrictApiKeyScopesToType("mcp", ["rest:write", "mcp:read"]),
+    ).toEqual(["mcp:read"]);
+  });
+
+  it("rejects cross-type scopes and invalid space access", () => {
+    expect(
+      getApiKeyConfigurationError("rest", ["mcp:read"], { mode: "all" }),
+    ).toBe("invalid_scope");
+    expect(
+      getApiKeyConfigurationError("rest", ["rest:read"], {
         mode: "selected",
         spaceIds: ["space-1"],
       }),
-    ).toBe("rest_scope_with_selected_spaces");
-  });
-
-  it("allows REST scopes when all spaces are selected", () => {
+    ).toBe("rest_space_access");
     expect(
-      getApiKeyConfigurationError(["rest:read"], { mode: "all" }),
-    ).toBeNull();
-  });
-
-  it("requires both a selected space and at least one scope", () => {
-    expect(
-      getApiKeyConfigurationError(["mcp:read"], {
+      getApiKeyConfigurationError("mcp", ["mcp:read"], {
         mode: "selected",
         spaceIds: [],
       }),
     ).toBe("missing_space");
-    expect(getApiKeyConfigurationError([], { mode: "all" })).toBe(
-      "missing_scope",
-    );
   });
 
-  it("retains MCP scopes and supplies read access when none remain", () => {
+  it("builds an explicit REST payload with all-space access", () => {
     expect(
-      restrictApiKeyScopesToMcp(["rest:read", "mcp:read", "mcp:destructive"]),
-    ).toEqual(["mcp:read", "mcp:destructive"]);
-    expect(restrictApiKeyScopesToMcp(["rest:read", "rest:write"])).toEqual([
-      "mcp:read",
-    ]);
+      buildApiKeyCreateRequest({
+        name: "REST client",
+        expiresAt: "2026-08-20T00:00:00.000Z",
+        keyType: "rest",
+        scopes: ["rest:read"],
+        spaceAccess: { mode: "selected", spaceIds: ["space-1"] },
+      }),
+    ).toEqual({
+      name: "REST client",
+      expiresAt: "2026-08-20T00:00:00.000Z",
+      keyType: "rest",
+      scopes: ["rest:read"],
+      spaceAccess: { mode: "all" },
+    });
+  });
+
+  it("builds an explicit MCP payload with selected-space access", () => {
+    expect(
+      buildApiKeyCreateRequest({
+        name: "MCP client",
+        expiresAt: "2026-08-20T00:00:00.000Z",
+        keyType: "mcp",
+        scopes: ["mcp:read", "mcp:write", "mcp:destructive"],
+        spaceAccess: { mode: "selected", spaceIds: ["space-1"] },
+      }),
+    ).toEqual({
+      name: "MCP client",
+      expiresAt: "2026-08-20T00:00:00.000Z",
+      keyType: "mcp",
+      scopes: ["mcp:read", "mcp:write", "mcp:destructive"],
+      spaceAccess: { mode: "selected", spaceIds: ["space-1"] },
+    });
   });
 });

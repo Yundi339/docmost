@@ -6,6 +6,7 @@ const auditFieldLabels: Record<string, string> = {
   authType: "Authentication",
   credentialId: "Credential ID",
   apiKeyId: "API key ID",
+  keyType: "Key type",
   oauthAuthorizationId: "OAuth authorization ID",
   oauthClientId: "OAuth client ID",
   clientId: "Client ID",
@@ -209,6 +210,10 @@ export function formatAuditPrimitive(
 
   const text = String(value);
   if (fieldKey === "toolName") return t(getMcpToolLabel(text));
+  if (fieldKey === "keyType") {
+    if (text === "rest") return t("REST API");
+    if (text === "mcp") return t("MCP");
+  }
 
   const valueLabel = auditValueLabels[text];
   return valueLabel ? t(valueLabel) : text;

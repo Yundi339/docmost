@@ -25,7 +25,8 @@ import { isCloud } from "@/lib/config.ts";
 import useUserRole from "@/hooks/use-user-role.tsx";
 import {
   prefetchApiKeyManagement,
-  prefetchApiKeys,
+  prefetchMcpApiKeys,
+  prefetchRestApiKeys,
   prefetchBilling,
   prefetchGroups,
   prefetchShares,
@@ -43,6 +44,7 @@ import { useAtom } from "jotai";
 import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import { useSettingsNavigation } from "@/hooks/use-settings-navigation";
+import { ACCOUNT_API_KEY_NAVIGATION } from "@/ee/api-key/lib/api-key-routes";
 
 type DataItem = {
   label: string;
@@ -56,6 +58,7 @@ type DataItem = {
 type DataGroup = {
   heading: string;
   items: DataItem[];
+  nested?: boolean;
 };
 
 const groupedData: DataGroup[] = [
@@ -69,19 +72,30 @@ const groupedData: DataGroup[] = [
         path: "/settings/account/preferences",
       },
       {
-        label: "API keys",
+        label: ACCOUNT_API_KEY_NAVIGATION.rest.label,
         icon: IconKey,
-        path: "/settings/account/api-keys",
+        path: ACCOUNT_API_KEY_NAVIGATION.rest.path,
+      },
+    ],
+  },
+  {
+    heading: "MCP connections",
+    nested: true,
+    items: [
+      {
+        label: ACCOUNT_API_KEY_NAVIGATION.mcp.label,
+        icon: IconKey,
+        path: ACCOUNT_API_KEY_NAVIGATION.mcp.path,
       },
       {
-        label: "OAuth settings",
+        label: ACCOUNT_API_KEY_NAVIGATION.oauth.label,
         icon: IconShieldLock,
-        path: "/settings/account/oauth",
+        path: ACCOUNT_API_KEY_NAVIGATION.oauth.path,
       },
       {
-        label: "MCP activity",
+        label: ACCOUNT_API_KEY_NAVIGATION.activity.label,
         icon: IconHistory,
-        path: "/settings/account/mcp-activity",
+        path: ACCOUNT_API_KEY_NAVIGATION.activity.path,
       },
     ],
   },
@@ -179,7 +193,10 @@ export default function SettingsSidebar() {
   const menuItems = groupedData.map((group) => {
     return (
       <div key={group.heading}>
-        <Text c="dimmed" className={classes.linkHeader}>
+        <Text
+          c="dimmed"
+          className={group.nested ? classes.subgroupHeader : classes.linkHeader}
+        >
           {t(group.heading)}
         </Text>
         {group.items.map((item) => {
@@ -207,10 +224,13 @@ export default function SettingsSidebar() {
             case "Public sharing":
               prefetchHandler = prefetchShares;
               break;
-            case "API keys":
-              prefetchHandler = prefetchApiKeys;
+            case "REST API keys":
+              prefetchHandler = prefetchRestApiKeys;
               break;
-            case "OAuth settings":
+            case "MCP keys":
+              prefetchHandler = prefetchMcpApiKeys;
+              break;
+            case "OAuth applications":
               prefetchHandler = prefetchOAuthSettings;
               break;
             case "MCP activity":
@@ -243,7 +263,7 @@ export default function SettingsSidebar() {
                 withArrow
               >
                 <span
-                  className={classes.link}
+                  className={`${classes.link} ${group.nested ? classes.subgroupLink : ""}`}
                   data-disabled
                   role="link"
                   aria-disabled="true"
@@ -263,7 +283,7 @@ export default function SettingsSidebar() {
           return (
             <Link
               onMouseEnter={prefetchHandler}
-              className={classes.link}
+              className={`${classes.link} ${group.nested ? classes.subgroupLink : ""}`}
               data-active={active.startsWith(item.path) || undefined}
               key={item.label}
               to={item.path}

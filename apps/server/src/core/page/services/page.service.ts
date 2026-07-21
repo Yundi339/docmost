@@ -60,6 +60,7 @@ import { WsTreeService } from '../../../ws/ws-tree.service';
 import { PageOperationPolicyService } from '../policies/page-operation-policy.service';
 import { PageContentLifecycleService } from '../../../collaboration/services/page-content-lifecycle.service';
 import { PageAccessService } from '../page-access/page-access.service';
+import { QueueOutboxService } from '../../../integrations/queue/queue-outbox.service';
 
 export type DeletedPageListItem = Page & {
   trashCapabilities: {
@@ -78,7 +79,7 @@ export class PageService {
     private attachmentRepo: AttachmentRepo,
     @InjectKysely() private readonly db: KyselyDB,
     private readonly storageService: StorageService,
-    @InjectQueue(QueueName.ATTACHMENT_QUEUE) private attachmentQueue: Queue,
+    private readonly queueOutbox: QueueOutboxService,
     @InjectQueue(QueueName.AI_QUEUE) private aiQueue: Queue,
     @InjectQueue(QueueName.GENERAL_QUEUE) private generalQueue: Queue,
     private eventEmitter: EventEmitter2,
@@ -1324,74 +1325,90 @@ export class PageService {
     return { ...result, items };
   }
 
-  async forceDelete(pageId: string, workspaceId: string): Promise<string[]> {
-    let pageIds: string[] = [];
-
-    await executeTx(this.db, async (trx) => {
-      const rootPage = await trx
-        .selectFrom('pages')
-        .select('id')
-        .where('id', '=', pageId)
-        .where('workspaceId', '=', workspaceId)
-        .where('deletedAt', 'is not', null)
-        .forUpdate()
-        .executeTakeFirst();
-
-      if (!rootPage) return;
-
-      const descendants = await trx
-        .withRecursive('page_descendants', (db) =>
-          db
-            .selectFrom('pages')
-            .select(['id'])
-            .where('id', '=', rootPage.id)
-            .where('workspaceId', '=', workspaceId)
-            .unionAll((exp) =>
-              exp
-                .selectFrom('pages as p')
-                .select(['p.id'])
-                .innerJoin('page_descendants as pd', 'pd.id', 'p.parentPageId')
-                .where('p.workspaceId', '=', workspaceId),
-            ),
-        )
-        .selectFrom('page_descendants')
-        .selectAll()
-        .execute();
-
-      pageIds = descendants.map((descendant) => descendant.id);
-
-      for (const id of pageIds) {
-        await this.attachmentQueue.add(
-          QueueJob.DELETE_PAGE_ATTACHMENTS,
-          { pageId: id },
-          {
-            jobId: `delete-page-attachments-${id}`,
-            attempts: 3,
-            backoff: {
-              type: 'exponential',
-              delay: 5000,
-            },
-          },
-        );
-      }
-
-      if (pageIds.length > 0) {
-        await trx
-          .deleteFrom('pages')
-          .where('id', 'in', pageIds)
+  async forceDelete(
+    pageId: string,
+    workspaceId: string,
+    existingTrx?: KyselyTransaction,
+    finalize = true,
+  ): Promise<string[]> {
+    const pageIds = await executeTx(
+      this.db,
+      async (trx) => {
+        const rootPage = await trx
+          .selectFrom('pages')
+          .select('id')
+          .where('id', '=', pageId)
           .where('workspaceId', '=', workspaceId)
-          .execute();
-      }
-    });
+          .where('deletedAt', 'is not', null)
+          .forUpdate()
+          .executeTakeFirst();
 
+        if (!rootPage) return [];
+
+        const descendants = await trx
+          .withRecursive('page_descendants', (db) =>
+            db
+              .selectFrom('pages')
+              .select(['id'])
+              .where('id', '=', rootPage.id)
+              .where('workspaceId', '=', workspaceId)
+              .unionAll((exp) =>
+                exp
+                  .selectFrom('pages as p')
+                  .select(['p.id'])
+                  .innerJoin(
+                    'page_descendants as pd',
+                    'pd.id',
+                    'p.parentPageId',
+                  )
+                  .where('p.workspaceId', '=', workspaceId),
+              ),
+          )
+          .selectFrom('page_descendants')
+          .selectAll()
+          .execute();
+
+        const affectedPageIds = descendants.map((descendant) => descendant.id);
+
+        if (affectedPageIds.length > 0) {
+          await this.queueOutbox.schedulePageAttachmentCleanup(
+            affectedPageIds,
+            trx,
+          );
+          await trx
+            .deleteFrom('pages')
+            .where('id', 'in', affectedPageIds)
+            .where('workspaceId', '=', workspaceId)
+            .execute();
+        }
+
+        return affectedPageIds;
+      },
+      existingTrx,
+    );
+
+    if (finalize) {
+      await this.finalizeForceDelete(pageIds, workspaceId);
+    }
+
+    return pageIds;
+  }
+
+  async finalizeForceDelete(
+    pageIds: string[],
+    workspaceId: string,
+  ): Promise<void> {
     if (pageIds.length > 0) {
+      this.queueOutbox.dispatchPending().catch((error) =>
+        this.logger.warn(
+          `Attachment cleanup remains pending in the queue outbox: ${error.message}`,
+        ),
+      );
       this.eventEmitter.emit(EventName.PAGE_DELETED, {
         pageIds,
         workspaceId,
       });
     }
-
-    return pageIds;
   }
 
   async removePage(

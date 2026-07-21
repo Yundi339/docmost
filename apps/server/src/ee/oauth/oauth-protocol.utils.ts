@@ -13,6 +13,7 @@ import {
   OAuthClientRegistrationResponse,
   OAuthRequestError,
 } from './oauth.types';
+import { resolveMcpMode } from '../../common/helpers/mcp-mode';
 
 const MAX_DCR_REDIRECT_URIS = 10;
 const MAX_DCR_REDIRECT_URI_LENGTH = 2048;
@@ -252,20 +253,6 @@ export function truncate(value: string, maxLength: number) {
 
 export function generateOpaqueToken(bytes = 32) {
   return randomBytes(bytes).toString('base64url');
-}
-
-type McpMode = 'off' | 'read-only' | 'read-write';
-
-export function resolveMcpMode(aiSettings: any): McpMode {
-  if (
-    aiSettings?.mcpMode === 'read-only' ||
-    aiSettings?.mcpMode === 'read-write'
-  ) {
-    return aiSettings.mcpMode;
-  }
-  if (aiSettings?.mcpMode === 'off') return 'off';
-
-  return aiSettings?.mcp === true ? 'read-write' : 'off';
 }
 
 export function assertMcpScopesAllowed(

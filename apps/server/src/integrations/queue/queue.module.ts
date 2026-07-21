@@ -4,6 +4,7 @@ import { EnvironmentService } from '../environment/environment.service';
 import { createRetryStrategy, parseRedisUrl } from '../../common/helpers';
 import { QueueName } from './constants';
 import { GeneralQueueProcessor } from './processors/general-queue.processor';
+import { QueueOutboxService } from './queue-outbox.service';
 
 @Global()
 @Module({
@@ -94,7 +95,7 @@ import { GeneralQueueProcessor } from './processors/general-queue.processor';
       },
     }),
   ],
-  exports: [BullModule],
-  providers: [GeneralQueueProcessor],
+  exports: [BullModule, QueueOutboxService],
+  providers: [GeneralQueueProcessor, QueueOutboxService],
 })
 export class QueueModule {}

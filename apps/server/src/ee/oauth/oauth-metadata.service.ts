@@ -28,15 +28,15 @@ export class OAuthMetadataService {
     req?: FastifyRequest,
   ): Promise<Workspace | undefined> {
     const workspace = getRequestValue<Workspace>(req, 'workspace');
-    if (workspace) return workspace;
+    if (workspace) return this.workspaceRepo.findActiveById(workspace.id);
 
     if (this.environmentService.isSelfHosted()) {
-      return this.workspaceRepo.findFirst();
+      return this.workspaceRepo.findActiveFirst();
     }
 
     if (this.environmentService.isCloud()) {
       const subdomain = getRequestHost(req)?.split('.')[0];
-      if (subdomain) return this.workspaceRepo.findByHostname(subdomain);
+      if (subdomain) return this.workspaceRepo.findActiveByHostname(subdomain);
     }
 
     return undefined;
@@ -54,7 +54,7 @@ export class OAuthMetadataService {
       authorization_servers: [issuer],
       scopes_supported: SUPPORTED_OAUTH_SCOPES,
       bearer_methods_supported: ['header'],
-      resource_documentation: `${issuer}/settings/account/oauth`,
+      resource_documentation: `${issuer}/settings/account/mcp/oauth`,
     };
   }
 
@@ -71,7 +71,7 @@ export class OAuthMetadataService {
       scopes_supported: SUPPORTED_OAUTH_SCOPES,
       registration_endpoint: `${issuer}/api/oauth/register`,
       token_endpoint_auth_methods_supported: ['none'],
-      resource_documentation: `${issuer}/settings/account/oauth`,
+      resource_documentation: `${issuer}/settings/account/mcp/oauth`,
     };
   }
 

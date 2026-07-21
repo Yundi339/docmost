@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { InjectKysely } from 'nestjs-kysely';
@@ -15,19 +20,24 @@ import { MemberInfo, UserSpaceRole } from './types';
 import { executeWithCursorPagination } from '@docmost/db/pagination/cursor-pagination';
 import { GroupRepo } from '@docmost/db/repos/group/group.repo';
 import { SpaceRepo } from '@docmost/db/repos/space/space.repo';
-import { withCache } from '../../../common/helpers/with-cache';
+import { withVersionedCache } from '../../../common/helpers/with-cache';
 import {
   CacheKey,
   PERMISSION_CACHE_TTL_MS,
 } from '../../../common/helpers/cache-keys';
+import { randomUUID } from 'node:crypto';
+import { SecurityEventService } from '../../../common/events/security-event.service';
 
 @Injectable()
 export class SpaceMemberRepo {
+  private readonly logger = new Logger(SpaceMemberRepo.name);
+
   constructor(
     @InjectKysely() private readonly db: KyselyDB,
     private readonly groupRepo: GroupRepo,
     private readonly spaceRepo: SpaceRepo,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly securityEvents: SecurityEventService,
   ) {}
 
   async insertSpaceMember(
@@ -222,9 +232,10 @@ export class SpaceMemberRepo {
     userId: string,
     spaceId: string,
   ): Promise<UserSpaceRole[]> {
-    return withCache(
+    return withVersionedCache(
       this.cacheManager,
       CacheKey.SPACE_ROLES(userId, spaceId),
+      CacheKey.SPACE_ROLES_VERSION(userId, spaceId),
       PERMISSION_CACHE_TTL_MS,
       async () => {
         const roles = await this.db
@@ -260,13 +271,28 @@ export class SpaceMemberRepo {
   ): Promise<void> {
     const uniqueUserIds = [...new Set(userIds)];
     const uniqueSpaceIds = [...new Set(spaceIds)];
-    await Promise.all(
-      uniqueUserIds.flatMap((userId) =>
-        uniqueSpaceIds.map((spaceId) =>
-          this.cacheManager.del(CacheKey.SPACE_ROLES(userId, spaceId)),
-        ),
+    const versionKeys = uniqueUserIds.flatMap((userId) =>
+      uniqueSpaceIds.map((spaceId) =>
+        CacheKey.SPACE_ROLES_VERSION(userId, spaceId),
       ),
     );
+    const versionResults = await Promise.allSettled(
+      versionKeys.map((key) => this.cacheManager.set(key, randomUUID())),
+    );
+    if (versionResults.some((result) => result.status === 'rejected')) {
+      this.logger.error('Failed to advance space permission cache version');
+      await Promise.allSettled(
+        versionKeys.map((key) => this.cacheManager.del(key)),
+      );
+    }
+
+    if (uniqueUserIds.length > 0 && uniqueSpaceIds.length > 0) {
+      await this.securityEvents.publish({
+        type: 'space.membership-changed',
+        userIds: uniqueUserIds,
+        spaceIds: uniqueSpaceIds,
+      });
+    }
   }
 
   async getUserIdsWithSpaceAccess(

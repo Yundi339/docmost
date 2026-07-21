@@ -31,13 +31,30 @@ describe('WsService.emitTreeEvent', () => {
         fetchSockets: jest.fn().mockImplementation(async () => sockets),
       }),
     };
+    const spaceMemberRepo = {
+      getUserIdsWithSpaceAccess: jest
+        .fn()
+        .mockImplementation(async (userIds: string[]) => new Set(userIds)),
+    };
     const service = new WsService(
       pagePermissionRepo as any,
       cacheManager as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      spaceMemberRepo as any,
+      { subscribe: jest.fn().mockReturnValue(jest.fn()) } as any,
     );
     service.setServer(server as any);
 
-    return { pagePermissionRepo, roomEmitter, server, service, sockets };
+    return {
+      pagePermissionRepo,
+      roomEmitter,
+      server,
+      service,
+      sockets,
+      spaceMemberRepo,
+    };
   }
 
   const event = {
@@ -136,5 +153,140 @@ describe('WsService.emitTreeEvent', () => {
     );
     expect(allowedSocket.emit).toHaveBeenCalledWith('message', invalidateEvent);
     expect(deniedSocket.emit).not.toHaveBeenCalled();
+  });
+
+  it('does not trust stale room membership for client tree refreshes', async () => {
+    const { pagePermissionRepo, service, spaceMemberRepo } = createService();
+    spaceMemberRepo.getUserIdsWithSpaceAccess.mockResolvedValue(new Set());
+    const client = {
+      data: { userId: 'removed-user' },
+      rooms: new Set(['space-space-id']),
+      leave: jest.fn().mockResolvedValue(undefined),
+      broadcast: { to: jest.fn() },
+    };
+
+    await service.handleClientTreeRefresh(client as any, 'space-id');
+
+    expect(spaceMemberRepo.getUserIdsWithSpaceAccess).toHaveBeenCalledWith(
+      ['removed-user'],
+      'space-id',
+    );
+    expect(client.leave).toHaveBeenCalledWith('space-space-id');
+    expect(pagePermissionRepo.hasRestrictedPagesInSpace).not.toHaveBeenCalled();
+  });
+
+  it('accepts only the non-authoritative client tree refresh event', () => {
+    const { service } = createService();
+
+    expect(
+      service.isClientTreeRefreshEvent({
+        operation: 'refetchRootTreeNodeEvent',
+        spaceId: 'space-id',
+      }),
+    ).toBe(true);
+    expect(service.isClientTreeRefreshEvent(event)).toBe(false);
+    expect(
+      service.isClientTreeRefreshEvent({
+        operation: 'deleteTreeNode',
+        spaceId: 'space-id',
+        payload: { node: { id: 'page-id' } },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('WsService connection authentication', () => {
+  function createAuthService(overrides: Record<string, any> = {}) {
+    const userRepo = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'user-id',
+        workspaceId: 'workspace-id',
+        deactivatedAt: null,
+        deletedAt: null,
+      }),
+      ...overrides.userRepo,
+    };
+    const sessionRepo = {
+      findActiveById: jest.fn().mockResolvedValue({
+        id: 'session-id',
+        userId: 'user-id',
+        workspaceId: 'workspace-id',
+      }),
+      ...overrides.sessionRepo,
+    };
+    const workspaceRepo = {
+      findActiveById: jest.fn().mockResolvedValue({ id: 'workspace-id' }),
+      ...overrides.workspaceRepo,
+    };
+    const spaceMemberRepo = {
+      getUserSpaceIds: jest.fn().mockResolvedValue(['space-id']),
+    };
+    const service = new WsService(
+      {} as any,
+      {} as any,
+      userRepo as any,
+      sessionRepo as any,
+      workspaceRepo as any,
+      spaceMemberRepo as any,
+      { subscribe: jest.fn().mockReturnValue(jest.fn()) } as any,
+    );
+    return { service, spaceMemberRepo };
+  }
+
+  it('requires a current session for a new connection', async () => {
+    const { service } = createAuthService();
+
+    await expect(
+      service.authenticateConnection({
+        sub: 'user-id',
+        email: 'user@example.test',
+        workspaceId: 'workspace-id',
+        type: 'access',
+      } as any),
+    ).rejects.toThrow('Session is required');
+  });
+
+  it('rejects a revoked session', async () => {
+    const { service } = createAuthService({
+      sessionRepo: { findActiveById: jest.fn().mockResolvedValue(undefined) },
+    });
+
+    await expect(
+      service.authenticateConnection({
+        sub: 'user-id',
+        email: 'user@example.test',
+        workspaceId: 'workspace-id',
+        sessionId: 'session-id',
+        type: 'access',
+      }),
+    ).rejects.toThrow('Unauthorized');
+  });
+
+  it('reconciles stale space rooms during connection revalidation', async () => {
+    const { service, spaceMemberRepo } = createAuthService();
+    spaceMemberRepo.getUserSpaceIds.mockResolvedValue(['current-space-id']);
+    const rooms = new Set(['socket-id', 'space-stale-space-id']);
+    const socket = {
+      data: {
+        userId: 'user-id',
+        workspaceId: 'workspace-id',
+        sessionId: 'session-id',
+      },
+      rooms,
+      disconnect: jest.fn(),
+      leave: jest.fn(async (room: string) => rooms.delete(room)),
+      join: jest.fn(async (room: string | string[]) => {
+        for (const roomId of Array.isArray(room) ? room : [room]) {
+          rooms.add(roomId);
+        }
+      }),
+    };
+
+    await expect(service.revalidateSocket(socket)).resolves.toBe(true);
+
+    expect(socket.leave).toHaveBeenCalledWith('space-stale-space-id');
+    expect(socket.join).toHaveBeenCalledWith('space-current-space-id');
+    expect(rooms.has('space-stale-space-id')).toBe(false);
+    expect(rooms.has('space-current-space-id')).toBe(true);
   });
 });

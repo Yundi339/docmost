@@ -1,4 +1,7 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+
+jest.mock('./page.service', () => ({ PageService: class PageService {} }));
+
 import { PageLifecycleService } from './page-lifecycle.service';
 
 describe('PageLifecycleService', () => {
@@ -10,6 +13,7 @@ describe('PageLifecycleService', () => {
     title: 'Lifecycle page',
     workspaceId: workspace.id,
     spaceId: 'space-id',
+    parentPageId: null,
     deletedAt: null,
   } as any;
   let pageRepo: any;
@@ -21,18 +25,21 @@ describe('PageLifecycleService', () => {
   let eventEmitter: any;
   let auditService: any;
   let service: PageLifecycleService;
+  let lockDescendants: jest.SpyInstance;
 
   beforeEach(() => {
     pageRepo = {
       findById: jest.fn().mockResolvedValue(page),
+      removePage: jest.fn().mockResolvedValue([page.id]),
       restorePage: jest.fn().mockResolvedValue([page.id]),
     };
     pageService = {
-      removePage: jest.fn().mockResolvedValue(undefined),
       forceDelete: jest.fn().mockResolvedValue([page.id]),
+      finalizeForceDelete: jest.fn().mockResolvedValue(undefined),
     };
     pageAccessService = {
-      validateCanEdit: jest.fn().mockResolvedValue(undefined),
+      validateCanEditPages: jest.fn().mockResolvedValue(undefined),
+      validateCanViewPages: jest.fn().mockResolvedValue(undefined),
     };
     spaceAbility = {
       createForUser: jest.fn().mockResolvedValue({
@@ -60,22 +67,46 @@ describe('PageLifecycleService', () => {
       eventEmitter,
       auditService,
     );
+    lockDescendants = jest
+      .spyOn(service as any, 'lockDescendantPages')
+      .mockResolvedValue([page]);
   });
 
-  it('trashes through the existing page service after page permission checks', async () => {
+  it('trashes the locked authorized subtree through the repository', async () => {
     await expect(service.trashPage(page.id, user, workspace)).resolves.toBe(
       page,
     );
 
-    expect(pageAccessService.validateCanEdit).toHaveBeenCalledWith(page, user);
-    expect(pageService.removePage).toHaveBeenCalledWith(
+    expect(pageAccessService.validateCanEditPages).toHaveBeenCalledWith(
+      [page],
+      user,
+    );
+    expect(pageRepo.removePage).toHaveBeenCalledWith(
       page.id,
       user.id,
       workspace.id,
+      { id: 'trx' },
+      false,
     );
-    expect(auditService.log).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'page.trashed', resourceId: page.id }),
+    expect(eventEmitter.emit).toHaveBeenCalledWith('page.soft_deleted', {
+      pageIds: [page.id],
+      workspaceId: workspace.id,
+    });
+  });
+
+  it('fails closed when one trash descendant cannot be edited', async () => {
+    const restrictedChild = { ...page, id: 'restricted-child' };
+    lockDescendants.mockResolvedValue([page, restrictedChild]);
+    pageAccessService.validateCanEditPages.mockRejectedValue(
+      new ForbiddenException(),
     );
+
+    await expect(
+      service.trashPage(page.id, user, workspace),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(pageRepo.removePage).not.toHaveBeenCalled();
+    expect(eventEmitter.emit).not.toHaveBeenCalled();
+    expect(auditService.log).not.toHaveBeenCalled();
   });
 
   it('rejects pages from another workspace before permission or mutation', async () => {
@@ -87,8 +118,8 @@ describe('PageLifecycleService', () => {
     await expect(
       service.trashPage(page.id, user, workspace),
     ).rejects.toBeInstanceOf(NotFoundException);
-    expect(pageAccessService.validateCanEdit).not.toHaveBeenCalled();
-    expect(pageService.removePage).not.toHaveBeenCalled();
+    expect(lockDescendants).not.toHaveBeenCalled();
+    expect(pageRepo.removePage).not.toHaveBeenCalled();
   });
 
   it('does not re-trash an already deleted page', async () => {
@@ -97,24 +128,23 @@ describe('PageLifecycleService', () => {
     await expect(
       service.trashPage(page.id, user, workspace),
     ).rejects.toBeInstanceOf(NotFoundException);
-    expect(pageService.removePage).not.toHaveBeenCalled();
+    expect(pageRepo.removePage).not.toHaveBeenCalled();
   });
 
-  it('restores through the existing repository after space and page checks', async () => {
+  it('restores only after every locked descendant is editable', async () => {
     const deleted = { ...page, deletedAt: new Date() };
     const restored = { ...page, hasChildren: true };
     pageRepo.findById
       .mockResolvedValueOnce(deleted)
-      .mockResolvedValueOnce(deleted)
       .mockResolvedValueOnce(restored);
+    lockDescendants.mockResolvedValue([deleted]);
 
     await expect(service.restorePage(page.id, user, workspace)).resolves.toBe(
       restored,
     );
 
-    expect(spaceAbility.createForUser).toHaveBeenCalledWith(user, page.spaceId);
-    expect(pageAccessService.validateCanEdit).toHaveBeenCalledWith(
-      deleted,
+    expect(pageAccessService.validateCanEditPages).toHaveBeenCalledWith(
+      [deleted],
       user,
     );
     expect(pageOperationPolicy.assertOperation).toHaveBeenCalledWith({
@@ -129,26 +159,25 @@ describe('PageLifecycleService', () => {
       { id: 'trx' },
       false,
     );
-    expect(eventEmitter.emit).toHaveBeenCalledWith('page.restored', {
-      pageIds: [page.id],
-      workspaceId: workspace.id,
-    });
-    expect(auditService.log).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'page.restored', resourceId: page.id }),
-    );
   });
 
-  it('requires space edit permission to restore', async () => {
-    pageRepo.findById.mockResolvedValue({ ...page, deletedAt: new Date() });
-    spaceAbility.createForUser.mockResolvedValue({
-      cannot: jest.fn().mockReturnValue(true),
-    });
+  it('fails closed when one restore descendant cannot be edited', async () => {
+    const deleted = { ...page, deletedAt: new Date() };
+    const restrictedChild = {
+      ...deleted,
+      id: 'restricted-child',
+    };
+    pageRepo.findById.mockResolvedValue(deleted);
+    lockDescendants.mockResolvedValue([deleted, restrictedChild]);
+    pageAccessService.validateCanEditPages.mockRejectedValue(
+      new ForbiddenException(),
+    );
 
     await expect(
       service.restorePage(page.id, user, workspace),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(pageAccessService.validateCanEdit).not.toHaveBeenCalled();
     expect(pageRepo.restorePage).not.toHaveBeenCalled();
+    expect(eventEmitter.emit).not.toHaveBeenCalled();
   });
 
   it('does not restore an active page', async () => {
@@ -161,6 +190,7 @@ describe('PageLifecycleService', () => {
   it('does not restore when an extension policy rejects the operation', async () => {
     const deleted = { ...page, deletedAt: new Date() };
     pageRepo.findById.mockResolvedValue(deleted);
+    lockDescendants.mockResolvedValue([deleted]);
     pageOperationPolicy.assertOperation.mockRejectedValue(
       new Error('Restore the board first'),
     );
@@ -168,13 +198,11 @@ describe('PageLifecycleService', () => {
     await expect(service.restorePage(page.id, user, workspace)).rejects.toThrow(
       'Restore the board first',
     );
-
     expect(pageRepo.restorePage).not.toHaveBeenCalled();
-    expect(eventEmitter.emit).not.toHaveBeenCalled();
   });
 
-  it('locks a deleted page parent before the page being restored', async () => {
-    const parent = { ...page, id: 'parent-page', deletedAt: null };
+  it('locks a deleted parent before locking the restore subtree', async () => {
+    const parent = { ...page, id: 'parent-page' };
     const deleted = {
       ...page,
       parentPageId: parent.id,
@@ -184,41 +212,92 @@ describe('PageLifecycleService', () => {
     pageRepo.findById
       .mockResolvedValueOnce(deleted)
       .mockResolvedValueOnce(parent)
-      .mockResolvedValueOnce(deleted)
       .mockResolvedValueOnce(restored);
+    lockDescendants.mockResolvedValue([deleted]);
 
     await service.restorePage(deleted.id, user, workspace);
 
     const parentLockOrder = pageRepo.findById.mock.invocationCallOrder[1];
-    const pageLockOrder = pageRepo.findById.mock.invocationCallOrder[2];
-    expect(parentLockOrder).toBeLessThan(pageLockOrder);
+    const subtreeLockOrder = lockDescendants.mock.invocationCallOrder[0];
+    expect(parentLockOrder).toBeLessThan(subtreeLockOrder);
     expect(pageRepo.findById).toHaveBeenNthCalledWith(2, parent.id, {
       withLock: true,
       trx: { id: 'trx' },
     });
   });
 
-  it('permanently deletes only pages already in trash as a space admin', async () => {
+  it('validates view access for every descendant before permanent deletion', async () => {
     const deleted = { ...page, deletedAt: new Date() };
+    const child = { ...deleted, id: 'child-page' };
     pageRepo.findById.mockResolvedValue(deleted);
+    lockDescendants.mockResolvedValue([deleted, child]);
+    pageService.forceDelete.mockResolvedValue([deleted.id, child.id]);
 
-    await expect(
-      service.permanentlyDeletePage(page.id, user, workspace),
-    ).resolves.toBe(deleted);
+    await service.permanentlyDeletePage(page.id, user, workspace);
 
-    expect(pageService.forceDelete).toHaveBeenCalledWith(page.id, workspace.id);
-    expect(auditService.log).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'page.deleted', resourceId: page.id }),
+    expect(pageAccessService.validateCanViewPages).toHaveBeenCalledWith(
+      [deleted, child],
+      user,
+    );
+    expect(pageService.forceDelete).toHaveBeenCalledWith(
+      page.id,
+      workspace.id,
+      { id: 'trx' },
+      false,
+    );
+    expect(pageService.finalizeForceDelete).toHaveBeenCalledWith(
+      [deleted.id, child.id],
+      workspace.id,
     );
   });
 
-  it('rejects permanent deletion of an active page', async () => {
+  it('does not permanently delete when a descendant is not viewable', async () => {
+    const deleted = { ...page, deletedAt: new Date() };
+    const restrictedChild = { ...deleted, id: 'restricted-child' };
+    pageRepo.findById.mockResolvedValue(deleted);
+    lockDescendants.mockResolvedValue([deleted, restrictedChild]);
+    pageAccessService.validateCanViewPages.mockRejectedValue(
+      new ForbiddenException(),
+    );
+
     await expect(
       service.permanentlyDeletePage(page.id, user, workspace),
-    ).rejects.toBeInstanceOf(NotFoundException);
-
-    expect(spaceAbility.createForUser).not.toHaveBeenCalled();
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(pageService.forceDelete).not.toHaveBeenCalled();
+  });
+
+  it('does not permanently delete a descendant outside the managed space', async () => {
+    const deleted = { ...page, deletedAt: new Date() };
+    const unmanagedChild = {
+      ...deleted,
+      id: 'unmanaged-child',
+      spaceId: 'unmanaged-space',
+    };
+    pageRepo.findById.mockResolvedValue(deleted);
+    lockDescendants.mockResolvedValue([deleted, unmanagedChild]);
+    spaceAbility.createForUser.mockImplementation(
+      async (_user: unknown, spaceId: string) => ({
+        cannot: jest.fn().mockReturnValue(spaceId === unmanagedChild.spaceId),
+      }),
+    );
+
+    await expect(
+      service.permanentlyDeletePage(page.id, user, workspace),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(pageService.forceDelete).not.toHaveBeenCalled();
+  });
+
+  it('does not finalize permanent deletion when the affected subtree changes', async () => {
+    const deleted = { ...page, deletedAt: new Date() };
+    const child = { ...deleted, id: 'child-page' };
+    pageRepo.findById.mockResolvedValue(deleted);
+    lockDescendants.mockResolvedValue([deleted, child]);
+    pageService.forceDelete.mockResolvedValue([deleted.id]);
+
+    await expect(
+      service.permanentlyDeletePage(page.id, user, workspace),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(pageService.finalizeForceDelete).not.toHaveBeenCalled();
   });
 
   it('requires space admin permission for permanent deletion', async () => {
@@ -230,19 +309,7 @@ describe('PageLifecycleService', () => {
     await expect(
       service.permanentlyDeletePage(page.id, user, workspace),
     ).rejects.toBeInstanceOf(ForbiddenException);
-
     expect(pageService.forceDelete).not.toHaveBeenCalled();
-  });
-
-  it('does not audit a permanent deletion that loses a restore race', async () => {
-    pageRepo.findById.mockResolvedValue({ ...page, deletedAt: new Date() });
-    pageService.forceDelete.mockResolvedValue([]);
-
-    await expect(
-      service.permanentlyDeletePage(page.id, user, workspace),
-    ).rejects.toBeInstanceOf(NotFoundException);
-
-    expect(auditService.log).not.toHaveBeenCalled();
   });
 
   it('returns explicit partial results for batch restore without duplicate work', async () => {

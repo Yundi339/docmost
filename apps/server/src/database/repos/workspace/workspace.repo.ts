@@ -69,6 +69,16 @@ export class WorkspaceRepo {
     return query.executeTakeFirst();
   }
 
+  async findActiveById(workspaceId: string): Promise<Workspace> {
+    return this.db
+      .selectFrom('workspaces')
+      .select(this.baseFields)
+      .where('id', '=', workspaceId)
+      .where('deletedAt', 'is', null)
+      .where(sql<boolean>`status IS DISTINCT FROM 'suspended'`)
+      .executeTakeFirst();
+  }
+
   async findLicenseKeyById(workspaceId: string): Promise<string | undefined> {
     const row = await this.db
       .selectFrom('workspaces')
@@ -87,11 +97,32 @@ export class WorkspaceRepo {
       .executeTakeFirst();
   }
 
+  async findActiveFirst(): Promise<Workspace> {
+    return this.db
+      .selectFrom('workspaces')
+      .select(this.baseFields)
+      .where('deletedAt', 'is', null)
+      .where(sql<boolean>`status IS DISTINCT FROM 'suspended'`)
+      .orderBy('createdAt', 'asc')
+      .limit(1)
+      .executeTakeFirst();
+  }
+
   async findByHostname(hostname: string): Promise<Workspace> {
     return await this.db
       .selectFrom('workspaces')
       .select(this.baseFields)
       .where(sql`LOWER(hostname)`, '=', sql`LOWER(${hostname})`)
+      .executeTakeFirst();
+  }
+
+  async findActiveByHostname(hostname: string): Promise<Workspace> {
+    return this.db
+      .selectFrom('workspaces')
+      .select(this.baseFields)
+      .where(sql`LOWER(hostname)`, '=', sql`LOWER(${hostname})`)
+      .where('deletedAt', 'is', null)
+      .where(sql<boolean>`status IS DISTINCT FROM 'suspended'`)
       .executeTakeFirst();
   }
 

@@ -39,6 +39,7 @@ import {
 import { IOAuthAuthorization, IOAuthClient, OAuthScope } from "@/ee/oauth";
 import { OAuthAuthorizationTable } from "@/ee/oauth/components/oauth-authorization-table";
 import { getOAuthProviderDescriptor } from "@/ee/oauth/oauth-provider-registry";
+import { resolveMcpMode } from "@/features/workspace/lib/mcp-mode";
 
 export default function WorkspaceOAuthManagement() {
   const { t } = useTranslation();
@@ -284,20 +285,4 @@ function CopyRow({ label, value }: { label: string; value: string }) {
       </CopyButton>
     </Group>
   );
-}
-
-type McpMode = "off" | "read-only" | "read-write";
-
-function resolveMcpMode(aiSettings: any): McpMode {
-  if (
-    aiSettings?.mcpMode === "read-only" ||
-    aiSettings?.mcpMode === "read-write"
-  ) {
-    return aiSettings.mcpMode;
-  }
-  if (aiSettings?.mcpMode === "off") {
-    return "off";
-  }
-
-  return aiSettings?.mcp === true ? "read-write" : "off";
 }

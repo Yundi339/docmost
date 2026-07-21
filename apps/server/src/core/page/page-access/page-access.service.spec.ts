@@ -226,4 +226,55 @@ describe('PageAccessService', () => {
       pagePermissionRepo.filterAccessiblePageIdsWithPermissions,
     ).not.toHaveBeenCalled();
   });
+
+  it('validates a complete page set with one batched permission lookup', async () => {
+    const secondPage = { id: 'page-2', spaceId: 'space-id' } as any;
+    spaceAbility.createForUser.mockResolvedValue(
+      spacePerms({ canRead: true, canEdit: true }),
+    );
+    pagePermissionRepo.filterAccessiblePageIdsWithPermissions.mockResolvedValue(
+      [
+        { id: page.id, canEdit: true },
+        { id: secondPage.id, canEdit: true },
+      ],
+    );
+
+    await expect(
+      service.validateCanEditPages([page, secondPage], user),
+    ).resolves.toBeUndefined();
+    expect(
+      pagePermissionRepo.filterAccessiblePageIdsWithPermissions,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails a batched edit when any page is hidden or read only', async () => {
+    const readOnlyPage = { id: 'page-2', spaceId: 'space-id' } as any;
+    spaceAbility.createForUser.mockResolvedValue(
+      spacePerms({ canRead: true, canEdit: true }),
+    );
+    pagePermissionRepo.filterAccessiblePageIdsWithPermissions.mockResolvedValue(
+      [
+        { id: page.id, canEdit: true },
+        { id: readOnlyPage.id, canEdit: false },
+      ],
+    );
+
+    await expect(
+      service.validateCanEditPages([page, readOnlyPage], user),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('fails a batched view when any page is hidden', async () => {
+    const hiddenPage = { id: 'page-2', spaceId: 'space-id' } as any;
+    spaceAbility.createForUser.mockResolvedValue(
+      spacePerms({ canRead: true, canEdit: true }),
+    );
+    pagePermissionRepo.filterAccessiblePageIdsWithPermissions.mockResolvedValue(
+      [{ id: page.id, canEdit: true }],
+    );
+
+    await expect(
+      service.validateCanViewPages([page, hiddenPage], user),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
 });

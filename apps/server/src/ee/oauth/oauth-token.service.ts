@@ -69,12 +69,13 @@ export class OAuthTokenService {
     workspaceHint?: Workspace,
     req?: FastifyRequest,
   ) {
-    const workspace =
-      workspaceHint ?? (await this.workspaceRepo.findById(payload.workspaceId));
-    if (!workspace) throw new ForbiddenException('Workspace not found');
-    if (workspace.id !== payload.workspaceId) {
+    if (workspaceHint && workspaceHint.id !== payload.workspaceId) {
       throw new ForbiddenException('OAuth token workspace does not match');
     }
+    const workspace = await this.workspaceRepo.findActiveById(
+      payload.workspaceId,
+    );
+    if (!workspace) throw new ForbiddenException('Workspace not found');
 
     const expectedResource = this.metadataService.getMcpResourceUrl(
       workspace,

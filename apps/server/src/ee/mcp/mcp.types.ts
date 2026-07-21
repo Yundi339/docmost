@@ -1,8 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { User, Workspace } from '@docmost/db/types/entity.types';
 import type { CredentialSpaceAccessContext } from '../../core/credential-space-access/credential-space-access.types';
+import type { McpMode } from '../../common/helpers/mcp-mode';
 
-export type McpMode = 'off' | 'read-only' | 'read-write';
+export type { McpMode } from '../../common/helpers/mcp-mode';
 export type McpToolAccess = 'read' | 'write' | 'destructive';
 
 export type McpToolResourcePolicy =

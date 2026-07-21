@@ -15,7 +15,7 @@ export class DomainMiddleware implements NestMiddleware {
     next: () => void,
   ) {
     if (this.environmentService.isSelfHosted()) {
-      const workspace = await this.workspaceRepo.findFirst();
+      const workspace = await this.workspaceRepo.findActiveFirst();
       if (!workspace) {
         setWorkspaceContext(req, null);
         return next();
@@ -27,7 +27,7 @@ export class DomainMiddleware implements NestMiddleware {
       const subdomain = host?.split('.')[0];
 
       const workspace = subdomain
-        ? await this.workspaceRepo.findByHostname(subdomain)
+        ? await this.workspaceRepo.findActiveByHostname(subdomain)
         : null;
 
       if (!workspace) {

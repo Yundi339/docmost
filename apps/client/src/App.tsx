@@ -17,8 +17,16 @@ const LoginPage = lazy(() => import("@/pages/auth/login"));
 const InviteSignup = lazy(() => import("@/pages/auth/invite-signup.tsx"));
 const ForgotPassword = lazy(() => import("@/pages/auth/forgot-password.tsx"));
 const PasswordReset = lazy(() => import("./pages/auth/password-reset"));
-const MfaChallengePage = lazy(() => import("@/ee/mfa/pages/mfa-challenge-page").then(m => ({ default: m.MfaChallengePage })));
-const MfaSetupRequiredPage = lazy(() => import("@/ee/mfa/pages/mfa-setup-required-page").then(m => ({ default: m.MfaSetupRequiredPage })));
+const MfaChallengePage = lazy(() =>
+  import("@/ee/mfa/pages/mfa-challenge-page").then((m) => ({
+    default: m.MfaChallengePage,
+  })),
+);
+const MfaSetupRequiredPage = lazy(() =>
+  import("@/ee/mfa/pages/mfa-setup-required-page").then((m) => ({
+    default: m.MfaSetupRequiredPage,
+  })),
+);
 
 // Main pages
 const Home = lazy(() => import("@/pages/dashboard/home"));
@@ -35,15 +43,25 @@ const SharedPage = lazy(() => import("@/pages/share/shared-page.tsx"));
 const ShareRedirect = lazy(() => import("@/pages/share/share-redirect.tsx"));
 
 // Settings pages
-const AccountSettings = lazy(() => import("@/pages/settings/account/account-settings"));
-const AccountPreferences = lazy(() => import("@/pages/settings/account/account-preferences.tsx"));
-const WorkspaceMembers = lazy(() => import("@/pages/settings/workspace/workspace-members"));
-const WorkspaceSettings = lazy(() => import("@/pages/settings/workspace/workspace-settings"));
+const AccountSettings = lazy(
+  () => import("@/pages/settings/account/account-settings"),
+);
+const AccountPreferences = lazy(
+  () => import("@/pages/settings/account/account-preferences.tsx"),
+);
+const WorkspaceMembers = lazy(
+  () => import("@/pages/settings/workspace/workspace-members"),
+);
+const WorkspaceSettings = lazy(
+  () => import("@/pages/settings/workspace/workspace-settings"),
+);
 const Groups = lazy(() => import("@/pages/settings/group/groups"));
 const GroupInfo = lazy(() => import("./pages/settings/group/group-info"));
 const Spaces = lazy(() => import("@/pages/settings/space/spaces.tsx"));
 const Shares = lazy(() => import("@/pages/settings/shares/shares.tsx"));
-const SystemStatus = lazy(() => import("@/pages/settings/workspace/system-status"));
+const SystemStatus = lazy(
+  () => import("@/pages/settings/workspace/system-status"),
+);
 
 // EE pages
 const Billing = lazy(() => import("@/ee/billing/pages/billing.tsx"));
@@ -53,7 +71,9 @@ const VerifyEmail = lazy(() => import("@/ee/pages/verify-email.tsx"));
 const Security = lazy(() => import("@/ee/security/pages/security.tsx"));
 const License = lazy(() => import("@/ee/licence/pages/license.tsx"));
 const UserApiKeys = lazy(() => import("@/ee/api-key/pages/user-api-keys"));
-const WorkspaceApiKeys = lazy(() => import("@/ee/api-key/pages/workspace-api-keys"));
+const WorkspaceApiKeys = lazy(
+  () => import("@/ee/api-key/pages/workspace-api-keys"),
+);
 const UserOAuthSettings = lazy(
   () => import("@/ee/oauth/pages/user-oauth-settings"),
 );
@@ -66,9 +86,13 @@ const WorkspaceOAuthManagement = lazy(
 const OAuthAuthorize = lazy(() => import("@/ee/oauth/pages/oauth-authorize"));
 const AiSettings = lazy(() => import("@/ee/ai/pages/ai-settings.tsx"));
 const AuditLogs = lazy(() => import("@/ee/audit/pages/audit-logs.tsx"));
-const VerifiedPages = lazy(() => import("@/ee/page-verification/pages/verified-pages.tsx"));
+const VerifiedPages = lazy(
+  () => import("@/ee/page-verification/pages/verified-pages.tsx"),
+);
 const TemplateList = lazy(() => import("@/ee/template/pages/template-list"));
-const TemplateEditor = lazy(() => import("@/ee/template/pages/template-editor"));
+const TemplateEditor = lazy(
+  () => import("@/ee/template/pages/template-editor"),
+);
 const AiChat = lazy(() => import("@/ee/ai-chat/pages/ai-chat.tsx"));
 
 export default function App() {
@@ -119,16 +143,10 @@ export default function App() {
           <Route path={"/favorites"} element={<FavoritesPage />} />
           <Route path={"/labels/:labelName"} element={<LabelPage />} />
           <Route path={"/templates"} element={<TemplateList />} />
-          <Route
-            path={"/templates/:templateId"}
-            element={<TemplateEditor />}
-          />
+          <Route path={"/templates/:templateId"} element={<TemplateEditor />} />
           <Route path={"/s/:spaceSlug"} element={<SpaceHome />} />
           <Route path={"/s/:spaceSlug/trash"} element={<SpaceTrash />} />
-          <Route
-            path={"/s/:spaceSlug/p/:pageSlug"}
-            element={<Page />}
-          />
+          <Route path={"/s/:spaceSlug/p/:pageSlug"} element={<Page />} />
 
           <Route path={"/settings"}>
             <Route path={"account/profile"} element={<AccountSettings />} />
@@ -136,11 +154,26 @@ export default function App() {
               path={"account/preferences"}
               element={<AccountPreferences />}
             />
-            <Route path={"account/api-keys"} element={<UserApiKeys />} />
-            <Route path={"account/oauth"} element={<UserOAuthSettings />} />
+            <Route
+              path={"account/api-keys"}
+              element={<UserApiKeys key="rest" keyType="rest" />}
+            />
+            <Route
+              path={"account/mcp/keys"}
+              element={<UserApiKeys key="mcp" keyType="mcp" />}
+            />
+            <Route path={"account/mcp/oauth"} element={<UserOAuthSettings />} />
+            <Route
+              path={"account/mcp/activity"}
+              element={<UserMcpActivity />}
+            />
+            <Route
+              path={"account/oauth"}
+              element={<Navigate replace to="/settings/account/mcp/oauth" />}
+            />
             <Route
               path={"account/mcp-activity"}
-              element={<UserMcpActivity />}
+              element={<Navigate replace to="/settings/account/mcp/activity" />}
             />
             <Route path={"workspace"} element={<WorkspaceSettings />} />
             <Route path={"members"} element={<WorkspaceMembers />} />

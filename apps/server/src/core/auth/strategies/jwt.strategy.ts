@@ -54,8 +54,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (payload.type !== JwtType.ACCESS) {
       throw new UnauthorizedException();
     }
+    if (!payload.sessionId) {
+      throw new UnauthorizedException('Active session is required');
+    }
 
-    const workspace = await this.workspaceRepo.findById(payload.workspaceId);
+    const workspace = await this.workspaceRepo.findActiveById(
+      payload.workspaceId,
+    );
 
     if (!workspace) {
       throw new UnauthorizedException();
@@ -66,25 +71,30 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException();
     }
 
-    if ((payload as JwtPayload).sessionId) {
-      const sessionId = (payload as JwtPayload).sessionId;
-      const session = await this.userSessionRepo.findActiveById(sessionId);
-      if (
-        !session ||
-        session.userId !== payload.sub ||
-        session.workspaceId !== payload.workspaceId
-      ) {
-        throw new UnauthorizedException();
-      }
-      req.raw.sessionId = sessionId;
-      this.sessionActivityService.trackActivity(
-        sessionId,
-        payload.sub,
-        payload.workspaceId,
-      );
+    const session = await this.userSessionRepo.findActiveById(
+      payload.sessionId,
+    );
+    if (
+      !session ||
+      session.userId !== payload.sub ||
+      session.workspaceId !== payload.workspaceId
+    ) {
+      throw new UnauthorizedException();
     }
+    req.raw.sessionId = payload.sessionId;
+    this.sessionActivityService.trackActivity(
+      payload.sessionId,
+      payload.sub,
+      payload.workspaceId,
+    );
 
-    return { user, workspace };
+    return {
+      user: {
+        ...user,
+        sessionId: payload.sessionId,
+      },
+      workspace,
+    };
   }
 
   private async validateApiKey(req: any, payload: JwtApiKeyPayload) {

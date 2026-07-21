@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Server, Socket } from 'socket.io';
@@ -10,51 +11,166 @@ import {
   getSpaceRoomName,
   getUserRoomName,
 } from './ws.utils';
+import { UserRepo } from '@docmost/db/repos/user/user.repo';
+import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
+import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
+import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
+import { JwtPayload } from '../core/auth/dto/jwt-payload';
+import { isUserDisabled } from '../common/helpers';
+import {
+  SecurityEvent,
+  SecurityEventService,
+} from '../common/events/security-event.service';
 
 @Injectable()
-export class WsService {
+export class WsService implements OnModuleDestroy {
   private server: Server;
+  private readonly unsubscribeSecurityEvents: () => void;
+  private revalidationInProgress = false;
 
   constructor(
     private readonly pagePermissionRepo: PagePermissionRepo,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-  ) {}
+    private readonly userRepo: UserRepo,
+    private readonly userSessionRepo: UserSessionRepo,
+    private readonly workspaceRepo: WorkspaceRepo,
+    private readonly spaceMemberRepo: SpaceMemberRepo,
+    private readonly securityEvents: SecurityEventService,
+  ) {
+    this.unsubscribeSecurityEvents = this.securityEvents.subscribe((event) =>
+      this.handleSecurityEvent(event),
+    );
+  }
+
+  onModuleDestroy(): void {
+    this.unsubscribeSecurityEvents();
+  }
 
   setServer(server: Server): void {
     this.server = server;
   }
 
-  async handleTreeEvent(client: Socket, data: any): Promise<void> {
-    const room = getSpaceRoomName(data.spaceId);
+  async authenticateConnection(payload: JwtPayload): Promise<{
+    userId: string;
+    workspaceId: string;
+    sessionId: string;
+    spaceIds: string[];
+  }> {
+    if (!payload.sessionId) throw new Error('Session is required');
+
+    const [workspace, user, session] = await Promise.all([
+      this.workspaceRepo.findActiveById(payload.workspaceId),
+      this.userRepo.findById(payload.sub, payload.workspaceId),
+      this.userSessionRepo.findActiveById(payload.sessionId),
+    ]);
+
+    if (
+      !workspace ||
+      !user ||
+      isUserDisabled(user) ||
+      !session ||
+      session.userId !== payload.sub ||
+      session.workspaceId !== payload.workspaceId
+    ) {
+      throw new Error('Unauthorized');
+    }
+
+    return {
+      userId: payload.sub,
+      workspaceId: payload.workspaceId,
+      sessionId: payload.sessionId,
+      spaceIds: await this.spaceMemberRepo.getUserSpaceIds(payload.sub),
+    };
+  }
+
+  async revalidateSocket(socket: {
+    data: Record<string, any>;
+    disconnect: (close?: boolean) => unknown;
+    rooms?: Set<string>;
+    join?: (room: string | string[]) => Promise<unknown> | unknown;
+    leave?: (room: string) => Promise<unknown> | unknown;
+  }): Promise<boolean> {
+    const { userId, workspaceId, sessionId } = socket.data;
+    if (!userId || !workspaceId || !sessionId) {
+      socket.disconnect(true);
+      return false;
+    }
+
+    const [workspace, user, session] = await Promise.all([
+      this.workspaceRepo.findActiveById(workspaceId),
+      this.userRepo.findById(userId, workspaceId),
+      this.userSessionRepo.findActiveById(sessionId),
+    ]);
+    const active = Boolean(
+      workspace &&
+      user &&
+      !isUserDisabled(user) &&
+      session &&
+      session.userId === userId &&
+      session.workspaceId === workspaceId,
+    );
+
+    if (!active) {
+      socket.disconnect(true);
+      return false;
+    }
+
+    socket.data.lastSecurityValidatedAt = Date.now();
+    if (socket.rooms && socket.join && socket.leave) {
+      const activeSpaceIds = new Set(
+        await this.spaceMemberRepo.getUserSpaceIds(userId),
+      );
+      const currentSpaceRooms = [...socket.rooms].filter((room) =>
+        room.startsWith('space-'),
+      );
+      for (const room of currentSpaceRooms) {
+        const spaceId = room.slice('space-'.length);
+        if (!activeSpaceIds.has(spaceId)) await socket.leave(room);
+      }
+      for (const spaceId of activeSpaceIds) {
+        const room = getSpaceRoomName(spaceId);
+        if (!socket.rooms.has(room)) await socket.join(room);
+      }
+    }
+    return active;
+  }
+
+  @Interval('ws-security-revalidation', 30_000)
+  async revalidateConnectedSockets(): Promise<void> {
+    if (!this.server || this.revalidationInProgress) return;
+    this.revalidationInProgress = true;
+    try {
+      const sockets = await this.server.fetchSockets();
+      await Promise.allSettled(
+        sockets.map((socket) => this.revalidateSocket(socket)),
+      );
+    } finally {
+      this.revalidationInProgress = false;
+    }
+  }
+
+  async handleClientTreeRefresh(client: Socket, spaceId: string): Promise<void> {
+    const room = getSpaceRoomName(spaceId);
+    const userId = client.data.userId as string | undefined;
+    if (!userId) return;
+
+    const activeMembers = await this.spaceMemberRepo.getUserIdsWithSpaceAccess(
+      [userId],
+      spaceId,
+    );
+    if (!activeMembers.has(userId)) {
+      await client.leave(room);
+      return;
+    }
 
     if (!client.rooms.has(room)) {
       return;
     }
 
-    if (data.operation === 'refetchRootTreeNodeEvent') {
-      client.broadcast.to(room).emit('message', data);
-      return;
-    }
-
-    const hasRestrictions = await this.spaceHasRestrictions(data.spaceId);
-    if (!hasRestrictions) {
-      client.broadcast.to(room).emit('message', data);
-      return;
-    }
-
-    const pageId = this.extractPageId(data);
-    if (!pageId) {
-      return;
-    }
-
-    const isRestricted =
-      await this.pagePermissionRepo.hasRestrictedAncestor(pageId);
-    if (!isRestricted) {
-      client.broadcast.to(room).emit('message', data);
-      return;
-    }
-
-    await this.broadcastToAuthorizedUsers(room, client.id, pageId, data);
+    client.broadcast.to(room).emit('message', {
+      operation: 'refetchRootTreeNodeEvent',
+      spaceId,
+    });
   }
 
   async emitTreeEvent(data: any): Promise<void> {
@@ -177,6 +293,20 @@ export class WsService {
     return TREE_EVENTS.has(data?.operation) && !!data?.spaceId;
   }
 
+  isClientTreeRefreshEvent(data: unknown): data is {
+    operation: 'refetchRootTreeNodeEvent';
+    spaceId: string;
+  } {
+    if (!data || typeof data !== 'object') return false;
+    const event = data as Record<string, unknown>;
+    return (
+      event.operation === 'refetchRootTreeNodeEvent' &&
+      typeof event.spaceId === 'string' &&
+      event.spaceId.length > 0 &&
+      event.spaceId.length <= 64
+    );
+  }
+
   private async broadcastToAuthorizedUsers(
     room: string,
     excludeSocketId: string | null,
@@ -252,6 +382,63 @@ export class WsService {
         return data.id ?? null;
       default:
         return null;
+    }
+  }
+
+  private async handleSecurityEvent(event: SecurityEvent): Promise<void> {
+    if (!this.server) return;
+
+    if (event.type === 'user.access-revoked') {
+      this.server.in(getUserRoomName(event.userId)).disconnectSockets(true);
+      return;
+    }
+
+    if (event.type === 'session.access-changed') {
+      const sockets = await this.server
+        .in(getUserRoomName(event.userId))
+        .fetchSockets();
+      await Promise.all(
+        sockets.map((socket) => {
+          const sessionId = socket.data.sessionId as string | undefined;
+          const explicitlyRevoked =
+            (event.sessionIds?.includes(sessionId ?? '') ?? false) ||
+            (event.excludeSessionId !== undefined &&
+              sessionId !== event.excludeSessionId);
+          if (explicitlyRevoked) {
+            socket.disconnect(true);
+            return Promise.resolve(false);
+          }
+          if (event.sessionIds || event.excludeSessionId) {
+            return Promise.resolve(true);
+          }
+          return this.revalidateSocket(socket);
+        }),
+      );
+      return;
+    }
+
+    if (event.type === 'space.membership-changed') {
+      for (const spaceId of event.spaceIds) {
+        const activeUserIds =
+          await this.spaceMemberRepo.getUserIdsWithSpaceAccess(
+            event.userIds,
+            spaceId,
+          );
+        for (const userId of event.userIds) {
+          const userSockets = this.server.in(getUserRoomName(userId));
+          const spaceRoom = getSpaceRoomName(spaceId);
+          if (activeUserIds.has(userId)) {
+            userSockets.socketsJoin(spaceRoom);
+          } else {
+            userSockets.socketsLeave(spaceRoom);
+          }
+        }
+      }
+      return;
+    }
+
+    if (event.type === 'page.permission-changed') {
+      await this.invalidateSpaceRestrictionCache(event.spaceId);
     }
   }
 }

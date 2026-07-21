@@ -1,6 +1,5 @@
-import { IPagination, QueryParams } from "@/lib/types.ts";
+import { IPagination } from "@/lib/types.ts";
 import {
-  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -11,6 +10,7 @@ import {
   getApiKeys,
   IApiKey,
   ICreateApiKeyRequest,
+  IApiKeyListParams,
   IUpdateApiKeyRequest,
   revokeApiKey,
   updateApiKey,
@@ -19,7 +19,7 @@ import { notifications } from "@mantine/notifications";
 import { useTranslation } from "react-i18next";
 
 export function useGetApiKeysQuery(
-  params?: QueryParams,
+  params: IApiKeyListParams,
   options?: { enabled?: boolean },
 ): UseQueryResult<IPagination<IApiKey>, Error> {
   return useQuery({
@@ -28,7 +28,6 @@ export function useGetApiKeysQuery(
     enabled: options?.enabled,
     staleTime: 0,
     gcTime: 0,
-    placeholderData: keepPreviousData,
   });
 }
 

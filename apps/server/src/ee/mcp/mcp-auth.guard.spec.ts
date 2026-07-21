@@ -1,5 +1,7 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { McpAuthGuard } from './mcp-auth.guard';
+import { ApiKeyScope, ApiKeyType } from '../../core/api-key/api-key-scopes';
+import { JwtType } from '../../core/auth/dto/jwt-payload';
 
 describe('McpAuthGuard', () => {
   const workspace = { id: 'workspace-id' } as any;
@@ -67,5 +69,50 @@ describe('McpAuthGuard', () => {
       guard.canActivate(createContext(request, response)),
     ).rejects.toThrow(UnauthorizedException);
     expect(auditService.logWithContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects REST keys from MCP even if they carry an MCP scope', async () => {
+    const tokenService = {
+      verifyAnyJwt: jest.fn().mockResolvedValue({
+        type: JwtType.API_KEY,
+        apiKeyId: 'api-key-id',
+        sub: 'user-id',
+        workspaceId: workspace.id,
+      }),
+    };
+    const apiKeyService = {
+      validateApiKey: jest.fn().mockResolvedValue({
+        user: { id: 'user-id' },
+        workspace,
+        apiKey: {
+          id: 'api-key-id',
+          keyType: ApiKeyType.REST,
+          scopes: [ApiKeyScope.MCP_READ],
+          spaceAccess: { mode: 'all' },
+        },
+      }),
+    };
+    const oauthService = {
+      resolveWorkspaceFromRequest: jest.fn(),
+      getWwwAuthenticateHeader: jest.fn(),
+    };
+    const auditService = { logWithContext: jest.fn() };
+    const guard = new McpAuthGuard(
+      tokenService as any,
+      apiKeyService as any,
+      oauthService as any,
+      auditService as any,
+    );
+    const request: Record<string, any> = {
+      headers: { authorization: 'Bearer api-token' },
+      raw: { workspace },
+      ip: '203.0.113.10',
+    };
+
+    await expect(
+      guard.canActivate(createContext(request, { header: jest.fn() })),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(apiKeyService.validateApiKey).toHaveBeenCalled();
   });
 });

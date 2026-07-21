@@ -8,17 +8,17 @@ describe('DomainMiddleware', () => {
 
   const createMiddleware = ({
     isSelfHosted,
-    findFirst,
-    findByHostname,
+    findActiveFirst,
+    findActiveByHostname,
   }: {
     isSelfHosted: boolean;
-    findFirst?: jest.Mock;
-    findByHostname?: jest.Mock;
+    findActiveFirst?: jest.Mock;
+    findActiveByHostname?: jest.Mock;
   }) =>
     new DomainMiddleware(
       {
-        findFirst: findFirst ?? jest.fn(),
-        findByHostname: findByHostname ?? jest.fn(),
+        findActiveFirst: findActiveFirst ?? jest.fn(),
+        findActiveByHostname: findActiveByHostname ?? jest.fn(),
       } as any,
       {
         isSelfHosted: () => isSelfHosted,
@@ -31,7 +31,7 @@ describe('DomainMiddleware', () => {
     const req: any = { raw: {}, headers: {} };
     const middleware = createMiddleware({
       isSelfHosted: true,
-      findFirst: jest.fn().mockResolvedValue(workspace),
+      findActiveFirst: jest.fn().mockResolvedValue(workspace),
     });
 
     await middleware.use(req as any, {} as any, next);
@@ -52,7 +52,7 @@ describe('DomainMiddleware', () => {
     const req: any = { raw: {}, headers: {} };
     const middleware = createMiddleware({
       isSelfHosted: true,
-      findFirst: jest.fn().mockResolvedValue(null),
+      findActiveFirst: jest.fn().mockResolvedValue(null),
     });
 
     await middleware.use(req as any, {} as any, next);
@@ -70,7 +70,7 @@ describe('DomainMiddleware', () => {
 
   it('uses forwarded host without port when resolving cloud workspaces', async () => {
     const next = jest.fn();
-    const findByHostname = jest.fn().mockResolvedValue(workspace);
+    const findActiveByHostname = jest.fn().mockResolvedValue(workspace);
     const req: any = {
       raw: {},
       headers: {
@@ -80,16 +80,31 @@ describe('DomainMiddleware', () => {
     };
     const middleware = createMiddleware({
       isSelfHosted: false,
-      findByHostname,
+      findActiveByHostname,
     });
 
     await middleware.use(req as any, {} as any, next);
 
-    expect(findByHostname).toHaveBeenCalledWith('docs');
+    expect(findActiveByHostname).toHaveBeenCalledWith('docs');
     expect(req.raw).toMatchObject({
       workspaceId: 'workspace-id',
       workspace,
     });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bind a suspended or deleted cloud workspace', async () => {
+    const next = jest.fn();
+    const req: any = { raw: {}, headers: { host: 'docs.example.test' } };
+    const middleware = createMiddleware({
+      isSelfHosted: false,
+      findActiveByHostname: jest.fn().mockResolvedValue(undefined),
+    });
+
+    await middleware.use(req as any, {} as any, next);
+
+    expect(req.workspaceId).toBeNull();
+    expect(req.raw.workspaceId).toBeNull();
     expect(next).toHaveBeenCalledTimes(1);
   });
 });

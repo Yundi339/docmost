@@ -36,6 +36,7 @@ import {
   PageContentLifecycleEffect,
   PageContentLifecycleService,
 } from '../services/page-content-lifecycle.service';
+import { AuthenticationExtension } from './authentication.extension';
 
 @Injectable()
 export class PersistenceExtension implements Extension {
@@ -50,6 +51,7 @@ export class PersistenceExtension implements Extension {
     @InjectQueue(QueueName.NOTIFICATION_QUEUE) private notificationQueue: Queue,
     private readonly collabHistory: CollabHistoryService,
     private readonly pageContentLifecycle: PageContentLifecycleService,
+    private readonly authenticationExtension: AuthenticationExtension,
   ) {}
 
   async onLoadDocument(data: onLoadDocumentPayload) {
@@ -100,6 +102,12 @@ export class PersistenceExtension implements Extension {
 
   async onStoreDocument(data: onStoreDocumentPayload) {
     const { documentName, document, context } = data;
+
+    await this.authenticationExtension.validateStoreContext(
+      documentName,
+      context,
+      data.socketId,
+    );
 
     const pageId = getPageId(documentName);
 

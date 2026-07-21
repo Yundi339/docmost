@@ -13,6 +13,13 @@ import { ExpressionBuilder } from 'kysely';
 import { DB } from '@docmost/db/types/db';
 import { jsonObjectFrom } from 'kysely/helpers/postgres';
 
+type ApiKeyFilters = {
+  creatorId?: string;
+  keyType?: ApiKey['keyType'];
+};
+
+type ApiKeyUpdate = Pick<UpdatableApiKey, 'name' | 'scopes'>;
+
 @Injectable()
 export class ApiKeyRepo {
   constructor(@InjectKysely() private readonly db: KyselyDB) {}
@@ -34,7 +41,7 @@ export class ApiKeyRepo {
   async findApiKeys(
     workspaceId: string,
     pagination: PaginationOptions,
-    creatorId?: string,
+    filters: ApiKeyFilters = {},
   ) {
     let query = this.db
       .selectFrom('apiKeys')
@@ -43,8 +50,12 @@ export class ApiKeyRepo {
       .where('workspaceId', '=', workspaceId)
       .where('deletedAt', 'is', null);
 
-    if (creatorId) {
-      query = query.where('creatorId', '=', creatorId);
+    if (filters.creatorId) {
+      query = query.where('creatorId', '=', filters.creatorId);
+    }
+
+    if (filters.keyType) {
+      query = query.where('keyType', '=', filters.keyType);
     }
 
     return executeWithCursorPagination(query, {
@@ -75,7 +86,7 @@ export class ApiKeyRepo {
   }
 
   async updateApiKey(
-    updatable: UpdatableApiKey,
+    updatable: ApiKeyUpdate,
     apiKeyId: string,
     workspaceId: string,
     trx?: KyselyTransaction,
@@ -83,7 +94,11 @@ export class ApiKeyRepo {
     const db = dbOrTx(this.db, trx);
     await db
       .updateTable('apiKeys')
-      .set({ ...updatable, updatedAt: new Date() })
+      .set({
+        name: updatable.name,
+        scopes: updatable.scopes,
+        updatedAt: new Date(),
+      })
       .where('id', '=', apiKeyId)
       .where('workspaceId', '=', workspaceId)
       .where('deletedAt', 'is', null)

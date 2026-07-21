@@ -90,4 +90,24 @@ describe('TokenService', () => {
       type: JwtType.MFA_TOKEN,
     });
   });
+
+  it('binds collaboration tokens to the authenticated session', async () => {
+    const token = await service.generateCollabToken(
+      { ...user, sessionId: 'session-id' },
+      'workspace-id',
+    );
+
+    expect(jwtService.decode(token)).toMatchObject({
+      sub: 'user-id',
+      workspaceId: 'workspace-id',
+      sessionId: 'session-id',
+      type: JwtType.COLLAB,
+    });
+  });
+
+  it('does not issue a collaboration token without a session', async () => {
+    await expect(
+      service.generateCollabToken(user, 'workspace-id'),
+    ).rejects.toThrow('An active session is required');
+  });
 });

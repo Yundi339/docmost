@@ -15,6 +15,7 @@ import { RedisConfigService } from '../../integrations/redis/redis-config.servic
 import { CaslModule } from '../../core/casl/casl.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import KeyvRedis from '@keyv/redis';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import KeyvRedis from '@keyv/redis';
     QueueModule,
     HealthModule,
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     RedisModule.forRootAsync({
       useClass: RedisConfigService,
     }),

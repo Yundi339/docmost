@@ -17,6 +17,8 @@ const t = (key: string) =>
       "Search pages": "搜索页面",
       "Additional verification failed": "二次验证失败",
       Rename: "重命名",
+      "REST API": "REST API",
+      MCP: "MCP",
     }) as Record<string, string>
   )[key] ?? key;
 
@@ -49,6 +51,7 @@ describe("audit display formatting", () => {
       "Affected record count",
     );
     expect(getAuditFieldLabel("diagnosticCode")).toBe("Diagnostic code");
+    expect(getAuditFieldLabel("keyType")).toBe("Key type");
     expect(getAuditFieldLabel("futureAuditField")).toBe("Future Audit Field");
   });
 
@@ -69,6 +72,9 @@ describe("audit display formatting", () => {
     expect(formatAuditPrimitive("rename", "optionOperation", t as any)).toBe(
       "重命名",
     );
+    expect(formatAuditPrimitive("rest", "keyType", t as any)).toBe("REST API");
+    expect(formatAuditPrimitive("mcp", "keyType", t as any)).toBe("MCP");
+    expect(formatAuditPrimitive("future", "keyType", t as any)).toBe("future");
   });
 
   it("hides internal snapshots and duplicate generic credential IDs", () => {

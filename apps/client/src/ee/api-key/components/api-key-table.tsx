@@ -1,7 +1,7 @@
 import { ActionIcon, Badge, Group, Menu, Table, Text } from "@mantine/core";
 import { IconDots, IconEdit, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import { IApiKey } from "@/ee/api-key";
+import { ApiKeyType, IApiKey } from "@/ee/api-key";
 import { CustomAvatar } from "@/components/ui/custom-avatar.tsx";
 import React from "react";
 import NoTableResults from "@/components/common/no-table-results";
@@ -11,20 +11,24 @@ import { SpaceAccessSummary } from "@/ee/space-access";
 
 interface ApiKeyTableProps {
   apiKeys: IApiKey[];
+  keyType: ApiKeyType;
   isLoading?: boolean;
   showUserColumn?: boolean;
   updateActionLabel?: string;
   onUpdate?: (apiKey: IApiKey) => void;
   onRevoke?: (apiKey: IApiKey) => void;
+  emptyText?: string;
 }
 
 export function ApiKeyTable({
   apiKeys,
+  keyType,
   isLoading,
   showUserColumn = false,
   updateActionLabel = "Edit",
   onUpdate,
   onRevoke,
+  emptyText,
 }: ApiKeyTableProps) {
   const { t } = useTranslation();
   const locale = useDateFnsLocale();
@@ -42,7 +46,10 @@ export function ApiKeyTable({
   const getStatuses = (apiKey: IApiKey) => {
     const statuses: Array<{ color: string; label: string }> = [];
 
-    if (apiKey.spaceAccess?.status === "no_effective_spaces") {
+    if (
+      keyType === "mcp" &&
+      apiKey.spaceAccess?.status === "no_effective_spaces"
+    ) {
       statuses.push({ color: "red", label: t("No effective spaces") });
     }
     if (isExpired(apiKey.expiresAt)) {
@@ -56,14 +63,18 @@ export function ApiKeyTable({
   };
 
   return (
-    <Table.ScrollContainer minWidth={1000}>
-      <Table highlightOnHover verticalSpacing="sm">
+    <Table.ScrollContainer minWidth={keyType === "mcp" ? 880 : 720}>
+      <Table
+        highlightOnHover
+        verticalSpacing="sm"
+        aria-busy={isLoading || undefined}
+      >
         <Table.Thead>
           <Table.Tr>
             <Table.Th>{t("Name")}</Table.Th>
             {showUserColumn && <Table.Th>{t("User")}</Table.Th>}
-            <Table.Th>{t("Usage type")}</Table.Th>
-            <Table.Th>{t("Space access")}</Table.Th>
+            <Table.Th>{t("Access")}</Table.Th>
+            {keyType === "mcp" && <Table.Th>{t("Space access")}</Table.Th>}
             <Table.Th>{t("Status")}</Table.Th>
             <Table.Th>{t("Last used")}</Table.Th>
             <Table.Th>{t("Expires")}</Table.Th>
@@ -101,17 +112,16 @@ export function ApiKeyTable({
                   <Text fz="sm" fw={500}>
                     {t(getApiKeyScopeLabel(apiKey.scopes))}
                   </Text>
-                  <Text fz="xs" c="dimmed" lineClamp={2}>
-                    {(apiKey.scopes || []).join(", ")}
-                  </Text>
                 </Table.Td>
 
-                <Table.Td>
-                  <SpaceAccessSummary
-                    access={apiKey.spaceAccess}
-                    showStatus={false}
-                  />
-                </Table.Td>
+                {keyType === "mcp" && (
+                  <Table.Td>
+                    <SpaceAccessSummary
+                      access={apiKey.spaceAccess}
+                      showStatus={false}
+                    />
+                  </Table.Td>
+                )}
 
                 <Table.Td>
                   <Group gap={4} wrap="nowrap">
@@ -192,7 +202,11 @@ export function ApiKeyTable({
               </Table.Tr>
             ))
           ) : (
-            <NoTableResults colSpan={showUserColumn ? 9 : 8} />
+            <NoTableResults
+              colSpan={(showUserColumn ? 1 : 0) + (keyType === "mcp" ? 8 : 7)}
+              text={isLoading ? t("Loading API keys") : emptyText}
+              announce={isLoading}
+            />
           )}
         </Table.Tbody>
       </Table>

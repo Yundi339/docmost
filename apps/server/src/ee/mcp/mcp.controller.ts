@@ -12,8 +12,9 @@ import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
-import { McpMode, McpRequestContext, McpService } from './mcp.service';
+import { McpRequestContext, McpService } from './mcp.service';
 import { McpAuthGuard } from './mcp-auth.guard';
+import { resolveMcpMode } from '../../common/helpers/mcp-mode';
 
 @UseGuards(McpAuthGuard)
 @Controller('mcp')
@@ -33,7 +34,7 @@ export class McpController {
     @AuthWorkspace() workspace: Workspace,
   ): Promise<void> {
     // Fetch full workspace to check MCP settings
-    const fullWorkspace = await this.workspaceRepo.findById(workspace.id);
+    const fullWorkspace = await this.workspaceRepo.findActiveById(workspace.id);
     if (!fullWorkspace) {
       throw new ForbiddenException('Workspace not found');
     }
@@ -89,19 +90,7 @@ export class McpController {
   }
 }
 
-export function resolveMcpMode(aiSettings: any): McpMode {
-  if (
-    aiSettings?.mcpMode === 'read-only' ||
-    aiSettings?.mcpMode === 'read-write'
-  ) {
-    return aiSettings.mcpMode;
-  }
-  if (aiSettings?.mcpMode === 'off') {
-    return 'off';
-  }
-
-  return aiSettings?.mcp === true ? 'read-write' : 'off';
-}
+export { resolveMcpMode } from '../../common/helpers/mcp-mode';
 
 function getClientIp(req: FastifyRequest) {
   return req.ip;

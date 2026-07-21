@@ -55,11 +55,11 @@ export default function UserOAuthSettings() {
     <>
       <Helmet>
         <title>
-          {t("OAuth settings")} - {getAppName()}
+          {t("OAuth applications")} - {getAppName()}
         </title>
       </Helmet>
 
-      <SettingsTitle title={t("OAuth settings")} />
+      <SettingsTitle title={t("OAuth applications")} />
 
       <Text size="sm" c="dimmed" mb="md">
         {t("Manage OAuth applications connected to your Docmost account.")}

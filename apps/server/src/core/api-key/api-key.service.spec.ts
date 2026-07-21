@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { ApiKeyService } from './api-key.service';
 import { UserRole } from '../../common/helpers/types/permission';
+import { ApiKeyType } from './api-key-scopes';
 
 describe('ApiKeyService', () => {
   let service: ApiKeyService;
@@ -14,7 +15,7 @@ describe('ApiKeyService', () => {
   };
   let tokenService: { generateApiToken: jest.Mock };
   let userRepo: { findById: jest.Mock };
-  let workspaceRepo: { findById: jest.Mock };
+  let workspaceRepo: { findActiveById: jest.Mock };
   let db: { transaction: jest.Mock };
   let credentialSpaceAccess: Record<string, jest.Mock>;
   let credentialRevocation: { lockActiveUserForIssuance: jest.Mock };
@@ -55,7 +56,7 @@ describe('ApiKeyService', () => {
       }),
     };
     workspaceRepo = {
-      findById: jest.fn().mockResolvedValue({
+      findActiveById: jest.fn().mockResolvedValue({
         id: 'workspace-id',
         licenseKey: null,
         plan: null,
@@ -150,9 +151,11 @@ describe('ApiKeyService', () => {
       ),
     ).resolves.toBe(result);
 
-    expect(apiKeyRepo.findApiKeys).toHaveBeenCalledWith('workspace-id', {
-      adminView: true,
-    });
+    expect(apiKeyRepo.findApiKeys).toHaveBeenCalledWith(
+      'workspace-id',
+      { adminView: true },
+      { keyType: undefined },
+    );
   });
 
   it('lists only the current user keys in personal view', async () => {
@@ -170,7 +173,35 @@ describe('ApiKeyService', () => {
     expect(apiKeyRepo.findApiKeys).toHaveBeenCalledWith(
       'workspace-id',
       { cursor: 'cursor-1' },
-      'member-id',
+      { creatorId: 'member-id', keyType: undefined },
+    );
+  });
+
+  it('filters both personal and owner views by keyType', async () => {
+    apiKeyRepo.findApiKeys.mockResolvedValue({ items: [], meta: {} });
+
+    await service.findApiKeys(
+      workspace(),
+      { keyType: ApiKeyType.MCP } as any,
+      user(UserRole.MEMBER, 'member-id'),
+    );
+    await service.findApiKeys(
+      workspace(),
+      { adminView: true, keyType: ApiKeyType.REST } as any,
+      user(UserRole.OWNER, 'owner-id'),
+    );
+
+    expect(apiKeyRepo.findApiKeys).toHaveBeenNthCalledWith(
+      1,
+      'workspace-id',
+      { keyType: ApiKeyType.MCP },
+      { creatorId: 'member-id', keyType: ApiKeyType.MCP },
+    );
+    expect(apiKeyRepo.findApiKeys).toHaveBeenNthCalledWith(
+      2,
+      'workspace-id',
+      { adminView: true, keyType: ApiKeyType.REST },
+      { keyType: ApiKeyType.REST },
     );
   });
 
@@ -178,6 +209,9 @@ describe('ApiKeyService', () => {
     apiKeyRepo.findById.mockResolvedValue({
       id: 'api-key-id',
       creatorId: 'member-id',
+      keyType: ApiKeyType.REST,
+      scopes: ['rest:read', 'rest:write'],
+      spaceAccessMode: 'all',
     });
 
     await service.update(
@@ -192,6 +226,54 @@ describe('ApiKeyService', () => {
       'workspace-id',
       {},
     );
+  });
+
+  it('rejects attempts to change an API key type', async () => {
+    apiKeyRepo.findById.mockResolvedValue({
+      id: 'api-key-id',
+      creatorId: 'member-id',
+      keyType: ApiKeyType.REST,
+      scopes: ['rest:read'],
+      spaceAccessMode: 'all',
+    });
+
+    await expect(
+      service.update(
+        {
+          apiKeyId: 'api-key-id',
+          name: 'Changed key',
+          keyType: ApiKeyType.MCP,
+        },
+        workspace(),
+        user(UserRole.MEMBER, 'member-id'),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(apiKeyRepo.updateApiKey).not.toHaveBeenCalled();
+  });
+
+  it('rejects scopes from another key type during update', async () => {
+    apiKeyRepo.findById.mockResolvedValue({
+      id: 'api-key-id',
+      creatorId: 'member-id',
+      keyType: ApiKeyType.REST,
+      scopes: ['rest:read'],
+      spaceAccessMode: 'all',
+    });
+
+    await expect(
+      service.update(
+        {
+          apiKeyId: 'api-key-id',
+          name: 'Changed key',
+          scopes: ['rest:read', 'mcp:read'],
+        },
+        workspace(),
+        user(UserRole.MEMBER, 'member-id'),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(apiKeyRepo.updateApiKey).not.toHaveBeenCalled();
   });
 
   it('blocks members from updating another user API key', async () => {
@@ -215,6 +297,7 @@ describe('ApiKeyService', () => {
     apiKeyRepo.findById.mockResolvedValue({
       id: 'api-key-id',
       creatorId: 'member-id',
+      keyType: ApiKeyType.REST,
     });
 
     await service.revoke(
@@ -233,6 +316,7 @@ describe('ApiKeyService', () => {
     apiKeyRepo.findById.mockResolvedValue({
       id: 'api-key-id',
       creatorId: 'member-id',
+      keyType: ApiKeyType.MCP,
       scopes: ['mcp:read'],
       spaceAccessMode: 'selected',
     });
@@ -252,7 +336,7 @@ describe('ApiKeyService', () => {
     expect(apiKeyRepo.updateApiKey).not.toHaveBeenCalled();
   });
 
-  it('rejects REST scopes for selected-space API keys', async () => {
+  it('rejects mixed scopes when creating an MCP key', async () => {
     credentialSpaceAccess.normalizeSelection.mockResolvedValue({
       mode: 'selected',
       spaceIds: ['018f3f73-2f69-7c8d-9d79-8f3f4d7d9712'],
@@ -263,6 +347,7 @@ describe('ApiKeyService', () => {
         {
           name: 'Scoped key',
           expiresAt: futureExpiration(),
+          keyType: ApiKeyType.MCP,
           scopes: ['mcp:read', 'rest:read'],
           spaceAccess: {
             mode: 'selected',
@@ -277,10 +362,76 @@ describe('ApiKeyService', () => {
     expect(apiKeyRepo.insertApiKey).not.toHaveBeenCalled();
   });
 
+  it('rejects selected-space access when creating a REST key', async () => {
+    credentialSpaceAccess.normalizeSelection.mockResolvedValue({
+      mode: 'selected',
+      spaceIds: ['018f3f73-2f69-7c8d-9d79-8f3f4d7d9712'],
+    });
+
+    await expect(
+      service.create(
+        {
+          name: 'REST key',
+          expiresAt: futureExpiration(),
+          keyType: ApiKeyType.REST,
+          scopes: ['rest:read'],
+          spaceAccess: {
+            mode: 'selected',
+            spaceIds: ['018f3f73-2f69-7c8d-9d79-8f3f4d7d9712'],
+          },
+        },
+        user(UserRole.MEMBER, 'member-id'),
+        workspace(),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(apiKeyRepo.insertApiKey).not.toHaveBeenCalled();
+  });
+
+  it.each<[ApiKeyType, string[]]>([
+    [ApiKeyType.REST, ['rest:read']],
+    [ApiKeyType.MCP, ['mcp:read']],
+  ])('uses the minimal default scopes for %s keys', async (keyType, scopes) => {
+    const expiresAt = futureExpiration();
+    apiKeyRepo.insertApiKey.mockResolvedValue({ id: 'api-key-id' });
+    apiKeyRepo.findById.mockResolvedValue({
+      id: 'api-key-id',
+      creatorId: 'member-id',
+      keyType,
+      scopes,
+      spaceAccessMode: 'all',
+    });
+    tokenService.generateApiToken.mockResolvedValue('api-token');
+
+    await service.create(
+      { name: 'Default key', expiresAt, keyType },
+      user(UserRole.MEMBER, 'member-id'),
+      workspace(
+        keyType === ApiKeyType.MCP
+          ? { ai: { mcpMode: 'read-write' } }
+          : {},
+      ),
+    );
+
+    expect(apiKeyRepo.insertApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({ keyType, scopes }),
+      {},
+    );
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ keyType, scopes }),
+      }),
+    );
+  });
+
   it('enforces admin-only API key creation when the workspace restricts it', async () => {
     await expect(
       service.create(
-        { name: 'Member key', expiresAt: futureExpiration() },
+        {
+          name: 'Member key',
+          expiresAt: futureExpiration(),
+          keyType: ApiKeyType.REST,
+        },
         user(UserRole.MEMBER, 'member-id'),
         workspace({ api: { restrictToAdmins: true } }),
       ),
@@ -307,6 +458,7 @@ describe('ApiKeyService', () => {
         {
           name: 'Member key',
           expiresAt: new Date(Date.now() - 1000).toISOString(),
+          keyType: ApiKeyType.REST,
         },
         user(UserRole.MEMBER, 'member-id'),
         workspace(),
@@ -327,9 +479,17 @@ describe('ApiKeyService', () => {
 
     await expect(
       service.create(
-        { name: 'Admin key', expiresAt, scopes: ['mcp:read'] },
+        {
+          name: 'Admin key',
+          expiresAt,
+          keyType: ApiKeyType.MCP,
+          scopes: ['mcp:read'],
+        },
         user(UserRole.ADMIN, 'admin-id'),
-        workspace({ api: { restrictToAdmins: true } }),
+        workspace({
+          api: { restrictToAdmins: true },
+          ai: { mcpMode: 'read-write' },
+        }),
       ),
     ).resolves.toMatchObject({
       id: 'api-key-id',
@@ -338,6 +498,7 @@ describe('ApiKeyService', () => {
     expect(apiKeyRepo.insertApiKey).toHaveBeenCalledWith(
       expect.objectContaining({
         expiresAt: new Date(expiresAt),
+        keyType: ApiKeyType.MCP,
         scopes: ['mcp:read'],
       }),
       {},
@@ -350,12 +511,50 @@ describe('ApiKeyService', () => {
     );
   });
 
+  it('rejects MCP key creation while MCP is disabled', async () => {
+    await expect(
+      service.create(
+        {
+          name: 'Disabled MCP key',
+          expiresAt: futureExpiration(),
+          keyType: ApiKeyType.MCP,
+          scopes: ['mcp:read'],
+        },
+        user(UserRole.MEMBER, 'member-id'),
+        workspace({ ai: { mcpMode: 'off' } }),
+      ),
+    ).rejects.toThrow('MCP is not enabled for this workspace');
+
+    expect(apiKeyRepo.insertApiKey).not.toHaveBeenCalled();
+  });
+
+  it('rejects writable MCP key creation in read-only mode', async () => {
+    await expect(
+      service.create(
+        {
+          name: 'Writable MCP key',
+          expiresAt: futureExpiration(),
+          keyType: ApiKeyType.MCP,
+          scopes: ['mcp:write'],
+        },
+        user(UserRole.MEMBER, 'member-id'),
+        workspace({ ai: { mcpMode: 'read-only' } }),
+      ),
+    ).rejects.toThrow('MCP is enabled in read-only mode');
+
+    expect(apiKeyRepo.insertApiKey).not.toHaveBeenCalled();
+  });
+
   it('does not create an API key after the user is deactivated', async () => {
     credentialRevocation.lockActiveUserForIssuance.mockResolvedValue(undefined);
 
     await expect(
       service.create(
-        { name: 'Member key', expiresAt: futureExpiration() },
+        {
+          name: 'Member key',
+          expiresAt: futureExpiration(),
+          keyType: ApiKeyType.REST,
+        },
         user(UserRole.MEMBER, 'member-id'),
         workspace(),
       ),
@@ -369,7 +568,9 @@ describe('ApiKeyService', () => {
     apiKeyRepo.findById.mockResolvedValue({
       id: 'api-key-id',
       creatorId: 'member-id',
+      keyType: ApiKeyType.REST,
       scopes: ['rest:read'],
+      spaceAccessMode: 'all',
     });
     userRepo.findById.mockResolvedValue({
       id: 'member-id',
@@ -394,7 +595,9 @@ describe('ApiKeyService', () => {
       id: 'api-key-id',
       creatorId: 'member-id',
       expiresAt: new Date(Date.now() - 1000),
+      keyType: ApiKeyType.REST,
       scopes: ['rest:read'],
+      spaceAccessMode: 'all',
     });
 
     await expect(
@@ -409,17 +612,86 @@ describe('ApiKeyService', () => {
     expect(apiKeyRepo.updateLastUsed).not.toHaveBeenCalled();
   });
 
-  it('keeps legacy API keys REST-only and updates last-used metadata', async () => {
+  it.each(['suspended', 'deleted'])(
+    'rejects API keys when the workspace is %s',
+    async () => {
+      apiKeyRepo.findById.mockResolvedValue({
+        id: 'api-key-id',
+        creatorId: 'member-id',
+        expiresAt: null,
+        keyType: ApiKeyType.REST,
+        scopes: ['rest:read'],
+        spaceAccessMode: 'all',
+      });
+      workspaceRepo.findActiveById.mockResolvedValue(undefined);
+
+      await expect(
+        service.validateApiKey({
+          apiKeyId: 'api-key-id',
+          sub: 'member-id',
+          workspaceId: 'workspace-id',
+          type: 'api_key',
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(workspaceRepo.findActiveById).toHaveBeenCalledWith('workspace-id');
+      expect(apiKeyRepo.updateLastUsed).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    {
+      name: 'mixed scopes',
+      keyType: ApiKeyType.REST,
+      scopes: ['rest:read', 'mcp:read'],
+      spaceAccessMode: 'all',
+    },
+    {
+      name: 'REST selected-space mode',
+      keyType: ApiKeyType.REST,
+      scopes: ['rest:read'],
+      spaceAccessMode: 'selected',
+    },
+    {
+      name: 'MCP scopes on a REST key',
+      keyType: ApiKeyType.REST,
+      scopes: ['mcp:read'],
+      spaceAccessMode: 'all',
+    },
+    {
+      name: 'empty scopes',
+      keyType: ApiKeyType.MCP,
+      scopes: [],
+      spaceAccessMode: 'all',
+    },
+  ])('rejects $name read from the database', async (configuration) => {
     apiKeyRepo.findById.mockResolvedValue({
       id: 'api-key-id',
       creatorId: 'member-id',
       expiresAt: null,
-      scopes: null,
+      ...configuration,
     });
-    userRepo.findById.mockResolvedValue({
-      id: 'member-id',
-      deactivatedAt: null,
-      deletedAt: null,
+
+    await expect(
+      service.validateApiKey({
+        apiKeyId: 'api-key-id',
+        sub: 'member-id',
+        workspaceId: 'workspace-id',
+        type: 'api_key',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(apiKeyRepo.updateLastUsed).not.toHaveBeenCalled();
+  });
+
+  it('returns the database keyType and updates last-used metadata', async () => {
+    apiKeyRepo.findById.mockResolvedValue({
+      id: 'api-key-id',
+      creatorId: 'member-id',
+      expiresAt: null,
+      keyType: ApiKeyType.MCP,
+      scopes: ['mcp:write'],
+      spaceAccessMode: 'selected',
     });
 
     const result = await service.validateApiKey(
@@ -432,10 +704,40 @@ describe('ApiKeyService', () => {
       { ipAddress: '127.0.0.1', userAgent: 'test-agent' },
     );
 
-    expect(result.apiKey.scopes).toEqual(['rest:read', 'rest:write']);
+    expect(result.apiKey).toMatchObject({
+      keyType: ApiKeyType.MCP,
+      scopes: ['mcp:read', 'mcp:write'],
+    });
     expect(apiKeyRepo.updateLastUsed).toHaveBeenCalledWith('api-key-id', {
       ipAddress: '127.0.0.1',
       userAgent: 'test-agent',
     });
+  });
+
+  it('rejects legacy null scopes after the type migration', async () => {
+    apiKeyRepo.findById.mockResolvedValue({
+      id: 'api-key-id',
+      creatorId: 'member-id',
+      expiresAt: null,
+      keyType: ApiKeyType.REST,
+      scopes: null,
+      spaceAccessMode: 'all',
+    });
+    userRepo.findById.mockResolvedValue({
+      id: 'member-id',
+      deactivatedAt: null,
+      deletedAt: null,
+    });
+
+    await expect(
+      service.validateApiKey({
+        apiKeyId: 'api-key-id',
+        sub: 'member-id',
+        workspaceId: 'workspace-id',
+        type: 'api_key',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(apiKeyRepo.updateLastUsed).not.toHaveBeenCalled();
   });
 });

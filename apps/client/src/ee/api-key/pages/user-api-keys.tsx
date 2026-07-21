@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Alert, Button, Group, Space, Text } from "@mantine/core";
+import { useState } from "react";
+import { Alert, Button, Code, Group, Space, Stack, Text } from "@mantine/core";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
@@ -13,12 +13,17 @@ import { RevokeApiKeyModal } from "@/ee/api-key/components/revoke-api-key-modal"
 import Paginate from "@/components/common/paginate";
 import { useCursorPaginate } from "@/hooks/use-cursor-paginate";
 import { useGetApiKeysQuery } from "@/ee/api-key/queries/api-key-query.ts";
-import { IApiKey } from "@/ee/api-key";
+import type { ApiKeyType, IApiKey } from "@/ee/api-key";
 import { useAtom } from "jotai";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
 import useUserRole from "@/hooks/use-user-role.tsx";
+import { resolveMcpMode } from "@/features/workspace/lib/mcp-mode";
 
-export default function UserApiKeys() {
+interface UserApiKeysProps {
+  keyType: ApiKeyType;
+}
+
+export default function UserApiKeys({ keyType }: UserApiKeysProps) {
   const { t } = useTranslation();
   const { cursor, goNext, goPrev } = useCursorPaginate();
   const [createModalOpened, setCreateModalOpened] = useState(false);
@@ -26,16 +31,15 @@ export default function UserApiKeys() {
   const [updateModalOpened, setUpdateModalOpened] = useState(false);
   const [revokeModalOpened, setRevokeModalOpened] = useState(false);
   const [selectedApiKey, setSelectedApiKey] = useState<IApiKey | null>(null);
-  const { data, isLoading } = useGetApiKeysQuery({ cursor });
+  const { data, isLoading } = useGetApiKeysQuery({ cursor, keyType });
   const [workspace] = useAtom(workspaceAtom);
   const { isAdmin } = useUserRole();
-  const mcpEnabled = resolveMcpMode(workspace?.settings?.ai) !== "off";
   const restrictToAdmins = workspace?.settings?.api?.restrictToAdmins === true;
-  const canCreate = !restrictToAdmins || isAdmin;
-
-  const handleCreateSuccess = (response: IApiKey) => {
-    setCreatedApiKey(response);
-  };
+  const canCreateByRole = !restrictToAdmins || isAdmin;
+  const isRest = keyType === "rest";
+  const mcpDisabled =
+    !isRest && resolveMcpMode(workspace?.settings?.ai) === "off";
+  const pageTitle = isRest ? t("REST API keys") : t("MCP keys");
 
   const handleUpdate = (apiKey: IApiKey) => {
     setSelectedApiKey(apiKey);
@@ -51,17 +55,19 @@ export default function UserApiKeys() {
     <>
       <Helmet>
         <title>
-          {t("API keys")} - {getAppName()}
+          {pageTitle} - {getAppName()}
         </title>
       </Helmet>
 
-      <SettingsTitle title={t("API keys")} />
+      <SettingsTitle title={pageTitle} />
 
       <Text size="sm" c="dimmed" mb="md">
-        {t("Manage your API keys.")}
+        {isRest
+          ? t("Manage keys used to access the REST API.")
+          : t("Manage keys used to connect MCP clients.")}
       </Text>
 
-      {mcpEnabled && canCreate && (
+      {!isRest && (
         <Alert
           variant="light"
           color="blue"
@@ -69,24 +75,38 @@ export default function UserApiKeys() {
           p="sm"
           icon={<IconInfoCircle />}
         >
-          <Text size="sm">
-            {t(
-              "Your workspace has MCP enabled. Use your API key to connect AI assistants.",
-            )}
-          </Text>
-          <Text size="sm" mt={4}>
-            {t("MCP server URL:")}{" "}
-            <Text size="sm" fw={500} span ff="monospace">
-              {`${getAppUrl()}/mcp`}
+          <Stack gap={4}>
+            <Text size="sm" fw={500}>
+              {t("MCP server URL")}
             </Text>
+            <Code
+              style={{ overflowWrap: "anywhere" }}
+            >{`${getAppUrl()}/mcp`}</Code>
+          </Stack>
+        </Alert>
+      )}
+
+      {mcpDisabled && (
+        <Alert
+          variant="light"
+          color="yellow"
+          mb="md"
+          p="sm"
+          icon={<IconInfoCircle />}
+        >
+          <Text size="sm">
+            {t("MCP is disabled. Enable MCP before creating MCP keys.")}
           </Text>
         </Alert>
       )}
 
-      {canCreate ? (
+      {canCreateByRole ? (
         <Group justify="flex-end" mb="md">
-          <Button onClick={() => setCreateModalOpened(true)}>
-            {t("Create API Key")}
+          <Button
+            disabled={mcpDisabled}
+            onClick={() => setCreateModalOpened(true)}
+          >
+            {t(isRest ? "Create REST API key" : "Create MCP key")}
           </Button>
         </Group>
       ) : restrictToAdmins ? (
@@ -107,7 +127,9 @@ export default function UserApiKeys() {
 
       <ApiKeyTable
         apiKeys={data?.items || []}
+        keyType={keyType}
         isLoading={isLoading}
+        emptyText={t(isRest ? "No REST API keys yet." : "No MCP keys yet.")}
         onUpdate={handleUpdate}
         onRevoke={handleRevoke}
       />
@@ -126,7 +148,8 @@ export default function UserApiKeys() {
       <CreateApiKeyModal
         opened={createModalOpened}
         onClose={() => setCreateModalOpened(false)}
-        onSuccess={handleCreateSuccess}
+        onSuccess={setCreatedApiKey}
+        keyType={keyType}
       />
 
       <ApiKeyCreatedModal
@@ -154,20 +177,4 @@ export default function UserApiKeys() {
       />
     </>
   );
-}
-
-type McpMode = "off" | "read-only" | "read-write";
-
-function resolveMcpMode(aiSettings: any): McpMode {
-  if (
-    aiSettings?.mcpMode === "read-only" ||
-    aiSettings?.mcpMode === "read-write"
-  ) {
-    return aiSettings.mcpMode;
-  }
-  if (aiSettings?.mcpMode === "off") {
-    return "off";
-  }
-
-  return aiSettings?.mcp === true ? "read-write" : "off";
 }

@@ -32,7 +32,7 @@ describe('OAuthTokenService', () => {
         tokenService,
         userRepo,
         overrides.workspaceRepo ?? {
-          findById: jest.fn().mockResolvedValue(workspace),
+          findActiveById: jest.fn().mockResolvedValue(workspace),
         },
         overrides.metadataService ?? {
           getMcpResourceUrl: jest.fn().mockReturnValue(resource),
@@ -439,6 +439,31 @@ describe('OAuthTokenService', () => {
         { ...workspace, id: 'other-workspace-id' },
       ),
     ).rejects.toThrow('OAuth token workspace does not match');
+    expect(db.selectFrom).not.toHaveBeenCalled();
+  });
+
+  it('rejects an access token when the workspace is inactive', async () => {
+    const db = { selectFrom: jest.fn(), updateTable: jest.fn() };
+    const workspaceRepo = {
+      findActiveById: jest.fn().mockResolvedValue(undefined),
+    };
+    const { service } = createService({ db, workspaceRepo });
+
+    await expect(
+      service.validateAccessToken(
+        {
+          sub: user.id,
+          workspaceId: workspace.id,
+          authorizationId: 'authorization-id',
+          oauthClientId: 'oauth-client-id',
+          clientId,
+          resource,
+          scopes: ['mcp:read'],
+        } as any,
+        workspace,
+      ),
+    ).rejects.toThrow('Workspace not found');
+    expect(workspaceRepo.findActiveById).toHaveBeenCalledWith(workspace.id);
     expect(db.selectFrom).not.toHaveBeenCalled();
   });
 

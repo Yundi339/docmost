@@ -21,6 +21,7 @@ import {
   IAuditService,
 } from '../../../integrations/audit/audit.service';
 import { User } from '@docmost/db/types/entity.types';
+import { SecurityEventService } from '../../../common/events/security-event.service';
 
 @Injectable()
 export class GroupUserService {
@@ -34,6 +35,7 @@ export class GroupUserService {
     private readonly favoriteRepo: FavoriteRepo,
     @InjectKysely() private readonly db: KyselyDB,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    private readonly securityEvents: SecurityEventService,
   ) {}
 
   async getGroupUsers(
@@ -91,6 +93,13 @@ export class GroupUserService {
       validUsers.map((user) => user.id),
       spaceIds,
     );
+    if (validUsers.length > 0) {
+      await this.securityEvents.publish({
+        type: 'user.permissions-changed',
+        userIds: validUsers.map((user) => user.id),
+        workspaceId,
+      });
+    }
 
     for (const user of validUsers) {
       this.auditService.log({
@@ -159,6 +168,11 @@ export class GroupUserService {
       }
     });
     await this.spaceMemberRepo.invalidateUserSpaceRoles([userId], spaceIds);
+    await this.securityEvents.publish({
+      type: 'user.permissions-changed',
+      userIds: [userId],
+      workspaceId,
+    });
 
     this.auditService.log({
       event: AuditEvent.GROUP_MEMBER_REMOVED,

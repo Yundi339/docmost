@@ -15,7 +15,11 @@ import {
 } from '../../core/auth/dto/jwt-payload';
 import { TokenService } from '../../core/auth/services/token.service';
 import { ApiKeyService } from '../../core/api-key/api-key.service';
-import { ApiKeyScope, hasApiKeyScope } from '../../core/api-key/api-key-scopes';
+import {
+  ApiKeyScope,
+  ApiKeyType,
+  hasApiKeyScope,
+} from '../../core/api-key/api-key-scopes';
 import { extractBearerTokenFromHeader } from '../../common/helpers';
 import { OAuthService } from '../oauth/oauth.service';
 import {
@@ -97,6 +101,15 @@ export class McpAuthGuard implements CanActivate {
         throw new UnauthorizedException('Invalid API key');
       }
       const scopes = authContext.apiKey.scopes ?? [];
+      if (authContext.apiKey.keyType !== ApiKeyType.MCP) {
+        this.auditAuthFailure(
+          workspace,
+          request,
+          'api_key_type_rejected',
+          payload,
+        );
+        throw new ForbiddenException('Invalid API key type for MCP');
+      }
       if (
         !hasApiKeyScope(scopes, ApiKeyScope.MCP_READ) &&
         !hasApiKeyScope(scopes, ApiKeyScope.MCP_WRITE)

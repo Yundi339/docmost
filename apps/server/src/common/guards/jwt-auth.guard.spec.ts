@@ -1,7 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { JwtType } from '../../core/auth/dto/jwt-payload';
-import { ApiKeyScope } from '../../core/api-key/api-key-scopes';
+import { ApiKeyScope, ApiKeyType } from '../../core/api-key/api-key-scopes';
 
 describe('JwtAuthGuard', () => {
   let guard: JwtAuthGuard;
@@ -34,7 +34,10 @@ describe('JwtAuthGuard', () => {
       url: '/pages',
       raw: {
         authType: JwtType.API_KEY,
-        apiKey: { scopes: [ApiKeyScope.REST_READ] },
+        apiKey: {
+          keyType: ApiKeyType.REST,
+          scopes: [ApiKeyScope.REST_READ],
+        },
       },
       cookies: {},
     };
@@ -48,7 +51,10 @@ describe('JwtAuthGuard', () => {
       url: '/pages/create',
       raw: {
         authType: JwtType.API_KEY,
-        apiKey: { scopes: [ApiKeyScope.REST_READ] },
+        apiKey: {
+          keyType: ApiKeyType.REST,
+          scopes: [ApiKeyScope.REST_READ],
+        },
       },
       cookies: {},
     };
@@ -65,7 +71,10 @@ describe('JwtAuthGuard', () => {
       url: '/pages/create',
       raw: {
         authType: JwtType.API_KEY,
-        apiKey: { scopes: [ApiKeyScope.REST_WRITE] },
+        apiKey: {
+          keyType: ApiKeyType.REST,
+          scopes: [ApiKeyScope.REST_WRITE],
+        },
       },
       cookies: {},
     };
@@ -81,7 +90,10 @@ describe('JwtAuthGuard', () => {
       url: '/pages/info',
       raw: {
         authType: JwtType.API_KEY,
-        apiKey: { scopes: [ApiKeyScope.REST_READ] },
+        apiKey: {
+          keyType: ApiKeyType.REST,
+          scopes: [ApiKeyScope.REST_READ],
+        },
       },
       cookies: {},
     };
@@ -95,7 +107,10 @@ describe('JwtAuthGuard', () => {
       url: '/pages/update?next=/mcp',
       raw: {
         authType: JwtType.API_KEY,
-        apiKey: { scopes: [ApiKeyScope.MCP_WRITE] },
+        apiKey: {
+          keyType: ApiKeyType.REST,
+          scopes: [ApiKeyScope.MCP_WRITE],
+        },
       },
       cookies: {},
     };
@@ -103,5 +118,24 @@ describe('JwtAuthGuard', () => {
     expect(() =>
       guard.handleRequest(null, { id: 'user-id' }, null, context(req)),
     ).toThrow(ForbiddenException);
+  });
+
+  it('blocks MCP keys from REST even if they carry a REST scope', () => {
+    const req = {
+      method: 'GET',
+      url: '/pages',
+      raw: {
+        authType: JwtType.API_KEY,
+        apiKey: {
+          keyType: ApiKeyType.MCP,
+          scopes: [ApiKeyScope.REST_READ],
+        },
+      },
+      cookies: {},
+    };
+
+    expect(() =>
+      guard.handleRequest(null, { id: 'user-id' }, null, context(req)),
+    ).toThrow('Invalid API key type for REST');
   });
 });

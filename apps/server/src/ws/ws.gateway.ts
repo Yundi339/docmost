@@ -10,7 +10,6 @@ import { Server, Socket } from 'socket.io';
 import { TokenService } from '../core/auth/services/token.service';
 import { JwtPayload, JwtType } from '../core/auth/dto/jwt-payload';
 import { OnModuleDestroy } from '@nestjs/common';
-import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { WsService } from './ws.service';
 import { getSpaceRoomName, getUserRoomName } from './ws.utils';
 import * as cookie from 'cookie';
@@ -27,7 +26,6 @@ export class WsGateway
 
   constructor(
     private tokenService: TokenService,
-    private spaceMemberRepo: SpaceMemberRepo,
     private wsService: WsService,
   ) {}
 
@@ -37,24 +35,25 @@ export class WsGateway
 
   async handleConnection(client: Socket, ...args: any[]): Promise<void> {
     try {
-      const cookies = cookie.parse(client.handshake.headers.cookie);
+      const cookies = cookie.parse(client.handshake.headers.cookie ?? '');
       const token: JwtPayload = await this.tokenService.verifyJwt(
         cookies['authToken'],
         JwtType.ACCESS,
       );
 
-      const userId = token.sub;
-      const workspaceId = token.workspaceId;
+      const context = await this.wsService.authenticateConnection(token);
+      const { userId, workspaceId, sessionId, spaceIds } = context;
 
       client.data.userId = userId;
-
-      const userSpaceIds = await this.spaceMemberRepo.getUserSpaceIds(userId);
+      client.data.workspaceId = workspaceId;
+      client.data.sessionId = sessionId;
+      client.data.lastSecurityValidatedAt = Date.now();
 
       const userRoom = getUserRoomName(userId);
       const workspaceRoom = `workspace-${workspaceId}`;
-      const spaceRooms = userSpaceIds.map((id) => getSpaceRoomName(id));
+      const spaceRooms = spaceIds.map((id) => getSpaceRoomName(id));
 
-      client.join([userRoom, workspaceRoom, ...spaceRooms]);
+      await client.join([userRoom, workspaceRoom, ...spaceRooms]);
     } catch (err) {
       client.emit('Unauthorized');
       client.disconnect();
@@ -63,8 +62,9 @@ export class WsGateway
 
   @SubscribeMessage('message')
   async handleMessage(client: Socket, data: any): Promise<void> {
-    if (this.wsService.isTreeEvent(data)) {
-      await this.wsService.handleTreeEvent(client, data);
+    if (!(await this.wsService.revalidateSocket(client))) return;
+    if (this.wsService.isClientTreeRefreshEvent(data)) {
+      await this.wsService.handleClientTreeRefresh(client, data.spaceId);
     }
   }
 

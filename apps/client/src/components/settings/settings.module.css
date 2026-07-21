@@ -58,6 +58,17 @@
     align-items: center;
 }
 
+.subgroupHeader {
+    padding: var(--mantine-spacing-md) var(--mantine-spacing-sm) var(--mantine-spacing-xs);
+    font-size: var(--mantine-font-size-xs);
+    color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+    font-weight: 600;
+}
+
+.subgroupLink {
+    padding-left: var(--mantine-spacing-lg);
+}
+
 .text {
     padding-left: var(--mantine-spacing-xs) ;
     padding-top: 10px;

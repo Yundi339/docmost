@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { TokenService } from '../auth/services/token.service';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
@@ -10,6 +10,11 @@ import {
   AUDIT_CONTEXT_KEY,
 } from '../../common/middlewares/audit-context.middleware';
 import * as Bowser from 'bowser';
+import { InjectKysely } from 'nestjs-kysely';
+import { KyselyDB } from '@docmost/db/types/kysely.types';
+import { executeTx } from '@docmost/db/utils';
+import { isUserDisabled } from '../../common/helpers';
+import { SecurityEventService } from '../../common/events/security-event.service';
 
 const MAX_SESSIONS_PER_USER = 25;
 const RETENTION_DAYS = 7;
@@ -23,6 +28,8 @@ export class SessionService {
     private readonly userSessionRepo: UserSessionRepo,
     private readonly environmentService: EnvironmentService,
     private readonly cls: ClsService,
+    @InjectKysely() private readonly db: KyselyDB,
+    private readonly securityEvents: SecurityEventService,
   ) {}
 
   @Interval('session-cleanup', 24 * 60 * 60 * 1000)
@@ -47,17 +54,37 @@ export class SessionService {
     const deviceName = this.parseDeviceName(userAgent);
     const expiresAt = this.environmentService.getCookieExpiresIn();
 
-    const session = await this.userSessionRepo.insertSession({
-      userId: user.id,
-      workspaceId: user.workspaceId,
-      deviceName,
-      userAgent,
-      ipAddress,
-      expiresAt,
-      metadata: metadata ?? null,
-    });
+    return executeTx(this.db, async (trx) => {
+      const lockedUser = await trx
+        .selectFrom('users')
+        .selectAll()
+        .where('id', '=', user.id)
+        .where('workspaceId', '=', user.workspaceId)
+        .forUpdate()
+        .executeTakeFirst();
 
-    return this.tokenService.generateAccessToken(user, session.id);
+      if (!lockedUser || isUserDisabled(lockedUser as User)) {
+        throw new ForbiddenException();
+      }
+
+      const session = await this.userSessionRepo.insertSession(
+        {
+          userId: lockedUser.id,
+          workspaceId: lockedUser.workspaceId,
+          deviceName,
+          userAgent,
+          ipAddress,
+          expiresAt,
+          metadata: metadata ?? null,
+        },
+        trx,
+      );
+
+      return this.tokenService.generateAccessToken(
+        lockedUser as User,
+        session.id,
+      );
+    });
   }
 
   async getActiveSessions(
@@ -92,6 +119,12 @@ export class SessionService {
     workspaceId: string,
   ): Promise<void> {
     await this.userSessionRepo.revokeById(sessionId, userId, workspaceId);
+    await this.securityEvents.publish({
+      type: 'session.access-changed',
+      userId,
+      workspaceId,
+      sessionIds: [sessionId],
+    });
   }
 
   async revokeAllOtherSessions(
@@ -104,6 +137,12 @@ export class SessionService {
       userId,
       workspaceId,
     );
+    await this.securityEvents.publish({
+      type: 'session.access-changed',
+      userId,
+      workspaceId,
+      excludeSessionId: currentSessionId,
+    });
   }
 
   private parseDeviceName(userAgent: string | null): string | null {

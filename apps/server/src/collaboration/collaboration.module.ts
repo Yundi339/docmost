@@ -19,6 +19,7 @@ import { CollaborationHandler } from './collaboration.handler';
 import { CollabHistoryService } from './services/collab-history.service';
 import { WatcherModule } from '../core/watcher/watcher.module';
 import { PageContentLifecycleService } from './services/page-content-lifecycle.service';
+import { SecurityEventModule } from '../common/events/security-event.service';
 
 @Module({
   providers: [
@@ -32,7 +33,7 @@ import { PageContentLifecycleService } from './services/page-content-lifecycle.s
     PageContentLifecycleService,
   ],
   exports: [CollaborationGateway, PageContentLifecycleService],
-  imports: [TokenModule, WatcherModule],
+  imports: [TokenModule, WatcherModule, SecurityEventModule],
 })
 export class CollaborationModule implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CollaborationModule.name);

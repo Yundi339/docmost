@@ -1,25 +1,25 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Modal, TextInput, Button, Group, Stack, Select } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { zod4Resolver } from "mantine-form-zod-resolver";
-import { z } from "zod/v4";
 import { useTranslation } from "react-i18next";
 import { useCreateApiKeyMutation } from "@/ee/api-key/queries/api-key-query";
 import { IconCalendar } from "@tabler/icons-react";
 import { IApiKey } from "@/ee/api-key";
 import {
+  buildApiKeyCreateRequest,
+  getDefaultApiKeyScopes,
   getApiKeyConfigurationError,
-  getApiKeyScopePresetValue,
-  resolveApiKeyScopes,
-  restrictApiKeyScopesToMcp,
 } from "@/ee/api-key/lib/api-key-scopes";
-import { ApiKeyScope } from "@/ee/api-key/types/api-key.types";
+import { ApiKeyScope, ApiKeyType } from "@/ee/api-key/types/api-key.types";
 import { ApiKeyScopeSelector } from "@/ee/api-key/components/api-key-scope-selector";
 import {
   SpaceAccessSelector,
   useSelectableSpaceOptionsQuery,
 } from "@/ee/space-access";
 import { SpaceAccessInput } from "@/ee/space-access/types/space-access.types";
+import { useAtomValue } from "jotai";
+import { workspaceAtom } from "@/features/user/atoms/current-user-atom";
+import { resolveMcpMode } from "@/features/workspace/lib/mcp-mode";
 
 const DateInput = lazy(() =>
   import("@mantine/dates").then((module) => ({
@@ -31,13 +31,13 @@ interface CreateApiKeyModalProps {
   opened: boolean;
   onClose: () => void;
   onSuccess: (response: IApiKey) => void;
+  keyType: ApiKeyType;
 }
 
-const formSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  expiresAt: z.string().optional(),
-});
-type FormValues = z.infer<typeof formSchema>;
+interface FormValues {
+  name: string;
+  expiresAt: string;
+}
 type ExpirationOption = "30" | "60" | "90" | "365" | "custom";
 
 function addDays(days: number) {
@@ -67,26 +67,39 @@ export function CreateApiKeyModal({
   opened,
   onClose,
   onSuccess,
+  keyType,
 }: CreateApiKeyModalProps) {
   const { t, i18n } = useTranslation();
   const [expirationOption, setExpirationOption] =
     useState<ExpirationOption>("30");
-  const [scopePreset, setScopePreset] = useState<string>("full");
-  const [customScopes, setCustomScopes] = useState<ApiKeyScope[]>([
-    "rest:read",
-    "rest:write",
-  ]);
+  const [scopes, setScopes] = useState<ApiKeyScope[]>(
+    getDefaultApiKeyScopes(keyType),
+  );
   const [spaceAccess, setSpaceAccess] = useState<SpaceAccessInput>({
     mode: "all",
   });
   const [spaceAccessError, setSpaceAccessError] = useState<string>();
   const [scopeError, setScopeError] = useState<string>();
   const createApiKeyMutation = useCreateApiKeyMutation();
+  const workspace = useAtomValue(workspaceAtom);
+  const mcpMode = resolveMcpMode(workspace?.settings?.ai);
+  const allowWrite = keyType !== "mcp" || mcpMode === "read-write";
   const { data: availableSpaces = [], isLoading: spacesLoading } =
-    useSelectableSpaceOptionsQuery({ enabled: opened });
+    useSelectableSpaceOptionsQuery({ enabled: opened && keyType === "mcp" });
+
+  useEffect(() => {
+    if (!opened) {
+      setScopes(getDefaultApiKeyScopes(keyType));
+      setSpaceAccess({ mode: "all" });
+    } else if (!allowWrite) {
+      setScopes(getDefaultApiKeyScopes(keyType));
+    }
+  }, [allowWrite, keyType, opened]);
 
   const form = useForm<FormValues>({
-    validate: zod4Resolver(formSchema),
+    validate: {
+      name: (value) => (value.trim() ? null : t("Name is required")),
+    },
     initialValues: {
       name: "",
       expiresAt: "",
@@ -109,7 +122,7 @@ export function CreateApiKeyModal({
       day: "2-digit",
       year: "numeric",
     });
-    return `${days} days (${formatted})`;
+    return t("{{count}} days ({{date}})", { count: days, date: formatted });
   };
 
   const expirationOptions = [
@@ -120,31 +133,18 @@ export function CreateApiKeyModal({
     { value: "custom", label: t("Custom") },
   ];
 
-  const getScopes = (): ApiKeyScope[] => {
-    return resolveApiKeyScopes(scopePreset, customScopes);
-  };
-
-  const handleSpaceAccessChange = (value: SpaceAccessInput) => {
-    setSpaceAccess(value);
-    setSpaceAccessError(undefined);
-    setScopeError(undefined);
-
-    if (value.mode === "selected") {
-      const mcpScopes = restrictApiKeyScopesToMcp(getScopes());
-      setCustomScopes(mcpScopes);
-      setScopePreset(getApiKeyScopePresetValue(mcpScopes));
-    }
-  };
-
   const handleSubmit = async (data: FormValues) => {
     const expiresAt = getExpirationDate();
     if (!expiresAt) {
-      form.setFieldError("expiresAt", "Expiration date is required");
+      form.setFieldError("expiresAt", t("Expiration date is required"));
       return;
     }
 
-    const scopes = getScopes();
-    const configurationError = getApiKeyConfigurationError(scopes, spaceAccess);
+    const configurationError = getApiKeyConfigurationError(
+      keyType,
+      scopes,
+      spaceAccess,
+    );
     if (configurationError === "missing_space") {
       setSpaceAccessError(t("Select at least one space."));
       return;
@@ -153,21 +153,21 @@ export function CreateApiKeyModal({
       setScopeError(t("Select at least one scope."));
       return;
     }
-    if (configurationError === "rest_scope_with_selected_spaces") {
-      setScopeError(
-        t(
-          "REST scopes cannot be used when access is limited to specific spaces.",
-        ),
-      );
+    if (
+      configurationError === "invalid_scope" ||
+      configurationError === "rest_space_access"
+    ) {
+      setScopeError(t("The selected access is invalid for this API key type."));
       return;
     }
 
-    const apiKeyData = {
+    const apiKeyData = buildApiKeyCreateRequest({
       name: data.name,
       expiresAt,
+      keyType,
       scopes,
       spaceAccess,
-    };
+    });
 
     try {
       const createdKey = await createApiKeyMutation.mutateAsync(apiKeyData);
@@ -182,8 +182,7 @@ export function CreateApiKeyModal({
   const resetFields = () => {
     form.reset();
     setExpirationOption("30");
-    setScopePreset("full");
-    setCustomScopes(["rest:read", "rest:write"]);
+    setScopes(getDefaultApiKeyScopes(keyType));
     setSpaceAccess({ mode: "all" });
     setSpaceAccessError(undefined);
     setScopeError(undefined);
@@ -198,7 +197,7 @@ export function CreateApiKeyModal({
     <Modal
       opened={opened}
       onClose={handleClose}
-      title={t("Create API Key")}
+      title={t(keyType === "rest" ? "Create REST API key" : "Create MCP key")}
       size="md"
       closeButtonProps={{ "aria-label": t("Close") }}
     >
@@ -212,25 +211,26 @@ export function CreateApiKeyModal({
             {...form.getInputProps("name")}
           />
 
-          <SpaceAccessSelector
-            value={spaceAccess}
-            onChange={handleSpaceAccessChange}
-            spaces={availableSpaces}
-            loading={spacesLoading}
-            error={spaceAccessError}
-          />
+          {keyType === "mcp" && (
+            <SpaceAccessSelector
+              value={spaceAccess}
+              onChange={(value) => {
+                setSpaceAccess(value);
+                setSpaceAccessError(undefined);
+              }}
+              spaces={availableSpaces}
+              loading={spacesLoading}
+              error={spaceAccessError}
+            />
+          )}
 
           <ApiKeyScopeSelector
-            scopePreset={scopePreset}
-            customScopes={customScopes}
-            mcpOnly={spaceAccess.mode === "selected"}
+            keyType={keyType}
+            scopes={scopes}
+            allowWrite={allowWrite}
             error={scopeError}
-            onScopePresetChange={(value) => {
-              setScopePreset(value);
-              setScopeError(undefined);
-            }}
-            onCustomScopesChange={(value) => {
-              setCustomScopes(value);
+            onChange={(value) => {
+              setScopes(value);
               setScopeError(undefined);
             }}
           />

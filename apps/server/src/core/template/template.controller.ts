@@ -36,8 +36,8 @@ export class TemplateController {
     @AuthWorkspace() workspace: Workspace,
   ) {
     return this.templateService.findTemplates(
-      workspace.id,
-      user.id,
+      workspace,
+      user,
       pagination,
       spaceId,
     );
@@ -48,9 +48,10 @@ export class TemplateController {
   @Post('info')
   async findOne(
     @Body() input: TemplateIdDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.templateService.findById(input.templateId, workspace.id);
+    return this.templateService.findById(input.templateId, user, workspace);
   }
 
   @HttpCode(HttpStatus.OK)
@@ -60,7 +61,7 @@ export class TemplateController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.templateService.create(dto, user.id, workspace.id);
+    return this.templateService.create(dto, user, workspace);
   }
 
   @HttpCode(HttpStatus.OK)
@@ -70,16 +71,17 @@ export class TemplateController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.templateService.update(dto, user.id, workspace.id);
+    return this.templateService.update(dto, user, workspace);
   }
 
   @HttpCode(HttpStatus.OK)
   @Post('delete')
   async delete(
     @Body() input: TemplateIdDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    await this.templateService.delete(input.templateId, workspace.id);
+    await this.templateService.delete(input.templateId, user, workspace);
   }
 
   @HttpCode(HttpStatus.OK)
@@ -89,6 +91,6 @@ export class TemplateController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.templateService.useTemplate(dto, user.id, workspace.id);
+    return this.templateService.useTemplate(dto, user, workspace);
   }
 }

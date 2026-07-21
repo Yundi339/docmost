@@ -83,17 +83,27 @@ export const prefetchShares = () => {
   });
 };
 
-export const prefetchApiKeys = () => {
+export const prefetchRestApiKeys = () => {
+  const params = { keyType: "rest" as const };
   queryClient.prefetchQuery({
-    queryKey: ["api-key-list", {}],
-    queryFn: () => getApiKeys({}),
+    queryKey: ["api-key-list", params],
+    queryFn: () => getApiKeys(params),
+  });
+};
+
+export const prefetchMcpApiKeys = () => {
+  const params = { keyType: "mcp" as const };
+  queryClient.prefetchQuery({
+    queryKey: ["api-key-list", params],
+    queryFn: () => getApiKeys(params),
   });
 };
 
 export const prefetchApiKeyManagement = () => {
+  const params = { adminView: true, keyType: "rest" as const };
   queryClient.prefetchQuery({
-    queryKey: ["api-key-list", { adminView: true }],
-    queryFn: () => getApiKeys({ adminView: true }),
+    queryKey: ["api-key-list", params],
+    queryFn: () => getApiKeys(params),
   });
 };
 
