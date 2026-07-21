@@ -19,6 +19,9 @@ const auditFieldLabels: Record<string, string> = {
   reason: "Reason",
   mode: "Mode",
   scopes: "Scopes",
+  spaceAccessMode: "Space access mode",
+  selectedSpaceCount: "Selected space count",
+  effectiveSpaceCount: "Effective space count",
   provider: "Provider",
   clientName: "Client name",
   redirectHost: "Redirect host",
@@ -184,18 +187,18 @@ export function getVisibleAuditChangeKeys(
     ...Object.keys(changes.before ?? {}),
     ...Object.keys(changes.after ?? {}),
   ]);
-  if (resource?.type !== 'page') return [...keys];
+  if (resource?.type !== "page") return [...keys];
 
-  keys.delete('pageId');
-  keys.delete('slugId');
+  keys.delete("pageId");
+  keys.delete("slugId");
 
   const beforeSpaceId = changes.before?.spaceId;
   const afterSpaceId = changes.after?.spaceId;
   const isSpaceTransition =
-    typeof beforeSpaceId === 'string' &&
-    typeof afterSpaceId === 'string' &&
+    typeof beforeSpaceId === "string" &&
+    typeof afterSpaceId === "string" &&
     beforeSpaceId !== afterSpaceId;
-  if (resource.spaceName && !isSpaceTransition) keys.delete('spaceId');
+  if (resource.spaceName && !isSpaceTransition) keys.delete("spaceId");
 
   return [...keys];
 }
@@ -213,6 +216,10 @@ export function formatAuditPrimitive(
   if (fieldKey === "keyType") {
     if (text === "rest") return t("REST API");
     if (text === "mcp") return t("MCP");
+  }
+  if (fieldKey === "spaceAccessMode") {
+    if (text === "all") return t("All spaces");
+    if (text === "selected") return t("Selected spaces");
   }
 
   const valueLabel = auditValueLabels[text];

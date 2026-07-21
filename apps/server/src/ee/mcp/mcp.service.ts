@@ -25,9 +25,9 @@ export type { McpMode, McpRequestContext } from './mcp.types';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const packageJson = require('../../../package.json');
 
-const DEFAULT_MAX_MCP_SESSIONS = 500;
-const DEFAULT_MAX_MCP_SESSIONS_PER_CREDENTIAL = 30;
-const DEFAULT_MCP_SESSION_IDLE_TTL_SECONDS = 5 * 60;
+const DEFAULT_MAX_MCP_SESSIONS = 1000;
+const DEFAULT_MAX_MCP_SESSIONS_PER_CREDENTIAL = 100;
+const DEFAULT_MCP_SESSION_IDLE_TTL_SECONDS = 3 * 60;
 
 interface McpSession {
   sessionId: string;
@@ -42,7 +42,7 @@ interface McpSession {
   permissionRevision: string;
   context: McpRequestContext;
   lastActivityAt: number;
-  activeRequests: number;
+  activeOperations: number;
 }
 
 @Injectable()
@@ -71,8 +71,8 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     const intervalMs = Math.min(
-      Math.max(Math.floor(this.sessionIdleTtlMs / 2), 60_000),
-      5 * 60_000,
+      Math.max(Math.floor(this.sessionIdleTtlMs / 6), 30_000),
+      60_000,
     );
     this.sessionCleanupTimer = setInterval(() => {
       this.pruneExpiredSessions().catch((err) => {
@@ -176,6 +176,7 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     // single-instance deployments. Multi-instance deployments must use sticky
     // sessions or replace this with a shared store.
     const server = this.createMcpServer(user, workspace, context);
+    const tracksActivity = req.method !== 'GET';
     let sid: string | undefined;
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
@@ -199,7 +200,7 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
           permissionRevision: getPermissionRevision(context),
           context: { ...context, scopes: [...context.scopes] },
           lastActivityAt: Date.now(),
-          activeRequests: 1,
+          activeOperations: tracksActivity ? 1 : 0,
         };
         this.sessions.set(sessionId, session);
         this.auditMcpSessionEvent(session, AuditEvent.MCP_SESSION_STARTED);
@@ -215,8 +216,8 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     try {
       await transport.handleRequest(req, res, body);
     } finally {
-      if (sid) {
-        this.finishRequest(sid);
+      if (sid && tracksActivity) {
+        this.finishOperation(sid);
       }
     }
   }
@@ -277,20 +278,25 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     res: ServerResponse,
     body: unknown,
   ) {
-    session.lastActivityAt = Date.now();
-    session.activeRequests = (session.activeRequests ?? 0) + 1;
+    const tracksActivity = req.method !== 'GET';
+    if (tracksActivity) {
+      session.lastActivityAt = Date.now();
+      session.activeOperations = (session.activeOperations ?? 0) + 1;
+    }
     try {
       await session.transport.handleRequest(req, res, body);
     } finally {
-      this.finishRequest(session.sessionId);
+      if (tracksActivity) {
+        this.finishOperation(session.sessionId);
+      }
     }
   }
 
-  private finishRequest(sessionId: string) {
+  private finishOperation(sessionId: string) {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    session.activeRequests = Math.max(0, session.activeRequests - 1);
+    session.activeOperations = Math.max(0, session.activeOperations - 1);
     session.lastActivityAt = Date.now();
   }
 
@@ -299,7 +305,7 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     const expiredSessionIds = [...this.sessions.values()]
       .filter(
         (session) =>
-          (session.activeRequests ?? 0) === 0 &&
+          (session.activeOperations ?? 0) === 0 &&
           session.lastActivityAt <= expiresBefore,
       )
       .map((session) => session.sessionId);

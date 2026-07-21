@@ -19,6 +19,8 @@ const t = (key: string) =>
       Rename: "重命名",
       "REST API": "REST API",
       MCP: "MCP",
+      "All spaces": "所有空间",
+      "Selected spaces": "指定空间",
     }) as Record<string, string>
   )[key] ?? key;
 
@@ -52,6 +54,13 @@ describe("audit display formatting", () => {
     );
     expect(getAuditFieldLabel("diagnosticCode")).toBe("Diagnostic code");
     expect(getAuditFieldLabel("keyType")).toBe("Key type");
+    expect(getAuditFieldLabel("spaceAccessMode")).toBe("Space access mode");
+    expect(getAuditFieldLabel("selectedSpaceCount")).toBe(
+      "Selected space count",
+    );
+    expect(getAuditFieldLabel("effectiveSpaceCount")).toBe(
+      "Effective space count",
+    );
     expect(getAuditFieldLabel("futureAuditField")).toBe("Future Audit Field");
   });
 
@@ -74,6 +83,12 @@ describe("audit display formatting", () => {
     );
     expect(formatAuditPrimitive("rest", "keyType", t as any)).toBe("REST API");
     expect(formatAuditPrimitive("mcp", "keyType", t as any)).toBe("MCP");
+    expect(formatAuditPrimitive("all", "spaceAccessMode", t as any)).toBe(
+      "所有空间",
+    );
+    expect(formatAuditPrimitive("selected", "spaceAccessMode", t as any)).toBe(
+      "指定空间",
+    );
     expect(formatAuditPrimitive("future", "keyType", t as any)).toBe("future");
   });
 

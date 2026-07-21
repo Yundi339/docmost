@@ -812,7 +812,7 @@ describe('McpService access control', () => {
     );
   });
 
-  it('keeps sessions with an active HTTP request', async () => {
+  it('keeps sessions with an active MCP operation', async () => {
     const close = jest.fn().mockResolvedValue(undefined);
     (service as any).sessions.set('streaming-session-id', {
       sessionId: 'streaming-session-id',
@@ -824,7 +824,7 @@ describe('McpService access control', () => {
       scopes: [ApiKeyScope.MCP_WRITE],
       context: context('read-write', [ApiKeyScope.MCP_WRITE]),
       lastActivityAt: 0,
-      activeRequests: 1,
+      activeOperations: 1,
       transport: { close },
     });
 
@@ -832,6 +832,26 @@ describe('McpService access control', () => {
 
     expect(close).not.toHaveBeenCalled();
     expect((service as any).sessions.has('streaming-session-id')).toBe(true);
+  });
+
+  it('does not treat an open SSE request as session activity', async () => {
+    const session = {
+      sessionId: 'sse-session-id',
+      lastActivityAt: 123,
+      activeOperations: 0,
+      transport: { handleRequest: jest.fn().mockResolvedValue(undefined) },
+    };
+    (service as any).sessions.set(session.sessionId, session);
+
+    await (service as any).handleSessionRequest(
+      session,
+      { method: 'GET' },
+      {},
+      undefined,
+    );
+
+    expect(session.lastActivityAt).toBe(123);
+    expect(session.activeOperations).toBe(0);
   });
 
   it('rejects new sessions when the active session limit is reached', async () => {
@@ -903,7 +923,7 @@ describe('McpService access control', () => {
       mode: 'read-write',
       server,
       transport,
-      activeRequests: 0,
+      activeOperations: 0,
     });
     expect(server.connect).toHaveBeenCalledWith(transport);
     expect(transport.handleRequest).toHaveBeenCalledWith(req, res, body);
