@@ -147,6 +147,36 @@ function createService() {
   };
 }
 
+describe('PageService JSON content parsing', () => {
+  it('parses serialized ProseMirror JSON used by MCP string arguments', async () => {
+    const { service } = createService();
+    const document = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Todo' }],
+        },
+      ],
+    };
+
+    const result = await (service as any).parseProsemirrorContent(
+      JSON.stringify(document),
+      'json',
+    );
+
+    expect(result).toEqual(document);
+  });
+
+  it('rejects malformed serialized JSON', async () => {
+    const { service } = createService();
+
+    await expect(
+      (service as any).parseProsemirrorContent('{invalid', 'json'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
 describe('PageService.getDeletedSpacePages', () => {
   const meta = {
     limit: 50,

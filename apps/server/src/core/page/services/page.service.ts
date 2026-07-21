@@ -1420,7 +1420,15 @@ export class PageService {
       }
       case 'json':
       default: {
-        prosemirrorJson = content;
+        if (typeof content === 'string') {
+          try {
+            prosemirrorJson = JSON.parse(content);
+          } catch {
+            throw new BadRequestException('Invalid content format');
+          }
+        } else {
+          prosemirrorJson = content;
+        }
         break;
       }
     }
