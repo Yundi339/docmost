@@ -1,8 +1,20 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { User, Workspace } from '@docmost/db/types/entity.types';
+import type { CredentialSpaceAccessContext } from '../../core/credential-space-access/credential-space-access.types';
 
 export type McpMode = 'off' | 'read-only' | 'read-write';
 export type McpToolAccess = 'read' | 'write' | 'destructive';
+
+export type McpToolResourcePolicy =
+  | { kind: 'identity' }
+  | { kind: 'scoped_collection'; spaceIds?: string[] }
+  | { kind: 'all_spaces_only' }
+  | {
+      kind: 'resource_args';
+      spaceIds?: string[];
+      pageIds?: string[];
+      commentIds?: string[];
+    };
 
 export interface McpRequestContext {
   authType: 'api_key' | 'oauth';
@@ -12,6 +24,8 @@ export interface McpRequestContext {
   oauthClientId?: string;
   clientId?: string;
   scopes: string[];
+  spaceAccess: CredentialSpaceAccessContext;
+  principalRevision: string;
   mode: McpMode;
   ipAddress?: string;
   userAgent?: string;
@@ -42,6 +56,7 @@ export interface McpToolDescriptor<T extends object = any> {
   description: string;
   inputSchema: Record<string, any>;
   access: McpToolAccess;
+  resource: McpToolResourcePolicy;
   input: McpToolInputPolicy<T>;
   handler: (
     invocation: McpToolInvocation,

@@ -1,3 +1,9 @@
+import {
+  ISpaceAccess,
+  ISpaceAccessSpace,
+  SpaceAccessInput,
+} from "@/ee/space-access/types/space-access.types";
+
 export type OAuthScope = "mcp:read" | "mcp:write" | "mcp:destructive";
 
 export interface IOAuthClient {
@@ -34,6 +40,7 @@ export interface IOAuthAuthorization {
   userName?: string | null;
   userEmail?: string | null;
   userAvatarUrl?: string | null;
+  spaceAccess: ISpaceAccess;
 }
 
 export interface IOAuthAuthorizeInfo {
@@ -44,6 +51,8 @@ export interface IOAuthAuthorizeInfo {
   redirectHost: string;
   resource: string;
   scopes: OAuthScope[];
+  availableSpaces: ISpaceAccessSpace[];
+  spaceAccess: ISpaceAccess;
   user: {
     id: string;
     name: string;
@@ -53,4 +62,14 @@ export interface IOAuthAuthorizeInfo {
 
 export interface IOAuthRedirectResponse {
   redirectUri: string;
+}
+
+export interface IOAuthApprovalRequest {
+  [key: string]: string | SpaceAccessInput | undefined;
+  spaceAccess?: SpaceAccessInput;
+}
+
+export interface IUpdateOAuthAuthorizationRequest {
+  authorizationId: string;
+  spaceAccess: SpaceAccessInput;
 }

@@ -6,6 +6,7 @@ import { OAuthAuthorizationService } from './oauth-authorization.service';
 import { OAuthClientService } from './oauth-client.service';
 import { OAuthMetadataService } from './oauth-metadata.service';
 import { OAuthTokenService } from './oauth-token.service';
+import { CredentialSpaceAccessInput } from '../../core/credential-space-access/credential-space-access.types';
 import {
   OAuthAuthorizeQuery,
   OAuthClientRegistrationRequest,
@@ -101,6 +102,22 @@ export class OAuthService {
   ) {
     return this.authorizationService.revokeAuthorization(
       authorizationId,
+      workspace,
+      user,
+      req,
+    );
+  }
+
+  updateAuthorizationAccess(
+    authorizationId: string,
+    spaceAccess: CredentialSpaceAccessInput,
+    workspace: Workspace,
+    user: User,
+    req?: FastifyRequest,
+  ) {
+    return this.authorizationService.updateAuthorizationAccess(
+      authorizationId,
+      spaceAccess,
       workspace,
       user,
       req,

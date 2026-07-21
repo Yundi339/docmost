@@ -23,6 +23,9 @@ describe('OAuthTokenService', () => {
     const userRepo = overrides.userRepo ?? {
       findById: jest.fn().mockResolvedValue(user),
     };
+    const credentialRevocation = overrides.credentialRevocation ?? {
+      lockActiveUserForIssuance: jest.fn().mockResolvedValue(user),
+    };
     return {
       service: new OAuthTokenService(
         overrides.db ?? ({} as any),
@@ -34,9 +37,19 @@ describe('OAuthTokenService', () => {
         overrides.metadataService ?? {
           getMcpResourceUrl: jest.fn().mockReturnValue(resource),
         },
+        overrides.credentialSpaceAccess ?? {
+          resolveOAuthAuthorizationAccess: jest.fn().mockResolvedValue({
+            mode: 'all',
+            selectedSpaceIds: [],
+            effectiveSpaceIds: ['space-id'],
+            revision: 'revision-1',
+          }),
+        },
+        credentialRevocation,
       ),
       tokenService,
       userRepo,
+      credentialRevocation,
     };
   }
 
@@ -58,7 +71,9 @@ describe('OAuthTokenService', () => {
         .mockReturnValueOnce(createSelectQuery(authorization)),
       transaction: createTransaction(trx),
     };
-    const { service, tokenService } = createService({ db });
+    const { service, tokenService, credentialRevocation } = createService({
+      db,
+    });
 
     const result = await service.exchangeToken(
       {
@@ -79,6 +94,11 @@ describe('OAuthTokenService', () => {
         clientId,
         resource,
       }),
+    );
+    expect(credentialRevocation.lockActiveUserForIssuance).toHaveBeenCalledWith(
+      user.id,
+      workspace.id,
+      trx,
     );
     expect(tokenService.generateMcpOAuthAccessToken).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -479,10 +499,14 @@ function createAuthorization(overrides: Record<string, any> = {}) {
     id: 'authorization-id',
     oauthClientId: 'oauth-client-id',
     userId: 'user-id',
+    workspaceId: 'workspace-id',
     clientId: 'docmost-client-id',
     resource: 'https://docs.example.test/mcp',
+    scopes: ['mcp:read', 'mcp:write'],
+    spaceAccessMode: 'all',
     oauthClientEnabled: true,
     oauthClientDeletedAt: null,
+    oauthClientAllowedScopes: ['mcp:read', 'mcp:write'],
     ...overrides,
   };
 }

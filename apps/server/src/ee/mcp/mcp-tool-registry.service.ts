@@ -51,6 +51,17 @@ export class McpToolRegistryService implements McpToolRegistrar {
       if (!tool.input) {
         throw new Error(`MCP tool ${tool.name} must declare a DTO or noDto`);
       }
+      if (!tool.resource) {
+        throw new Error(`MCP tool ${tool.name} must declare a resource policy`);
+      }
+      if (
+        tool.resource.kind === 'scoped_collection' &&
+        !MCP_SCOPED_COLLECTION_TOOLS.has(tool.name)
+      ) {
+        throw new Error(
+          `MCP scoped collection policy is not reviewed: ${tool.name}`,
+        );
+      }
       names.add(tool.name);
     }
     const unlisted = tools.find(
@@ -74,6 +85,12 @@ export class McpToolRegistryService implements McpToolRegistrar {
     }
   }
 }
+
+const MCP_SCOPED_COLLECTION_TOOLS = new Set([
+  'search_pages',
+  'search_attachments',
+  'list_spaces',
+]);
 
 export const MCP_LEGACY_TOOL_ORDER = [
   'search_pages',

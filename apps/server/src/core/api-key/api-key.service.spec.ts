@@ -15,6 +15,9 @@ describe('ApiKeyService', () => {
   let tokenService: { generateApiToken: jest.Mock };
   let userRepo: { findById: jest.Mock };
   let workspaceRepo: { findById: jest.Mock };
+  let db: { transaction: jest.Mock };
+  let credentialSpaceAccess: Record<string, jest.Mock>;
+  let credentialRevocation: { lockActiveUserForIssuance: jest.Mock };
   let auditService: { log: jest.Mock };
 
   const workspace = (settings: Record<string, any> = {}) =>
@@ -45,7 +48,11 @@ describe('ApiKeyService', () => {
       generateApiToken: jest.fn(),
     };
     userRepo = {
-      findById: jest.fn(),
+      findById: jest.fn().mockResolvedValue({
+        id: 'member-id',
+        deactivatedAt: null,
+        deletedAt: null,
+      }),
     };
     workspaceRepo = {
       findById: jest.fn().mockResolvedValue({
@@ -57,12 +64,52 @@ describe('ApiKeyService', () => {
     auditService = {
       log: jest.fn(),
     };
+    db = {
+      transaction: jest.fn().mockReturnValue({
+        execute: (callback: (trx: any) => unknown) => callback({}),
+      }),
+    };
+    credentialSpaceAccess = {
+      normalizeSelection: jest
+        .fn()
+        .mockResolvedValue({ mode: 'all', spaceIds: [] }),
+      replaceApiKeyAccess: jest.fn().mockResolvedValue(undefined),
+      addApiKeyViews: jest.fn(async (records) =>
+        records.map((record) => ({
+          ...record,
+          spaceAccess: {
+            mode: 'all',
+            spaces: [],
+            selectedCount: 0,
+            effectiveCount: 1,
+            status: 'active',
+          },
+        })),
+      ),
+      resolveApiKeyAccess: jest.fn().mockResolvedValue({
+        mode: 'all',
+        selectedSpaceIds: [],
+        effectiveSpaceIds: ['space-id'],
+        revision: 'revision-1',
+      }),
+      listSelectableSpaces: jest.fn().mockResolvedValue([]),
+    };
+    credentialRevocation = {
+      lockActiveUserForIssuance: jest.fn().mockResolvedValue({
+        id: 'member-id',
+        deactivatedAt: null,
+        deletedAt: null,
+      }),
+    };
 
     service = new ApiKeyService(
       apiKeyRepo as any,
       tokenService as any,
       userRepo as any,
       workspaceRepo as any,
+      db as any,
+      credentialSpaceAccess as any,
+      credentialRevocation as any,
       auditService as any,
     );
   });
@@ -140,9 +187,10 @@ describe('ApiKeyService', () => {
     );
 
     expect(apiKeyRepo.updateApiKey).toHaveBeenCalledWith(
-      { name: 'Renamed key' },
+      { name: 'Renamed key', scopes: ['rest:read', 'rest:write'] },
       'api-key-id',
       'workspace-id',
+      {},
     );
   });
 
@@ -179,6 +227,54 @@ describe('ApiKeyService', () => {
       'api-key-id',
       'workspace-id',
     );
+  });
+
+  it('only lets owners rename another user API key', async () => {
+    apiKeyRepo.findById.mockResolvedValue({
+      id: 'api-key-id',
+      creatorId: 'member-id',
+      scopes: ['mcp:read'],
+      spaceAccessMode: 'selected',
+    });
+
+    await expect(
+      service.update(
+        {
+          apiKeyId: 'api-key-id',
+          name: 'Renamed key',
+          spaceAccess: { mode: 'all' },
+        },
+        workspace(),
+        user(UserRole.OWNER, 'owner-id'),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(apiKeyRepo.updateApiKey).not.toHaveBeenCalled();
+  });
+
+  it('rejects REST scopes for selected-space API keys', async () => {
+    credentialSpaceAccess.normalizeSelection.mockResolvedValue({
+      mode: 'selected',
+      spaceIds: ['018f3f73-2f69-7c8d-9d79-8f3f4d7d9712'],
+    });
+
+    await expect(
+      service.create(
+        {
+          name: 'Scoped key',
+          expiresAt: futureExpiration(),
+          scopes: ['mcp:read', 'rest:read'],
+          spaceAccess: {
+            mode: 'selected',
+            spaceIds: ['018f3f73-2f69-7c8d-9d79-8f3f4d7d9712'],
+          },
+        },
+        user(UserRole.MEMBER, 'member-id'),
+        workspace(),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(apiKeyRepo.insertApiKey).not.toHaveBeenCalled();
   });
 
   it('enforces admin-only API key creation when the workspace restricts it', async () => {
@@ -244,6 +340,7 @@ describe('ApiKeyService', () => {
         expiresAt: new Date(expiresAt),
         scopes: ['mcp:read'],
       }),
+      {},
     );
     expect(tokenService.generateApiToken).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -251,6 +348,21 @@ describe('ApiKeyService', () => {
         scopes: ['mcp:read'],
       }),
     );
+  });
+
+  it('does not create an API key after the user is deactivated', async () => {
+    credentialRevocation.lockActiveUserForIssuance.mockResolvedValue(undefined);
+
+    await expect(
+      service.create(
+        { name: 'Member key', expiresAt: futureExpiration() },
+        user(UserRole.MEMBER, 'member-id'),
+        workspace(),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(apiKeyRepo.insertApiKey).not.toHaveBeenCalled();
+    expect(tokenService.generateApiToken).not.toHaveBeenCalled();
   });
 
   it('rejects API keys created by disabled users', async () => {

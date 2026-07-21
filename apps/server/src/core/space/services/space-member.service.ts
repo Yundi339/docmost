@@ -99,7 +99,6 @@ export class SpaceMemberService {
     authUser: User,
     workspaceId: string,
   ): Promise<void> {
-
     const space = await this.spaceRepo.findById(dto.spaceId, workspaceId);
     if (!space) {
       throw new NotFoundException('Space not found');
@@ -172,6 +171,17 @@ export class SpaceMemberService {
 
     if (membersToAdd.length > 0) {
       await this.spaceMemberRepo.insertSpaceMember(membersToAdd);
+      const groupUserIds = (
+        await Promise.all(
+          validGroups.map((group) =>
+            this.groupUserRepo.getUserIdsByGroupId(group.id),
+          ),
+        )
+      ).flat();
+      await this.spaceMemberRepo.invalidateUserSpaceRoles(
+        [...validUsers.map((user) => user.id), ...groupUserIds],
+        [dto.spaceId],
+      );
 
       // Audit log for each member added
       for (const user of validUsers) {
@@ -281,6 +291,9 @@ export class SpaceMemberService {
         { trx },
       );
     });
+    await this.spaceMemberRepo.invalidateUserSpaceRoles(affectedUserIds, [
+      dto.spaceId,
+    ]);
 
     this.auditService.log({
       event: AuditEvent.SPACE_MEMBER_REMOVED,
@@ -348,6 +361,12 @@ export class SpaceMemberService {
       spaceMember.id,
       dto.spaceId,
     );
+    const affectedUserIds = dto.userId
+      ? [dto.userId]
+      : await this.groupUserRepo.getUserIdsByGroupId(dto.groupId);
+    await this.spaceMemberRepo.invalidateUserSpaceRoles(affectedUserIds, [
+      dto.spaceId,
+    ]);
 
     this.auditService.log({
       event: AuditEvent.SPACE_MEMBER_ROLE_CHANGED,
@@ -384,7 +403,13 @@ export class SpaceMemberService {
     userId: string,
     pagination: PaginationOptions,
     workspaceId?: string,
+    allowedSpaceIds?: string[],
   ): Promise<CursorPaginationResult<Space>> {
-    return this.spaceMemberRepo.getUserSpaces(userId, pagination, workspaceId);
+    return this.spaceMemberRepo.getUserSpaces(
+      userId,
+      pagination,
+      workspaceId,
+      allowedSpaceIds,
+    );
   }
 }

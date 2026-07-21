@@ -14,11 +14,13 @@ import type {
   McpToolInvocation,
   McpToolInputPolicy,
 } from './mcp.types';
+import { McpToolAccessService } from './mcp-tool-access.service';
 
 @Injectable()
 export class McpToolExecutorService {
   constructor(
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    private readonly toolAccess: McpToolAccessService,
   ) {}
 
   register(
@@ -50,6 +52,12 @@ export class McpToolExecutorService {
         descriptor.name,
         args,
         descriptor.input,
+      );
+      await this.toolAccess.assertCredentialResourceAccess(
+        context,
+        invocation.workspace.id,
+        descriptor.resource,
+        args,
       );
       const result = await descriptor.handler(invocation, input, args);
       this.auditToolCall(
@@ -135,6 +143,7 @@ export class McpToolExecutorService {
         metadata: {
           toolName: descriptor.name,
           access: descriptor.access,
+          resourcePolicy: descriptor.resource.kind,
           authType: context.authType,
           credentialId: context.credentialId,
           apiKeyId: context.apiKeyId,

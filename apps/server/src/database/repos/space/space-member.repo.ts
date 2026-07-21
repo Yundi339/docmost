@@ -254,6 +254,21 @@ export class SpaceMemberRepo {
     );
   }
 
+  async invalidateUserSpaceRoles(
+    userIds: readonly string[],
+    spaceIds: readonly string[],
+  ): Promise<void> {
+    const uniqueUserIds = [...new Set(userIds)];
+    const uniqueSpaceIds = [...new Set(spaceIds)];
+    await Promise.all(
+      uniqueUserIds.flatMap((userId) =>
+        uniqueSpaceIds.map((spaceId) =>
+          this.cacheManager.del(CacheKey.SPACE_ROLES(userId, spaceId)),
+        ),
+      ),
+    );
+  }
+
   async getUserIdsWithSpaceAccess(
     userIds: string[],
     spaceId: string,
@@ -323,11 +338,7 @@ export class SpaceMemberRepo {
       .unionAll(
         this.db
           .selectFrom('spaceMembers')
-          .innerJoin(
-            'groupUsers',
-            'groupUsers.groupId',
-            'spaceMembers.groupId',
-          )
+          .innerJoin('groupUsers', 'groupUsers.groupId', 'spaceMembers.groupId')
           .select(['spaceMembers.spaceId', 'spaceMembers.role'])
           .where('groupUsers.userId', '=', userId)
           .where('spaceMembers.spaceId', 'in', spaceIds),
@@ -339,6 +350,7 @@ export class SpaceMemberRepo {
     userId: string,
     pagination: PaginationOptions,
     workspaceId?: string,
+    allowedSpaceIds?: string[],
   ) {
     let query = this.db
       .selectFrom('spaces')
@@ -348,6 +360,14 @@ export class SpaceMemberRepo {
 
     if (workspaceId) {
       query = query.where('spaces.workspaceId', '=', workspaceId);
+    }
+
+    if (allowedSpaceIds) {
+      if (allowedSpaceIds.length === 0) {
+        query = query.where(sql<boolean>`false`);
+      } else {
+        query = query.where('spaces.id', 'in', allowedSpaceIds);
+      }
     }
 
     if (pagination.query) {

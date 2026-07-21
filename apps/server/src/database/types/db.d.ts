@@ -40,9 +40,16 @@ export interface ApiKeys {
   lastUsedUserAgent: string | null;
   name: string | null;
   scopes: Generated<string[]>;
+  spaceAccessMode: Generated<string>;
   updatedAt: Generated<Timestamp>;
   creatorId: string;
   workspaceId: string;
+}
+
+export interface ApiKeySpaceGrants {
+  apiKeyId: string;
+  createdAt: Generated<Timestamp>;
+  spaceId: string;
 }
 
 export interface Attachments {
@@ -184,9 +191,16 @@ export interface OauthAuthorizations {
   resource: string;
   revokedAt: Timestamp | null;
   scopes: string[];
+  spaceAccessMode: Generated<string>;
   updatedAt: Generated<Timestamp>;
   userId: string;
   workspaceId: string;
+}
+
+export interface OauthAuthorizationSpaceGrants {
+  authorizationId: string;
+  createdAt: Generated<Timestamp>;
+  spaceId: string;
 }
 
 export interface OauthRegisteredClients {
@@ -767,6 +781,7 @@ export interface DB {
   aiChats: AiChats;
   aiChatMessages: AiChatMessages;
   apiKeys: ApiKeys;
+  apiKeySpaceGrants: ApiKeySpaceGrants;
   attachments: Attachments;
   audit: Audit;
   authAccounts: AuthAccounts;
@@ -785,6 +800,7 @@ export interface DB {
   labels: Labels;
   notifications: Notifications;
   oauthAuthorizationCodes: OauthAuthorizationCodes;
+  oauthAuthorizationSpaceGrants: OauthAuthorizationSpaceGrants;
   oauthAuthorizations: OauthAuthorizations;
   oauthClients: OauthClients;
   oauthRegisteredClients: OauthRegisteredClients;

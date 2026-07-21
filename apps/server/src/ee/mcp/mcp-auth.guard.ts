@@ -121,6 +121,8 @@ export class McpAuthGuard implements CanActivate {
         credentialId: authContext.apiKey.id,
         apiKeyId: authContext.apiKey.id,
         scopes,
+        spaceAccess: authContext.apiKey.spaceAccess,
+        principalRevision: getPrincipalRevision(authContext.user),
       });
       return true;
     }
@@ -170,6 +172,8 @@ export class McpAuthGuard implements CanActivate {
         oauthClientId: authContext.oauth.oauthClientId,
         clientId: authContext.oauth.clientId,
         scopes,
+        spaceAccess: authContext.oauth.spaceAccess,
+        principalRevision: getPrincipalRevision(authContext.user),
       });
       return true;
     }
@@ -256,4 +260,14 @@ function getAuthMetadata(req: FastifyRequest) {
 function truncateString(value: unknown, maxLength: number) {
   if (typeof value !== 'string') return undefined;
   return value.length > maxLength ? value.slice(0, maxLength) : value;
+}
+
+function getPrincipalRevision(user: {
+  updatedAt?: Date | string;
+  role?: string;
+}) {
+  const updatedAt = user.updatedAt
+    ? new Date(user.updatedAt).toISOString()
+    : 'unknown';
+  return `${updatedAt}:${user.role ?? 'member'}`;
 }

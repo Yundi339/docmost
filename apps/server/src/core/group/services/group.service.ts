@@ -214,6 +214,7 @@ export class GroupService {
         );
       }
     });
+    await this.spaceMemberRepo.invalidateUserSpaceRoles(userIds, spaceIds);
 
     this.auditService.log({
       event: AuditEvent.GROUP_DELETED,

@@ -1,4 +1,8 @@
 import { IUser } from "@/features/user/types/user.types.ts";
+import {
+  ISpaceAccess,
+  SpaceAccessInput,
+} from "@/ee/space-access/types/space-access.types";
 
 export type ApiKeyScope =
   | "rest:read"
@@ -14,6 +18,7 @@ export interface IApiKey {
   creatorId: string;
   workspaceId: string;
   scopes: ApiKeyScope[];
+  spaceAccess: ISpaceAccess;
   expiresAt: string | null;
   lastUsedAt: string | null;
   lastUsedIp?: string | null;
@@ -26,9 +31,12 @@ export interface ICreateApiKeyRequest {
   name: string;
   expiresAt: string;
   scopes?: ApiKeyScope[];
+  spaceAccess: SpaceAccessInput;
 }
 
 export interface IUpdateApiKeyRequest {
   apiKeyId: string;
   name: string;
+  scopes?: ApiKeyScope[];
+  spaceAccess?: SpaceAccessInput;
 }

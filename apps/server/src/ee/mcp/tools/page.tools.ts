@@ -44,15 +44,17 @@ export class McpPageToolProvider implements McpToolProvider {
           format: z.enum(['json', 'markdown', 'html']).optional(),
         },
         access: 'read',
+        resource: { kind: 'resource_args', pageIds: ['pageId'] },
         input: { dto: PageInfoDto },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const page = await this.access.findActiveWorkspacePage(
             input.pageId,
             workspace.id,
             { includeContent: true, includeSpace: true },
+            context,
           );
           if (!page) return pageNotFound();
-          await this.access.validateCanView(page, user);
+          await this.access.validateCanView(page, user, context);
           let content = page.content;
           if (input.format && input.format !== 'json' && content) {
             content =
@@ -86,22 +88,30 @@ export class McpPageToolProvider implements McpToolProvider {
           parentPageId: z.string().optional(),
         },
         access: 'write',
+        resource: {
+          kind: 'resource_args',
+          spaceIds: ['spaceId'],
+          pageIds: ['parentPageId'],
+        },
         input: { dto: CreatePageDto },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           if (input.parentPageId) {
             const parent = await this.access.findActiveWorkspacePage(
               input.parentPageId,
               workspace.id,
+              undefined,
+              context,
             );
             if (!parent || parent.spaceId !== input.spaceId) {
               return pageNotFound('Parent page not found');
             }
-            await this.access.validateCanEdit(parent, user);
+            await this.access.validateCanEdit(parent, user, context);
           } else {
             await this.access.assertSpacePageAccess(
               user,
               input.spaceId,
               SpaceCaslAction.Create,
+              context,
             );
           }
           const page = await this.pageService.create(user.id, workspace.id, {
@@ -130,14 +140,17 @@ export class McpPageToolProvider implements McpToolProvider {
           operation: z.enum(['append', 'prepend', 'replace']).optional(),
         },
         access: 'write',
+        resource: { kind: 'resource_args', pageIds: ['pageId'] },
         input: { dto: UpdatePageDto },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const page = await this.access.findActiveWorkspacePage(
             input.pageId,
             workspace.id,
+            undefined,
+            context,
           );
           if (!page) return pageNotFound();
-          await this.access.validateCanEdit(page, user);
+          await this.access.validateCanEdit(page, user, context);
           const updated = await this.pageService.update(
             page,
             {
@@ -157,14 +170,16 @@ export class McpPageToolProvider implements McpToolProvider {
         description: 'List root-level pages in a space',
         inputSchema: { spaceId: z.string(), limit: z.number().optional() },
         access: 'read',
+        resource: { kind: 'resource_args', spaceIds: ['spaceId'] },
         input: {
           dto: SidebarPageDto,
           mapArgs: ({ spaceId }) => ({ spaceId }),
         },
-        handler: async ({ user }, input, { limit }) => {
+        handler: async ({ user, context }, input, { limit }) => {
           const canEdit = await this.access.getSpacePageEditAccess(
             user,
             input.spaceId,
+            context,
           );
           const result = await this.pageService.getSidebarPages(
             input.spaceId,
@@ -185,17 +200,25 @@ export class McpPageToolProvider implements McpToolProvider {
           limit: z.number().optional(),
         },
         access: 'read',
+        resource: {
+          kind: 'resource_args',
+          spaceIds: ['spaceId'],
+          pageIds: ['pageId'],
+        },
         input: { dto: SidebarPageDto },
-        handler: async ({ user, workspace }, input, { limit }) => {
+        handler: async ({ user, workspace, context }, input, { limit }) => {
           const page = await this.access.findActiveWorkspacePage(
             input.pageId,
             workspace.id,
+            undefined,
+            context,
           );
           if (!page || page.spaceId !== input.spaceId) return pageNotFound();
-          await this.access.validateCanView(page, user);
+          await this.access.validateCanView(page, user, context);
           const canEdit = await this.access.getSpacePageEditAccess(
             user,
             input.spaceId,
+            context,
           );
           const result = await this.pageService.getSidebarPages(
             input.spaceId,
@@ -212,21 +235,25 @@ export class McpPageToolProvider implements McpToolProvider {
         description: 'Duplicate a page within the same space',
         inputSchema: { pageId: z.string() },
         access: 'write',
+        resource: { kind: 'resource_args', pageIds: ['pageId'] },
         input: {
           dto: DuplicatePageDto,
           mapArgs: ({ pageId }) => ({ pageId }),
         },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const page = await this.access.findActiveWorkspacePage(
             input.pageId,
             workspace.id,
+            undefined,
+            context,
           );
           if (!page) return pageNotFound();
-          await this.access.validateCanEdit(page, user);
+          await this.access.validateCanEdit(page, user, context);
           await this.access.assertSpacePageAccess(
             user,
             page.spaceId,
             SpaceCaslAction.Create,
+            context,
           );
           const copy = await this.pageService.duplicatePage(
             page,
@@ -241,18 +268,26 @@ export class McpPageToolProvider implements McpToolProvider {
         description: 'Copy a page to a different space',
         inputSchema: { pageId: z.string(), spaceId: z.string() },
         access: 'write',
+        resource: {
+          kind: 'resource_args',
+          spaceIds: ['spaceId'],
+          pageIds: ['pageId'],
+        },
         input: { dto: DuplicatePageDto },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const page = await this.access.findActiveWorkspacePage(
             input.pageId,
             workspace.id,
+            undefined,
+            context,
           );
           if (!page) return pageNotFound();
-          await this.access.validateCanEdit(page, user);
+          await this.access.validateCanEdit(page, user, context);
           await this.access.assertSpacePageAccess(
             user,
             input.spaceId,
             SpaceCaslAction.Create,
+            context,
           );
           const copy = await this.pageService.duplicatePage(
             page,
@@ -270,6 +305,10 @@ export class McpPageToolProvider implements McpToolProvider {
           parentPageId: z.string().optional(),
         },
         access: 'write',
+        resource: {
+          kind: 'resource_args',
+          pageIds: ['pageId', 'parentPageId'],
+        },
         input: {
           dto: MovePageUnderDto,
           mapArgs: ({ pageId, parentPageId }) => ({
@@ -277,27 +316,32 @@ export class McpPageToolProvider implements McpToolProvider {
             targetPageId: parentPageId,
           }),
         },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const page = await this.access.findActiveWorkspacePage(
             input.pageId,
             workspace.id,
+            undefined,
+            context,
           );
           if (!page) return pageNotFound();
           await this.access.assertSpacePageAccess(
             user,
             page.spaceId,
             SpaceCaslAction.Edit,
+            context,
           );
-          await this.access.validateCanEdit(page, user);
+          await this.access.validateCanEdit(page, user, context);
           if (input.targetPageId) {
             const parent = await this.access.findActiveWorkspacePage(
               input.targetPageId,
               workspace.id,
+              undefined,
+              context,
             );
             if (!parent || parent.spaceId !== page.spaceId) {
               return pageNotFound('Parent page not found');
             }
-            await this.access.validateCanEdit(parent, user);
+            await this.access.validateCanEdit(parent, user, context);
           }
           await this.pageService.movePageToParent(
             page,
@@ -312,23 +356,32 @@ export class McpPageToolProvider implements McpToolProvider {
         description: 'Move a page to a different space',
         inputSchema: { pageId: z.string(), spaceId: z.string() },
         access: 'write',
+        resource: {
+          kind: 'resource_args',
+          spaceIds: ['spaceId'],
+          pageIds: ['pageId'],
+        },
         input: { dto: MovePageToSpaceDto },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const page = await this.access.findActiveWorkspacePage(
             input.pageId,
             workspace.id,
+            undefined,
+            context,
           );
           if (!page) return pageNotFound();
           await this.access.assertSpacePageAccess(
             user,
             page.spaceId,
             SpaceCaslAction.Edit,
+            context,
           );
-          await this.access.validateCanEdit(page, user);
+          await this.access.validateCanEdit(page, user, context);
           await this.access.assertSpacePageAccess(
             user,
             input.spaceId,
             SpaceCaslAction.Edit,
+            context,
           );
           await this.pageService.movePageToSpace(page, input.spaceId, user.id);
           return textResult(
@@ -343,12 +396,14 @@ export class McpPageToolProvider implements McpToolProvider {
           'Move a page and its descendants to trash. Requires confirm=true and can be reversed with restore_page.',
         inputSchema: { pageId: z.string(), confirm: z.literal(true) },
         access: 'destructive',
+        resource: { kind: 'resource_args', pageIds: ['pageId'] },
         input: { dto: TrashPageToolDto },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const page = await this.pageLifecycleService.trashPage(
             input.pageId,
             user,
             workspace,
+            context.spaceAccess.effectiveSpaceIds,
           );
           return textResult({
             id: page.id,
@@ -364,12 +419,14 @@ export class McpPageToolProvider implements McpToolProvider {
           'Restore a trashed page and its descendants using existing page permissions.',
         inputSchema: { pageId: z.string() },
         access: 'write',
+        resource: { kind: 'resource_args', pageIds: ['pageId'] },
         input: { dto: PageIdDto },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const page = await this.pageLifecycleService.restorePage(
             input.pageId,
             user,
             workspace,
+            context.spaceAccess.effectiveSpaceIds,
           );
           return textResult({
             id: page.id,

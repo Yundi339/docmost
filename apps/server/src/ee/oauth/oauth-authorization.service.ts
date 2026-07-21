@@ -8,7 +8,11 @@ import {
 import { InjectKysely } from 'nestjs-kysely';
 import { FastifyRequest } from 'fastify';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
-import { User, Workspace } from '@docmost/db/types/entity.types';
+import {
+  OauthAuthorization,
+  User,
+  Workspace,
+} from '@docmost/db/types/entity.types';
 import { UserRole } from '../../common/helpers/types/permission';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import {
@@ -40,6 +44,14 @@ import {
 } from './oauth-protocol.utils';
 import { OAuthAuthorizeQuery } from './oauth.types';
 import { OAuthProviderRegistry } from './providers/oauth-provider.registry';
+import { CredentialSpaceAccessService } from '../../core/credential-space-access/credential-space-access.service';
+import {
+  CredentialSpaceAccessInput,
+  CredentialSpaceAccessView,
+} from '../../core/credential-space-access/credential-space-access.types';
+import { KyselyTransaction } from '@docmost/db/types/kysely.types';
+import { dbOrTx } from '@docmost/db/utils';
+import { CredentialRevocationService } from '../../core/credential-space-access/credential-revocation.service';
 
 @Injectable()
 export class OAuthAuthorizationService {
@@ -48,6 +60,8 @@ export class OAuthAuthorizationService {
     private readonly clientService: OAuthClientService,
     private readonly metadataService: OAuthMetadataService,
     private readonly providerRegistry: OAuthProviderRegistry,
+    private readonly credentialSpaceAccess: CredentialSpaceAccessService,
+    private readonly credentialRevocation: CredentialRevocationService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -70,11 +84,13 @@ export class OAuthAuthorizationService {
         'oa.redirectUri',
         'oa.resource',
         'oa.scopes',
+        'oa.spaceAccessMode',
         'oa.lastUsedAt',
         'oa.revokedAt',
         'oa.createdAt',
         'oa.updatedAt',
         'oa.userId',
+        'oa.workspaceId',
         'u.name as userName',
         'u.email as userEmail',
         'u.avatarUrl as userAvatarUrl',
@@ -84,7 +100,79 @@ export class OAuthAuthorizationService {
       .orderBy('oa.createdAt', 'desc');
 
     if (!opts?.adminView) query = query.where('oa.userId', '=', user.id);
-    return query.execute();
+    const authorizations = await query.execute();
+    return this.credentialSpaceAccess.addOAuthViews(authorizations);
+  }
+
+  async updateAuthorizationAccess(
+    authorizationId: string,
+    spaceAccess: CredentialSpaceAccessInput,
+    workspace: Workspace,
+    user: User,
+    req?: FastifyRequest,
+  ) {
+    const authorization = await this.db
+      .selectFrom('oauthAuthorizations')
+      .selectAll()
+      .where('id', '=', authorizationId)
+      .where('workspaceId', '=', workspace.id)
+      .where('revokedAt', 'is', null)
+      .executeTakeFirst();
+    if (!authorization) {
+      throw new NotFoundException('OAuth authorization not found');
+    }
+    if (authorization.userId !== user.id) {
+      throw new ForbiddenException(
+        'Only the authorization owner can change its space access',
+      );
+    }
+
+    const selection = await this.credentialSpaceAccess.normalizeSelection(
+      spaceAccess,
+      user.id,
+      workspace.id,
+    );
+    await this.db
+      .transaction()
+      .execute((trx) =>
+        this.credentialSpaceAccess.replaceOAuthAuthorizationAccess(
+          authorization.id,
+          selection,
+          trx,
+        ),
+      );
+
+    this.auditService.logWithContext(
+      {
+        event: AuditEvent.MCP_OAUTH_AUTHORIZED,
+        resourceType: AuditResource.MCP_OAUTH_AUTHORIZATION,
+        resourceId: authorization.id,
+        metadata: {
+          action: 'space_access_updated',
+          provider: authorization.provider,
+          clientId: truncate(authorization.clientId, 255),
+          clientName: authorization.clientName,
+          authorizationUserId: authorization.userId,
+          spaceAccessMode: selection.mode,
+          selectedSpaceCount: selection.spaceIds.length,
+          userAgent: getRequestUserAgent(req),
+        },
+      },
+      {
+        workspaceId: workspace.id,
+        actorId: user.id,
+        actorType: 'user',
+        ipAddress: req?.ip,
+      },
+    );
+
+    const updated = await this.db
+      .selectFrom('oauthAuthorizations')
+      .selectAll()
+      .where('id', '=', authorization.id)
+      .executeTakeFirstOrThrow();
+    const [view] = await this.credentialSpaceAccess.addOAuthViews([updated]);
+    return view;
   }
 
   async revokeAuthorization(
@@ -156,6 +244,20 @@ export class OAuthAuthorizationService {
     req?: FastifyRequest,
   ) {
     const resolved = await this.resolveAuthorizeRequest(query, workspace, req);
+    const availableSpaces =
+      await this.credentialSpaceAccess.listSelectableSpaces(
+        user.id,
+        workspace.id,
+      );
+    const existing = await this.findActiveAuthorization(
+      resolved,
+      user.id,
+      workspace.id,
+    );
+    const spaceAccess = existing
+      ? (await this.credentialSpaceAccess.addOAuthViews([existing]))[0]
+          .spaceAccess
+      : defaultSpaceAccessView(availableSpaces.length);
     return {
       provider: resolved.oauthClient.provider,
       clientName: resolved.clientName,
@@ -165,6 +267,8 @@ export class OAuthAuthorizationService {
       resource: resolved.resource,
       scopes: resolved.scopes,
       user: { id: user.id, name: user.name, email: user.email },
+      availableSpaces,
+      spaceAccess,
     };
   }
 
@@ -175,8 +279,14 @@ export class OAuthAuthorizationService {
     req?: FastifyRequest,
   ) {
     const resolved = await this.resolveAuthorizeRequest(query, workspace, req);
-    const authorization = await this.upsertAuthorization(
+    const existing = await this.findActiveAuthorization(
       resolved,
+      user.id,
+      workspace.id,
+    );
+    const selection = await this.resolveApprovalSelection(
+      query.spaceAccess,
+      existing,
       user,
       workspace,
     );
@@ -186,23 +296,46 @@ export class OAuthAuthorizationService {
       now.getTime() + OAUTH_AUTHORIZATION_CODE_TTL_SECONDS * 1000,
     );
 
-    await this.db
-      .insertInto('oauthAuthorizationCodes')
-      .values({
-        codeHash: hashToken(code),
-        workspaceId: workspace.id,
-        userId: user.id,
-        oauthClientId: resolved.oauthClient.id,
-        authorizationId: authorization.id,
-        clientId: resolved.clientId,
-        redirectUri: resolved.redirectUri,
-        resource: resolved.resource,
-        scopes: resolved.scopes,
-        codeChallenge: resolved.codeChallenge,
-        codeChallengeMethod: resolved.codeChallengeMethod,
-        expiresAt,
-      })
-      .execute();
+    const authorization = await this.db.transaction().execute(async (trx) => {
+      const activeUser =
+        await this.credentialRevocation.lockActiveUserForIssuance(
+          user.id,
+          workspace.id,
+          trx,
+        );
+      if (!activeUser) {
+        throw new ForbiddenException('User is no longer active');
+      }
+      const row = await this.upsertAuthorization(
+        resolved,
+        user,
+        workspace,
+        trx,
+      );
+      await this.credentialSpaceAccess.replaceOAuthAuthorizationAccess(
+        row.id,
+        selection,
+        trx,
+      );
+      await trx
+        .insertInto('oauthAuthorizationCodes')
+        .values({
+          codeHash: hashToken(code),
+          workspaceId: workspace.id,
+          userId: user.id,
+          oauthClientId: resolved.oauthClient.id,
+          authorizationId: row.id,
+          clientId: resolved.clientId,
+          redirectUri: resolved.redirectUri,
+          resource: resolved.resource,
+          scopes: resolved.scopes,
+          codeChallenge: resolved.codeChallenge,
+          codeChallengeMethod: resolved.codeChallengeMethod,
+          expiresAt,
+        })
+        .execute();
+      return row;
+    });
 
     this.auditService.logWithContext(
       {
@@ -216,6 +349,8 @@ export class OAuthAuthorizationService {
           redirectHost: getUrlHost(resolved.redirectUri),
           scopes: resolved.scopes,
           authorizationUserId: user.id,
+          spaceAccessMode: selection.mode,
+          selectedSpaceCount: selection.spaceIds.length,
           userAgent: getRequestUserAgent(req),
         },
       },
@@ -346,13 +481,14 @@ export class OAuthAuthorizationService {
     resolved: ResolvedAuthorizeRequest,
     user: User,
     workspace: Workspace,
+    trx?: KyselyTransaction,
   ) {
     const authorizationKey = buildAuthorizationKey(
       resolved.clientId,
       resolved.resource,
     );
 
-    return this.db
+    return dbOrTx(this.db, trx)
       .insertInto('oauthAuthorizations')
       .values({
         authorizationKey,
@@ -385,7 +521,73 @@ export class OAuthAuthorizationService {
       .executeTakeFirstOrThrow();
   }
 
+  private findActiveAuthorization(
+    resolved: ResolvedAuthorizeRequest,
+    userId: string,
+    workspaceId: string,
+  ) {
+    return this.db
+      .selectFrom('oauthAuthorizations')
+      .selectAll()
+      .where('workspaceId', '=', workspaceId)
+      .where('userId', '=', userId)
+      .where(
+        'authorizationKey',
+        '=',
+        buildAuthorizationKey(resolved.clientId, resolved.resource),
+      )
+      .where('revokedAt', 'is', null)
+      .executeTakeFirst();
+  }
+
+  private async resolveApprovalSelection(
+    input: CredentialSpaceAccessInput | undefined,
+    existing: OauthAuthorization | undefined,
+    user: User,
+    workspace: Workspace,
+  ) {
+    if (input) {
+      return this.credentialSpaceAccess.normalizeSelection(
+        input,
+        user.id,
+        workspace.id,
+      );
+    }
+
+    if (existing) {
+      const [view] = await this.credentialSpaceAccess.addOAuthViews([existing]);
+      return this.credentialSpaceAccess.normalizeSelection(
+        view.spaceAccess.mode === 'selected'
+          ? {
+              mode: 'selected',
+              spaceIds: view.spaceAccess.spaces.map((space) => space.id),
+            }
+          : { mode: 'all' },
+        user.id,
+        workspace.id,
+      );
+    }
+
+    return this.credentialSpaceAccess.normalizeSelection(
+      { mode: 'all' },
+      user.id,
+      workspace.id,
+    );
+  }
+
   private assertOwner(user: User) {
     if (user.role !== UserRole.OWNER) throw new ForbiddenException();
   }
+}
+
+function defaultSpaceAccessView(
+  effectiveCount: number,
+): CredentialSpaceAccessView {
+  return {
+    mode: 'all',
+    spaces: [],
+    selectedCount: 0,
+    effectiveCount,
+    status: effectiveCount > 0 ? 'active' : 'no_effective_spaces',
+  };
 }

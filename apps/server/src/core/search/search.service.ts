@@ -37,6 +37,7 @@ export class SearchService {
     opts: {
       userId?: string;
       workspaceId: string;
+      allowedSpaceIds?: string[];
     },
   ): Promise<{ items: SearchResponseDto[] }> {
     const trimmedQuery = searchParams.query?.trim();
@@ -67,20 +68,22 @@ export class SearchService {
         return { items: [] };
       }
 
-      const isRestricted =
-        await this.pagePermissionRepo.hasRestrictedAncestor(share.pageId);
+      const isRestricted = await this.pagePermissionRepo.hasRestrictedAncestor(
+        share.pageId,
+      );
       if (isRestricted) {
         return { items: [] };
       }
 
       sharedPageIdsToSearch = [];
       if (share.includeSubPages) {
-        const pageList = await this.pageRepo.getPageAndDescendantsExcludingRestricted(
-          share.pageId,
-          {
-            includeContent: false,
-          },
-        );
+        const pageList =
+          await this.pageRepo.getPageAndDescendantsExcludingRestricted(
+            share.pageId,
+            {
+              includeContent: false,
+            },
+          );
 
         sharedPageIdsToSearch.push(...pageList.map((page) => page.id));
       } else {
@@ -137,6 +140,13 @@ export class SearchService {
 
       if (!searchParams.shareId) {
         queryResults = queryResults.select((eb) => this.pageRepo.withSpace(eb));
+      }
+
+      if (opts.allowedSpaceIds) {
+        queryResults =
+          opts.allowedSpaceIds.length === 0
+            ? queryResults.where(sql<boolean>`false`)
+            : queryResults.where('spaceId', 'in', opts.allowedSpaceIds);
       }
 
       if (searchParams.spaceId) {
@@ -341,11 +351,7 @@ export class SearchService {
           .unionAll((exp) =>
             exp
               .selectFrom('pages as p')
-              .innerJoin(
-                'page_ancestors as pa',
-                'pa.parentPageId',
-                'p.id',
-              )
+              .innerJoin('page_ancestors as pa', 'pa.parentPageId', 'p.id')
               .select([
                 'pa.startId as startId',
                 'p.id as id',

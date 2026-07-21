@@ -35,6 +35,7 @@ import {
   OAUTH_TOKEN_THROTTLER,
   SHARE_UNLOCK_THROTTLER,
 } from '../../integrations/throttle/throttler-names';
+import { UpdateOAuthAuthorizationDto } from './dto/update-oauth-authorization.dto';
 
 @Controller('.well-known')
 export class OAuthMetadataController {
@@ -234,6 +235,29 @@ export class OAuthController {
   ) {
     await this.oauthService.revokeAuthorization(
       input.authorizationId,
+      workspace,
+      user,
+      req,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('authorizations/update')
+  async updateAuthorizationAccess(
+    @Body() input: UpdateOAuthAuthorizationDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.oauthService.updateAuthorizationAccess(
+      input.authorizationId,
+      input.spaceAccess.mode === 'selected'
+        ? {
+            mode: 'selected',
+            spaceIds: input.spaceAccess.spaceIds ?? [],
+          }
+        : { mode: 'all' },
       workspace,
       user,
       req,

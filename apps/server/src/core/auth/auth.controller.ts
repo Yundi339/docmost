@@ -29,6 +29,7 @@ import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { SessionAuthGuard } from '../../common/guards/session-auth.guard';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { PasswordResetDto } from './dto/password-reset.dto';
 import { VerifyUserTokenDto } from './dto/verify-user-token.dto';
@@ -168,7 +169,7 @@ export class AuthController {
   }
 
   @SkipThrottle({ [AUTH_THROTTLER]: true, [FORGOT_PASSWORD_THROTTLER]: true })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, SessionAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('collab-token')
   async collabToken(

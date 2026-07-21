@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ActionIcon,
   Alert,
@@ -25,6 +25,7 @@ import {
 import { IOAuthAuthorization } from "@/ee/oauth";
 import { OAuthAuthorizationTable } from "@/ee/oauth/components/oauth-authorization-table";
 import { getOAuthProviderDescriptor } from "@/ee/oauth/oauth-provider-registry";
+import { UpdateOAuthAuthorizationModal } from "@/ee/oauth/components/update-oauth-authorization-modal";
 
 export default function UserOAuthSettings() {
   const { t } = useTranslation();
@@ -32,6 +33,8 @@ export default function UserOAuthSettings() {
   const { data: authorizations = [] } = useOAuthAuthorizationsQuery();
   const revokeMutation = useRevokeOAuthAuthorizationMutation();
   const metadataClient = clients[0];
+  const [authorizationToUpdate, setAuthorizationToUpdate] =
+    useState<IOAuthAuthorization | null>(null);
 
   const revokeAuthorization = (authorization: IOAuthAuthorization) => {
     modals.openConfirmModal({
@@ -117,7 +120,14 @@ export default function UserOAuthSettings() {
 
       <OAuthAuthorizationTable
         authorizations={authorizations}
+        onUpdate={setAuthorizationToUpdate}
         onRevoke={revokeAuthorization}
+      />
+
+      <UpdateOAuthAuthorizationModal
+        opened={Boolean(authorizationToUpdate)}
+        authorization={authorizationToUpdate}
+        onClose={() => setAuthorizationToUpdate(null)}
       />
     </>
   );

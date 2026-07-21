@@ -73,7 +73,12 @@ describe('McpService access control', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     auditService = { logWithContext: jest.fn() };
-    executor = new McpToolExecutorService(auditService as any);
+    executor = new McpToolExecutorService(
+      auditService as any,
+      {
+        assertCredentialResourceAccess: jest.fn(),
+      } as any,
+    );
     service = new McpService(
       { registerTools: jest.fn() } as any,
       auditService as any,
@@ -89,6 +94,13 @@ describe('McpService access control', () => {
     apiKeyId: 'api-key-id',
     mode,
     scopes,
+    spaceAccess: {
+      mode: 'all',
+      selectedSpaceIds: [],
+      effectiveSpaceIds: [spaceId, targetSpaceId],
+      revision: 'space-revision-1',
+    },
+    principalRevision: 'principal-revision-1',
     ipAddress: '203.0.113.10',
     userAgent: 'test-agent',
   });
@@ -136,9 +148,12 @@ describe('McpService access control', () => {
       pageRepo as any,
       spaceAbility as any,
       pageAccessService as any,
+      {} as any,
     );
     const registry = new McpToolRegistryService(
-      new McpToolExecutorService(overrides.auditService ?? auditService),
+      new McpToolExecutorService(overrides.auditService ?? auditService, {
+        assertCredentialResourceAccess: jest.fn(),
+      } as any),
       new McpPageToolProvider(
         pageService as any,
         overrides.pageLifecycleService ?? ({} as any),
@@ -202,6 +217,7 @@ describe('McpService access control', () => {
         description: name,
         inputSchema: {},
         access,
+        resource: { kind: 'identity' },
         input: { noDto: true },
         handler,
       },
@@ -401,6 +417,7 @@ describe('McpService access control', () => {
       'user-id',
       expect.objectContaining({ limit: 100 }),
       'workspace-id',
+      [spaceId, targetSpaceId],
     );
   });
 
@@ -480,11 +497,13 @@ describe('McpService access control', () => {
       pageId,
       expect.objectContaining({ id: 'user-id' }),
       expect.objectContaining({ id: 'workspace-id' }),
+      [spaceId, targetSpaceId],
     );
     expect(pageLifecycleService.restorePage).toHaveBeenCalledWith(
       pageId,
       expect.objectContaining({ id: 'user-id' }),
       expect.objectContaining({ id: 'workspace-id' }),
+      [spaceId, targetSpaceId],
     );
   });
 
@@ -521,6 +540,7 @@ describe('McpService access control', () => {
     };
     const access = new McpToolAccessService(
       pageRepo as any,
+      {} as any,
       {} as any,
       {} as any,
     );
@@ -630,6 +650,8 @@ describe('McpService access control', () => {
         apiKeyId: 'other-api-key-id',
         mode: 'read-write',
         scopes: [ApiKeyScope.MCP_WRITE],
+        spaceAccess: context('read-write', [ApiKeyScope.MCP_WRITE]).spaceAccess,
+        principalRevision: 'principal-revision-1',
       },
     );
 
@@ -655,6 +677,8 @@ describe('McpService access control', () => {
       credentialId: 'api-key-id',
       mode: 'read-write',
       scopes: [ApiKeyScope.MCP_WRITE],
+      permissionRevision: 'principal-revision-1:space-revision-1',
+      context: context('read-write', [ApiKeyScope.MCP_WRITE]),
       transport: { close, handleRequest },
     });
 
@@ -678,6 +702,88 @@ describe('McpService access control', () => {
         error: 'MCP session permissions changed. Reconnect required.',
       }),
     );
+  });
+
+  it('closes an existing session when its effective spaces change', async () => {
+    const end = jest.fn();
+    const close = jest.fn().mockResolvedValue(undefined);
+    const handleRequest = jest.fn();
+    const res = {
+      writeHead: jest.fn().mockReturnValue({ end }),
+    };
+    const originalContext = context('read-write', [ApiKeyScope.MCP_WRITE]);
+    (service as any).sessions.set('session-id', {
+      userId: 'user-id',
+      workspaceId: 'workspace-id',
+      authType: 'api_key',
+      credentialId: 'api-key-id',
+      mode: originalContext.mode,
+      scopes: originalContext.scopes,
+      permissionRevision: 'principal-revision-1:space-revision-1',
+      context: originalContext,
+      transport: { close, handleRequest },
+    });
+    const narrowedContext = {
+      ...originalContext,
+      spaceAccess: {
+        ...originalContext.spaceAccess,
+        effectiveSpaceIds: [spaceId],
+        revision: 'space-revision-2',
+      },
+    };
+
+    await service.handleRequest(
+      { headers: { 'mcp-session-id': 'session-id' } } as any,
+      res as any,
+      {},
+      { id: 'user-id' } as any,
+      { id: 'workspace-id' } as any,
+      narrowedContext,
+    );
+
+    expect(close).toHaveBeenCalled();
+    expect(handleRequest).not.toHaveBeenCalled();
+    expect((service as any).sessions.has('session-id')).toBe(false);
+  });
+
+  it('closes sessions that include a deleted space', async () => {
+    const affectedClose = jest.fn().mockResolvedValue(undefined);
+    const unaffectedClose = jest.fn().mockResolvedValue(undefined);
+    const affectedContext = context('read-write', [ApiKeyScope.MCP_WRITE]);
+    const unaffectedContext = {
+      ...affectedContext,
+      credentialId: 'other-api-key-id',
+      apiKeyId: 'other-api-key-id',
+      spaceAccess: {
+        ...affectedContext.spaceAccess,
+        effectiveSpaceIds: [targetSpaceId],
+      },
+    };
+    (service as any).sessions.set('affected-session', {
+      sessionId: 'affected-session',
+      userId: 'user-id',
+      workspaceId: 'workspace-id',
+      authType: 'api_key',
+      credentialId: 'api-key-id',
+      context: affectedContext,
+      transport: { close: affectedClose },
+    });
+    (service as any).sessions.set('unaffected-session', {
+      sessionId: 'unaffected-session',
+      userId: 'user-id',
+      workspaceId: 'workspace-id',
+      authType: 'api_key',
+      credentialId: 'other-api-key-id',
+      context: unaffectedContext,
+      transport: { close: unaffectedClose },
+    });
+
+    await service.handleSpaceDeleted({ spaceId });
+
+    expect(affectedClose).toHaveBeenCalled();
+    expect(unaffectedClose).not.toHaveBeenCalled();
+    expect((service as any).sessions.has('affected-session')).toBe(false);
+    expect((service as any).sessions.has('unaffected-session')).toBe(true);
   });
 
   it('expires idle sessions and audits the expiry', async () => {

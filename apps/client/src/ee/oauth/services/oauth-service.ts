@@ -1,10 +1,12 @@
 import api from "@/lib/api-client";
 import {
   IOAuthAuthorization,
+  IOAuthApprovalRequest,
   IOAuthAuthorizeInfo,
   IOAuthClient,
   IOAuthRedirectResponse,
   OAuthScope,
+  IUpdateOAuthAuthorizationRequest,
 } from "@/ee/oauth/types/oauth.types";
 
 export async function getOAuthClients(): Promise<IOAuthClient[]> {
@@ -40,6 +42,16 @@ export async function revokeOAuthAuthorization(data: {
   await api.post("/oauth/authorizations/revoke", data);
 }
 
+export async function updateOAuthAuthorization(
+  data: IUpdateOAuthAuthorizationRequest,
+): Promise<IOAuthAuthorization> {
+  const req = await api.post<IOAuthAuthorization>(
+    "/oauth/authorizations/update",
+    data,
+  );
+  return req.data;
+}
+
 export async function getOAuthAuthorizeInfo(
   query: Record<string, string>,
 ): Promise<IOAuthAuthorizeInfo> {
@@ -48,7 +60,7 @@ export async function getOAuthAuthorizeInfo(
 }
 
 export async function approveOAuthAuthorization(
-  query: Record<string, string>,
+  query: IOAuthApprovalRequest,
 ): Promise<IOAuthRedirectResponse> {
   const req = await api.post("/oauth/authorize/approve", query);
   return req.data;

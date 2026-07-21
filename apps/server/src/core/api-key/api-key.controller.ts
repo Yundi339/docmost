@@ -25,6 +25,15 @@ export class ApiKeyController {
   constructor(private readonly apiKeyService: ApiKeyService) {}
 
   @HttpCode(HttpStatus.OK)
+  @Post('spaces')
+  async listSelectableSpaces(
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.apiKeyService.listSelectableSpaces(user, workspace);
+  }
+
+  @HttpCode(HttpStatus.OK)
   @Post('/')
   async findApiKeys(
     @Body() pagination: PaginationOptions,

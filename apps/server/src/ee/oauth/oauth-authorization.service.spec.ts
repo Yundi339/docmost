@@ -44,6 +44,9 @@ describe('OAuthAuthorizationService', () => {
   function createService(
     db: any,
     auditService = { logWithContext: jest.fn() },
+    credentialRevocation = {
+      lockActiveUserForIssuance: jest.fn().mockResolvedValue(user),
+    },
   ) {
     const provider = new ChatGptOAuthClientProvider();
     const clientService = {
@@ -64,10 +67,31 @@ describe('OAuthAuthorizationService', () => {
             .mockReturnValue('https://docs.example.test/mcp'),
         } as any,
         new OAuthProviderRegistry([provider]),
+        {
+          normalizeSelection: jest
+            .fn()
+            .mockResolvedValue({ mode: 'all', spaceIds: [] }),
+          replaceOAuthAuthorizationAccess: jest.fn(),
+          addOAuthViews: jest.fn(async (records) =>
+            records.map((record) => ({
+              ...record,
+              spaceAccess: {
+                mode: 'all',
+                spaces: [],
+                selectedCount: 0,
+                effectiveCount: 1,
+                status: 'active',
+              },
+            })),
+          ),
+          listSelectableSpaces: jest.fn().mockResolvedValue([]),
+        } as any,
+        credentialRevocation as any,
         auditService as any,
       ),
       clientService,
       auditService,
+      credentialRevocation,
     };
   }
 
@@ -78,13 +102,19 @@ describe('OAuthAuthorizationService', () => {
     };
     const authorizationInsert = createInsertQuery(authorization);
     const codeInsert = createInsertQuery(undefined);
-    const db = {
+    const trx = {
       insertInto: jest
         .fn()
         .mockReturnValueOnce(authorizationInsert.query)
         .mockReturnValueOnce(codeInsert.query),
     };
-    const { service, auditService } = createService(db);
+    const db = {
+      selectFrom: jest.fn().mockReturnValue(createSelectQuery(undefined)),
+      transaction: jest.fn().mockReturnValue({
+        execute: (callback: (transaction: any) => unknown) => callback(trx),
+      }),
+    };
+    const { service, auditService, credentialRevocation } = createService(db);
 
     const result = await service.approveAuthorization(
       {
@@ -121,6 +151,11 @@ describe('OAuthAuthorizationService', () => {
       'revokedAt',
       'is',
       null,
+    );
+    expect(credentialRevocation.lockActiveUserForIssuance).toHaveBeenCalledWith(
+      user.id,
+      workspace.id,
+      trx,
     );
 
     const codeValues = codeInsert.query.values.mock.calls[0][0];

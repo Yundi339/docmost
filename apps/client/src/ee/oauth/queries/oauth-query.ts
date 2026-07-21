@@ -6,13 +6,16 @@ import {
   getOAuthAuthorizeInfo,
   getOAuthClients,
   IOAuthAuthorization,
+  IOAuthApprovalRequest,
   IOAuthAuthorizeInfo,
   IOAuthClient,
   IOAuthRedirectResponse,
   revokeOAuthAuthorization,
+  updateOAuthAuthorization,
   updateOAuthClient,
 } from "@/ee/oauth";
 import { OAuthScope } from "@/ee/oauth/types/oauth.types";
+import { IUpdateOAuthAuthorizationRequest } from "@/ee/oauth/types/oauth.types";
 import { notifications } from "@mantine/notifications";
 import {
   useMutation,
@@ -112,8 +115,31 @@ export function useRevokeOAuthAuthorizationMutation() {
   });
 }
 
+export function useUpdateOAuthAuthorizationMutation() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation<
+    IOAuthAuthorization,
+    Error,
+    IUpdateOAuthAuthorizationRequest
+  >({
+    mutationFn: updateOAuthAuthorization,
+    onSuccess: () => {
+      notifications.show({ message: t("Updated successfully") });
+      queryClient.invalidateQueries({
+        predicate: (item) => item.queryKey[0] === "oauth-authorizations",
+      });
+    },
+    onError: (error) => {
+      const errorMessage = error["response"]?.data?.message;
+      notifications.show({ message: errorMessage, color: "red" });
+    },
+  });
+}
+
 export function useApproveOAuthAuthorizationMutation() {
-  return useMutation<IOAuthRedirectResponse, Error, Record<string, string>>({
+  return useMutation<IOAuthRedirectResponse, Error, IOAuthApprovalRequest>({
     mutationFn: approveOAuthAuthorization,
   });
 }

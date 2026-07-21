@@ -50,6 +50,7 @@ import {
   IAuditService,
 } from '../../../integrations/audit/audit.service';
 import { SsoEnforcementService } from '../../auth/services/sso-enforcement.service';
+import { CredentialRevocationService } from '../../credential-space-access/credential-revocation.service';
 
 @Injectable()
 export class WorkspaceService {
@@ -75,6 +76,7 @@ export class WorkspaceService {
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
     private userSessionRepo: UserSessionRepo,
     private readonly ssoEnforcement: SsoEnforcementService,
+    private readonly credentialRevocation: CredentialRevocationService,
   ) {}
 
   async findById(workspaceId: string) {
@@ -805,6 +807,7 @@ export class WorkspaceService {
         trx,
       );
       await this.userSessionRepo.revokeByUserId(userId, workspaceId, trx);
+      await this.credentialRevocation.revokeForUser(userId, workspaceId, trx);
     });
 
     this.auditService.log({
@@ -925,6 +928,7 @@ export class WorkspaceService {
       });
 
       await this.userSessionRepo.revokeByUserId(userId, workspaceId, trx);
+      await this.credentialRevocation.revokeForUser(userId, workspaceId, trx);
     });
 
     this.auditService.log({

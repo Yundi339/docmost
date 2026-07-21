@@ -31,6 +31,8 @@ import {
   OAuthTokenRequest,
   OAuthTokenResponse,
 } from './oauth.types';
+import { CredentialSpaceAccessService } from '../../core/credential-space-access/credential-space-access.service';
+import { CredentialRevocationService } from '../../core/credential-space-access/credential-revocation.service';
 
 @Injectable()
 export class OAuthTokenService {
@@ -40,6 +42,8 @@ export class OAuthTokenService {
     private readonly userRepo: UserRepo,
     private readonly workspaceRepo: WorkspaceRepo,
     private readonly metadataService: OAuthMetadataService,
+    private readonly credentialSpaceAccess: CredentialSpaceAccessService,
+    private readonly credentialRevocation: CredentialRevocationService,
   ) {}
 
   async exchangeToken(
@@ -93,9 +97,11 @@ export class OAuthTokenService {
         'oa.oauthClientId',
         'oa.resource',
         'oa.scopes',
+        'oa.spaceAccessMode',
         'oa.revokedAt',
         'oc.isEnabled as oauthClientEnabled',
         'oc.deletedAt as oauthClientDeletedAt',
+        'oc.allowedScopes as oauthClientAllowedScopes',
       ])
       .where('oa.id', '=', payload.authorizationId)
       .where('oa.workspaceId', '=', payload.workspaceId)
@@ -125,6 +131,16 @@ export class OAuthTokenService {
     if (!isSubset(scopes, authorization.scopes)) {
       throw new ForbiddenException('OAuth token scopes are no longer valid');
     }
+    if (!isSubset(scopes, authorization.oauthClientAllowedScopes ?? [])) {
+      throw new ForbiddenException('OAuth client scopes are no longer valid');
+    }
+    const spaceAccess =
+      await this.credentialSpaceAccess.resolveOAuthAuthorizationAccess({
+        id: authorization.id,
+        userId: authorization.userId,
+        workspaceId: authorization.workspaceId,
+        spaceAccessMode: authorization.spaceAccessMode,
+      });
 
     const lastUsedBefore = new Date(Date.now() - 5 * 60 * 1000);
     this.db
@@ -148,6 +164,7 @@ export class OAuthTokenService {
         oauthClientId: authorization.oauthClientId ?? undefined,
         clientId: authorization.clientId,
         scopes,
+        spaceAccess,
       },
     };
   }
@@ -208,6 +225,18 @@ export class OAuthTokenService {
     }
     const scopes = normalizeScopes(codeRow.scopes, DEFAULT_OAUTH_SCOPES);
     assertMcpScopesAllowed(workspace, scopes);
+    if (!isSubset(scopes, authorization.scopes)) {
+      throw new OAuthRequestError(
+        'invalid_grant',
+        'OAuth authorization scopes are no longer valid.',
+      );
+    }
+    await this.assertAuthorizationSpaceAccess({
+      id: authorization.id,
+      userId: authorization.userId,
+      workspaceId: workspace.id,
+      spaceAccessMode: authorization.spaceAccessMode,
+    });
 
     const refreshToken = generateOpaqueToken();
     const refreshTokenExpiresAt = new Date(
@@ -215,6 +244,15 @@ export class OAuthTokenService {
     );
 
     await this.db.transaction().execute(async (trx) => {
+      const activeUser =
+        await this.credentialRevocation.lockActiveUserForIssuance(
+          user.id,
+          workspace.id,
+          trx,
+        );
+      if (!activeUser) {
+        throw new OAuthRequestError('invalid_grant', 'User not found.');
+      }
       const consumedCode = await trx
         .updateTable('oauthAuthorizationCodes')
         .set({ consumedAt: now })
@@ -321,12 +359,33 @@ export class OAuthTokenService {
     if (!user || isUserDisabled(user)) {
       throw new OAuthRequestError('invalid_grant', 'User not found.');
     }
+    if (!isSubset(requestedScopes, authorization.scopes)) {
+      throw new OAuthRequestError(
+        'invalid_scope',
+        'Requested scope is no longer authorized.',
+      );
+    }
+    await this.assertAuthorizationSpaceAccess({
+      id: authorization.id,
+      userId: authorization.userId,
+      workspaceId: workspace.id,
+      spaceAccessMode: authorization.spaceAccessMode,
+    });
 
     const replacement = generateOpaqueToken();
     const replacementExpiresAt = new Date(
       now.getTime() + OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000,
     );
     await this.db.transaction().execute(async (trx) => {
+      const activeUser =
+        await this.credentialRevocation.lockActiveUserForIssuance(
+          user.id,
+          workspace.id,
+          trx,
+        );
+      if (!activeUser) {
+        throw new OAuthRequestError('invalid_grant', 'User not found.');
+      }
       const revokedToken = await trx
         .updateTable('oauthRefreshTokens')
         .set({ revokedAt: now, lastUsedAt: now })
@@ -419,9 +478,12 @@ export class OAuthTokenService {
         'oa.userId',
         'oa.clientId',
         'oa.resource',
+        'oa.scopes',
+        'oa.spaceAccessMode',
         'oa.revokedAt',
         'oc.isEnabled as oauthClientEnabled',
         'oc.deletedAt as oauthClientDeletedAt',
+        'oc.allowedScopes as oauthClientAllowedScopes',
       ])
       .where('oa.id', '=', authorizationId)
       .where('oa.workspaceId', '=', workspaceId)
@@ -441,6 +503,28 @@ export class OAuthTokenService {
         'OAuth authorization is invalid.',
       );
     }
+    if (!isSubset(row.scopes, row.oauthClientAllowedScopes ?? [])) {
+      throw new OAuthRequestError(
+        'invalid_grant',
+        'OAuth client scopes are no longer valid.',
+      );
+    }
     return row;
+  }
+
+  private async assertAuthorizationSpaceAccess(input: {
+    id: string;
+    userId: string;
+    workspaceId: string;
+    spaceAccessMode: string;
+  }) {
+    try {
+      await this.credentialSpaceAccess.resolveOAuthAuthorizationAccess(input);
+    } catch {
+      throw new OAuthRequestError(
+        'invalid_grant',
+        'OAuth authorization has no accessible spaces.',
+      );
+    }
   }
 }

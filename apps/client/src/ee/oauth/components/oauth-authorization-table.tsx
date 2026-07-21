@@ -1,21 +1,24 @@
 import { ActionIcon, Badge, Group, Table, Text, Tooltip } from "@mantine/core";
-import { IconTrash } from "@tabler/icons-react";
+import { IconEdit, IconTrash } from "@tabler/icons-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import NoTableResults from "@/components/common/no-table-results";
 import { CustomAvatar } from "@/components/ui/custom-avatar";
 import { formatLocalized, useDateFnsLocale } from "@/lib/date-locale";
 import { IOAuthAuthorization, OAuthScope } from "@/ee/oauth";
+import { SpaceAccessSummary } from "@/ee/space-access";
 
 type OAuthAuthorizationTableProps = {
   authorizations: IOAuthAuthorization[];
   showUserColumn?: boolean;
+  onUpdate?: (authorization: IOAuthAuthorization) => void;
   onRevoke?: (authorization: IOAuthAuthorization) => void;
 };
 
 export function OAuthAuthorizationTable({
   authorizations,
   showUserColumn = false,
+  onUpdate,
   onRevoke,
 }: OAuthAuthorizationTableProps) {
   const { t } = useTranslation();
@@ -27,13 +30,14 @@ export function OAuthAuthorizationTable({
   };
 
   return (
-    <Table.ScrollContainer minWidth={700}>
+    <Table.ScrollContainer minWidth={850}>
       <Table highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           <Table.Tr>
             <Table.Th>{t("Application")}</Table.Th>
             {showUserColumn && <Table.Th>{t("User")}</Table.Th>}
             <Table.Th>{t("Scopes")}</Table.Th>
+            <Table.Th>{t("Space access")}</Table.Th>
             <Table.Th>{t("Last used")}</Table.Th>
             <Table.Th>{t("Created")}</Table.Th>
             <Table.Th aria-label={t("Action")} />
@@ -87,6 +91,10 @@ export function OAuthAuthorizationTable({
                 </Table.Td>
 
                 <Table.Td>
+                  <SpaceAccessSummary access={authorization.spaceAccess} />
+                </Table.Td>
+
+                <Table.Td>
                   <Text fz="sm" style={{ whiteSpace: "nowrap" }}>
                     {formatDate(authorization.lastUsedAt)}
                   </Text>
@@ -99,23 +107,37 @@ export function OAuthAuthorizationTable({
                 </Table.Td>
 
                 <Table.Td>
-                  {onRevoke && (
-                    <Tooltip label={t("Revoke")}>
-                      <ActionIcon
-                        variant="subtle"
-                        color="red"
-                        aria-label={t("Revoke OAuth authorization")}
-                        onClick={() => onRevoke(authorization)}
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                  )}
+                  <Group gap={4} wrap="nowrap">
+                    {onUpdate && (
+                      <Tooltip label={t("Edit space access")}>
+                        <ActionIcon
+                          variant="subtle"
+                          color="gray"
+                          aria-label={t("Edit space access")}
+                          onClick={() => onUpdate(authorization)}
+                        >
+                          <IconEdit size={16} />
+                        </ActionIcon>
+                      </Tooltip>
+                    )}
+                    {onRevoke && (
+                      <Tooltip label={t("Revoke")}>
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          aria-label={t("Revoke OAuth authorization")}
+                          onClick={() => onRevoke(authorization)}
+                        >
+                          <IconTrash size={16} />
+                        </ActionIcon>
+                      </Tooltip>
+                    )}
+                  </Group>
                 </Table.Td>
               </Table.Tr>
             ))
           ) : (
-            <NoTableResults colSpan={showUserColumn ? 6 : 5} />
+            <NoTableResults colSpan={showUserColumn ? 7 : 6} />
           )}
         </Table.Tbody>
       </Table>

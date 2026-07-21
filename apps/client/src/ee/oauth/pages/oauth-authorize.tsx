@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Badge,
@@ -22,6 +22,13 @@ import {
   useOAuthAuthorizeInfoQuery,
 } from "@/ee/oauth/queries/oauth-query";
 import { OAuthScope } from "@/ee/oauth";
+import {
+  isSpaceAccessSelectionValid,
+  mergeSpaceAccessOptions,
+  SpaceAccessSelector,
+  toSpaceAccessInput,
+} from "@/ee/space-access";
+import { SpaceAccessInput } from "@/ee/space-access/types/space-access.types";
 
 export default function OAuthAuthorize() {
   const { t } = useTranslation();
@@ -36,6 +43,17 @@ export default function OAuthAuthorize() {
   });
   const approveMutation = useApproveOAuthAuthorizationMutation();
   const denyMutation = useDenyOAuthAuthorizationMutation();
+  const [spaceAccess, setSpaceAccess] = useState<SpaceAccessInput>({
+    mode: "all",
+  });
+  const [spaceAccessError, setSpaceAccessError] = useState<string>();
+
+  useEffect(() => {
+    if (data) {
+      setSpaceAccess(toSpaceAccessInput(data.spaceAccess));
+      setSpaceAccessError(undefined);
+    }
+  }, [data]);
 
   const redirect = (response?: { redirectUri?: string }) => {
     if (response?.redirectUri) {
@@ -44,8 +62,22 @@ export default function OAuthAuthorize() {
   };
 
   const errorMessage =
+    approveMutation.error?.["response"]?.data?.message ||
     error?.["response"]?.data?.message ||
     (!hasRequest ? t("Invalid OAuth authorization request.") : null);
+  const availableSpaces = mergeSpaceAccessOptions(
+    data?.availableSpaces,
+    data?.spaceAccess?.spaces,
+  );
+
+  const approve = () => {
+    if (!isSpaceAccessSelectionValid(spaceAccess)) {
+      setSpaceAccessError(t("Select at least one space."));
+      return;
+    }
+
+    approveMutation.mutate({ ...query, spaceAccess }, { onSuccess: redirect });
+  };
 
   return (
     <>
@@ -100,6 +132,19 @@ export default function OAuthAuthorize() {
                   </Text>
                 </div>
 
+                <SpaceAccessSelector
+                  value={spaceAccess}
+                  onChange={(value) => {
+                    setSpaceAccess(value);
+                    setSpaceAccessError(undefined);
+                  }}
+                  spaces={availableSpaces}
+                  description={t(
+                    "Choose which spaces this application can access.",
+                  )}
+                  error={spaceAccessError}
+                />
+
                 <div>
                   <Text size="sm" c="dimmed" mb={4}>
                     {t("Requested access")}
@@ -141,10 +186,11 @@ export default function OAuthAuthorize() {
                   <Button
                     leftSection={<IconCheck size={16} />}
                     loading={approveMutation.isPending}
-                    disabled={denyMutation.isPending}
-                    onClick={() =>
-                      approveMutation.mutate(query, { onSuccess: redirect })
+                    disabled={
+                      denyMutation.isPending ||
+                      !isSpaceAccessSelectionValid(spaceAccess)
                     }
+                    onClick={approve}
                   >
                     {t("Authorize")}
                   </Button>

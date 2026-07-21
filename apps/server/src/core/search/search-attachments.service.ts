@@ -28,6 +28,7 @@ export class SearchAttachmentsService {
     searchDto: SearchDTO,
     userId: string,
     workspaceId: string,
+    allowedSpaceIds?: string[],
   ) {
     const query = searchDto.query?.trim();
     if (!query) {
@@ -40,8 +41,8 @@ export class SearchAttachmentsService {
     const userSpaceIds = this.spaceMemberRepo.getUserSpaceIdsQuery(userId);
 
     const rows = await this.collectAccessibleAttachmentRows(
-      async (batchLimit, batchOffset) =>
-        this.db
+      async (batchLimit, batchOffset) => {
+        let attachmentQuery = this.db
           .selectFrom('attachments as a')
           .innerJoin('pages as p', 'p.id', 'a.pageId')
           .innerJoin('spaces as s', 's.id', 'a.spaceId')
@@ -78,39 +79,42 @@ export class SearchAttachmentsService {
           .$if(Boolean(searchDto.spaceId), (qb) =>
             qb.where('a.spaceId', '=', searchDto.spaceId),
           )
-          .orderBy('rank', 'desc')
-          .limit(batchLimit)
-          .offset(batchOffset)
-          .execute(),
+          .orderBy('rank', 'desc');
+        if (allowedSpaceIds) {
+          attachmentQuery =
+            allowedSpaceIds.length === 0
+              ? attachmentQuery.where(sql<boolean>`false`)
+              : attachmentQuery.where('a.spaceId', 'in', allowedSpaceIds);
+        }
+        return attachmentQuery.limit(batchLimit).offset(batchOffset).execute();
+      },
       userId,
       searchDto.spaceId,
       offset,
       limit,
     );
 
-    const items = rows
-      .slice(offset, offset + limit)
-      .map((row: any) => ({
-        id: row.id,
-        fileName: row.fileName,
-        pageId: row.pageId,
-        creatorId: row.creatorId,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-        rank: row.rank,
-        highlight: row.highlight,
-        space: {
-          id: row.spaceId,
-          name: row.spaceName,
-          slug: row.spaceSlug,
-          icon: row.spaceIcon,
-        },
-        page: {
-          id: row.pageIdRef,
-          title: row.pageTitle,
-          slugId: row.pageSlugId,
-        },
-      }));
+    const items = rows.slice(offset, offset + limit).map((row: any) => ({
+      id: row.id,
+      fileName: row.fileName,
+      pageId: row.pageId,
+      creatorId: row.creatorId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      rank: row.rank,
+      highlight: row.highlight,
+      space: {
+        id: row.spaceId,
+        name: row.spaceName,
+        slug: row.spaceSlug,
+        icon: row.spaceIcon,
+      },
+      page: {
+        id: row.pageIdRef,
+        title: row.pageTitle,
+        slugId: row.pageSlugId,
+      },
+    }));
 
     return { items };
   }

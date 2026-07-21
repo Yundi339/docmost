@@ -1,13 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import {
-  Modal,
-  TextInput,
-  Button,
-  Group,
-  Stack,
-  Select,
-  MultiSelect,
-} from "@mantine/core";
+import { Modal, TextInput, Button, Group, Stack, Select } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { z } from "zod/v4";
@@ -15,8 +7,19 @@ import { useTranslation } from "react-i18next";
 import { useCreateApiKeyMutation } from "@/ee/api-key/queries/api-key-query";
 import { IconCalendar } from "@tabler/icons-react";
 import { IApiKey } from "@/ee/api-key";
-import { API_KEY_SCOPE_PRESETS } from "@/ee/api-key/lib/api-key-scopes";
+import {
+  getApiKeyConfigurationError,
+  getApiKeyScopePresetValue,
+  resolveApiKeyScopes,
+  restrictApiKeyScopesToMcp,
+} from "@/ee/api-key/lib/api-key-scopes";
 import { ApiKeyScope } from "@/ee/api-key/types/api-key.types";
+import { ApiKeyScopeSelector } from "@/ee/api-key/components/api-key-scope-selector";
+import {
+  SpaceAccessSelector,
+  useSelectableSpaceOptionsQuery,
+} from "@/ee/space-access";
+import { SpaceAccessInput } from "@/ee/space-access/types/space-access.types";
 
 const DateInput = lazy(() =>
   import("@mantine/dates").then((module) => ({
@@ -73,7 +76,14 @@ export function CreateApiKeyModal({
     "rest:read",
     "rest:write",
   ]);
+  const [spaceAccess, setSpaceAccess] = useState<SpaceAccessInput>({
+    mode: "all",
+  });
+  const [spaceAccessError, setSpaceAccessError] = useState<string>();
+  const [scopeError, setScopeError] = useState<string>();
   const createApiKeyMutation = useCreateApiKeyMutation();
+  const { data: availableSpaces = [], isLoading: spacesLoading } =
+    useSelectableSpaceOptionsQuery({ enabled: opened });
 
   const form = useForm<FormValues>({
     validate: zod4Resolver(formSchema),
@@ -110,28 +120,20 @@ export function CreateApiKeyModal({
     { value: "custom", label: t("Custom") },
   ];
 
-  const scopePresetOptions = API_KEY_SCOPE_PRESETS.map((preset) => ({
-    value: preset.value,
-    label: t(preset.label),
-  }));
-
-  const scopeOptions = [
-    { value: "rest:read", label: "rest:read" },
-    { value: "rest:write", label: "rest:write" },
-    { value: "mcp:read", label: "mcp:read" },
-    { value: "mcp:write", label: "mcp:write" },
-    { value: "mcp:destructive", label: "mcp:destructive" },
-  ];
-
   const getScopes = (): ApiKeyScope[] => {
-    if (scopePreset === "custom") {
-      return customScopes;
-    }
+    return resolveApiKeyScopes(scopePreset, customScopes);
+  };
 
-    return (
-      API_KEY_SCOPE_PRESETS.find((preset) => preset.value === scopePreset)
-        ?.scopes || []
-    );
+  const handleSpaceAccessChange = (value: SpaceAccessInput) => {
+    setSpaceAccess(value);
+    setSpaceAccessError(undefined);
+    setScopeError(undefined);
+
+    if (value.mode === "selected") {
+      const mcpScopes = restrictApiKeyScopesToMcp(getScopes());
+      setCustomScopes(mcpScopes);
+      setScopePreset(getApiKeyScopePresetValue(mcpScopes));
+    }
   };
 
   const handleSubmit = async (data: FormValues) => {
@@ -141,27 +143,54 @@ export function CreateApiKeyModal({
       return;
     }
 
-    const groupData = {
+    const scopes = getScopes();
+    const configurationError = getApiKeyConfigurationError(scopes, spaceAccess);
+    if (configurationError === "missing_space") {
+      setSpaceAccessError(t("Select at least one space."));
+      return;
+    }
+    if (configurationError === "missing_scope") {
+      setScopeError(t("Select at least one scope."));
+      return;
+    }
+    if (configurationError === "rest_scope_with_selected_spaces") {
+      setScopeError(
+        t(
+          "REST scopes cannot be used when access is limited to specific spaces.",
+        ),
+      );
+      return;
+    }
+
+    const apiKeyData = {
       name: data.name,
       expiresAt,
-      scopes: getScopes(),
+      scopes,
+      spaceAccess,
     };
 
     try {
-      const createdKey = await createApiKeyMutation.mutateAsync(groupData);
+      const createdKey = await createApiKeyMutation.mutateAsync(apiKeyData);
       onSuccess(createdKey);
-      form.reset();
+      resetFields();
       onClose();
-    } catch (err) {
-      //
+    } catch (error) {
+      // The mutation displays the API error notification.
     }
   };
 
-  const handleClose = () => {
+  const resetFields = () => {
     form.reset();
     setExpirationOption("30");
     setScopePreset("full");
     setCustomScopes(["rest:read", "rest:write"]);
+    setSpaceAccess({ mode: "all" });
+    setSpaceAccessError(undefined);
+    setScopeError(undefined);
+  };
+
+  const handleClose = () => {
+    resetFields();
     onClose();
   };
 
@@ -183,23 +212,28 @@ export function CreateApiKeyModal({
             {...form.getInputProps("name")}
           />
 
-          <Select
-            label={t("Usage type")}
-            data={scopePresetOptions}
-            value={scopePreset}
-            onChange={(value) => setScopePreset(value || "full")}
-            allowDeselect={false}
+          <SpaceAccessSelector
+            value={spaceAccess}
+            onChange={handleSpaceAccessChange}
+            spaces={availableSpaces}
+            loading={spacesLoading}
+            error={spaceAccessError}
           />
 
-          {scopePreset === "custom" && (
-            <MultiSelect
-              label={t("Scopes")}
-              data={scopeOptions}
-              value={customScopes}
-              onChange={(value) => setCustomScopes(value as ApiKeyScope[])}
-              required
-            />
-          )}
+          <ApiKeyScopeSelector
+            scopePreset={scopePreset}
+            customScopes={customScopes}
+            mcpOnly={spaceAccess.mode === "selected"}
+            error={scopeError}
+            onScopePresetChange={(value) => {
+              setScopePreset(value);
+              setScopeError(undefined);
+            }}
+            onCustomScopesChange={(value) => {
+              setCustomScopes(value);
+              setScopeError(undefined);
+            }}
+          />
 
           <Select
             label={t("Expiration")}

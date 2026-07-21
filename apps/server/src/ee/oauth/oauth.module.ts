@@ -9,9 +9,10 @@ import { OAuthTokenService } from './oauth-token.service';
 import { ChatGptOAuthClientProvider } from './providers/chatgpt-oauth-client.provider';
 import { OAUTH_CLIENT_PROVIDERS } from './providers/oauth-client-provider';
 import { OAuthProviderRegistry } from './providers/oauth-provider.registry';
+import { CredentialSpaceAccessModule } from '../../core/credential-space-access/credential-space-access.module';
 
 @Module({
-  imports: [TokenModule],
+  imports: [TokenModule, CredentialSpaceAccessModule],
   controllers: [OAuthMetadataController, OAuthController],
   providers: [
     ChatGptOAuthClientProvider,

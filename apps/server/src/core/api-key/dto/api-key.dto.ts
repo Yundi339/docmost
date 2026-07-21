@@ -7,8 +7,11 @@ import {
   IsString,
   IsUUID,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { API_KEY_SCOPES } from '../api-key-scopes';
+import { CredentialSpaceAccessDto } from '../../credential-space-access/dto/credential-space-access.dto';
 
 export class CreateApiKeyDto {
   @IsString()
@@ -23,6 +26,11 @@ export class CreateApiKeyDto {
   @ArrayNotEmpty()
   @IsIn(API_KEY_SCOPES, { each: true })
   scopes?: string[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CredentialSpaceAccessDto)
+  spaceAccess?: CredentialSpaceAccessDto;
 }
 
 export class UpdateApiKeyDto {
@@ -32,6 +40,17 @@ export class UpdateApiKeyDto {
   @IsString()
   @MaxLength(100)
   name: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsIn(API_KEY_SCOPES, { each: true })
+  scopes?: string[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CredentialSpaceAccessDto)
+  spaceAccess?: CredentialSpaceAccessDto;
 }
 
 export class ApiKeyIdDto {

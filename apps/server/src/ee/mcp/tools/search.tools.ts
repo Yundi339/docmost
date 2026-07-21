@@ -30,6 +30,7 @@ export class McpSearchToolProvider implements McpToolProvider {
           limit: z.number().optional(),
         },
         access: 'read',
+        resource: { kind: 'scoped_collection', spaceIds: ['spaceId'] },
         input: {
           dto: SearchDTO,
           mapArgs: ({ query, spaceId, limit }) => ({
@@ -39,18 +40,20 @@ export class McpSearchToolProvider implements McpToolProvider {
             offset: 0,
           }),
         },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           delete input.shareId;
           if (input.spaceId) {
             await this.access.assertSpacePageAccess(
               user,
               input.spaceId,
               SpaceCaslAction.Read,
+              context,
             );
           }
           const result = await this.searchService.searchPage(input, {
             userId: user.id,
             workspaceId: workspace.id,
+            allowedSpaceIds: context.spaceAccess.effectiveSpaceIds,
           });
           return textResult(result.items);
         },
@@ -60,6 +63,7 @@ export class McpSearchToolProvider implements McpToolProvider {
         description: 'Search attachments (PDF, DOCX) by text content',
         inputSchema: { query: z.string(), limit: z.number().optional() },
         access: 'read',
+        resource: { kind: 'scoped_collection' },
         input: {
           dto: SearchDTO,
           mapArgs: ({ query, limit }) => ({
@@ -68,11 +72,12 @@ export class McpSearchToolProvider implements McpToolProvider {
             offset: 0,
           }),
         },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const result = await this.searchAttachmentsService.searchAttachments(
             input,
             user.id,
             workspace.id,
+            context.spaceAccess.effectiveSpaceIds,
           );
           return textResult(result.items);
         },

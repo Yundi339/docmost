@@ -86,6 +86,11 @@ export class GroupUserService {
       .values(groupUsersToInsert)
       .onConflict((oc) => oc.columns(['userId', 'groupId']).doNothing())
       .execute();
+    const spaceIds = await this.spaceMemberRepo.getSpaceIdsByGroupId(groupId);
+    await this.spaceMemberRepo.invalidateUserSpaceRoles(
+      validUsers.map((user) => user.id),
+      spaceIds,
+    );
 
     for (const user of validUsers) {
       this.auditService.log({
@@ -153,6 +158,7 @@ export class GroupUserService {
         );
       }
     });
+    await this.spaceMemberRepo.invalidateUserSpaceRoles([userId], spaceIds);
 
     this.auditService.log({
       event: AuditEvent.GROUP_MEMBER_REMOVED,

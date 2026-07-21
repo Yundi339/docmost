@@ -78,6 +78,7 @@ export default function WorkspaceApiKeys() {
         apiKeys={data?.items || []}
         isLoading={isLoading}
         showUserColumn
+        updateActionLabel="Rename"
         onUpdate={handleUpdate}
         onRevoke={handleRevoke}
       />
@@ -107,6 +108,7 @@ export default function WorkspaceApiKeys() {
 
       <UpdateApiKeyModal
         opened={updateModalOpened}
+        nameOnly
         onClose={() => {
           setUpdateModalOpened(false);
           setSelectedApiKey(null);

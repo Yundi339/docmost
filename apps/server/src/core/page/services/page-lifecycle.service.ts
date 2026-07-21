@@ -52,8 +52,10 @@ export class PageLifecycleService {
     pageId: string,
     user: User,
     workspace: Workspace,
+    allowedSpaceIds?: readonly string[],
   ): Promise<Page> {
     const page = await this.findWorkspacePage(pageId, workspace.id);
+    this.assertAllowedSpace(page.spaceId, allowedSpaceIds);
     if (page.deletedAt) {
       throw new NotFoundException('Page not found');
     }
@@ -83,8 +85,10 @@ export class PageLifecycleService {
     pageId: string,
     user: User,
     workspace: Workspace,
+    allowedSpaceIds?: readonly string[],
   ): Promise<Page> {
     const page = await this.findWorkspacePage(pageId, workspace.id);
+    this.assertAllowedSpace(page.spaceId, allowedSpaceIds);
     if (!page.deletedAt) {
       throw new NotFoundException('Page not found');
     }
@@ -115,6 +119,7 @@ export class PageLifecycleService {
       ) {
         throw new NotFoundException('Page not found');
       }
+      this.assertAllowedSpace(currentPage.spaceId, allowedSpaceIds);
 
       await this.pageOperationPolicy.assertOperation({
         operation: 'restore',
@@ -257,5 +262,14 @@ export class PageLifecycleService {
       throw new NotFoundException('Page not found');
     }
     return page;
+  }
+
+  private assertAllowedSpace(
+    spaceId: string,
+    allowedSpaceIds?: readonly string[],
+  ) {
+    if (allowedSpaceIds && !allowedSpaceIds.includes(spaceId)) {
+      throw new NotFoundException('Page not found');
+    }
   }
 }

@@ -30,6 +30,7 @@ export class McpMemberToolProvider implements McpToolProvider {
         description: 'List workspace members',
         inputSchema: { limit: z.number().optional() },
         access: 'read',
+        resource: { kind: 'all_spaces_only' },
         input: { noDto: true },
         handler: async ({ user, workspace }, { limit }) => {
           const ability = this.workspaceAbility.createForUser(user, workspace);
@@ -55,6 +56,7 @@ export class McpMemberToolProvider implements McpToolProvider {
         description: 'Get information about the currently authenticated user',
         inputSchema: {},
         access: 'read',
+        resource: { kind: 'identity' },
         input: { noDto: true },
         handler: async ({ user, workspace }) => {
           const current = await this.userRepo.findById(user.id, workspace.id);

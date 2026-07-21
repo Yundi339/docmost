@@ -7,11 +7,13 @@ import React from "react";
 import NoTableResults from "@/components/common/no-table-results";
 import { formatLocalized, useDateFnsLocale } from "@/lib/date-locale.ts";
 import { getApiKeyScopeLabel } from "@/ee/api-key/lib/api-key-scopes";
+import { SpaceAccessSummary } from "@/ee/space-access";
 
 interface ApiKeyTableProps {
   apiKeys: IApiKey[];
   isLoading?: boolean;
   showUserColumn?: boolean;
+  updateActionLabel?: string;
   onUpdate?: (apiKey: IApiKey) => void;
   onRevoke?: (apiKey: IApiKey) => void;
 }
@@ -20,6 +22,7 @@ export function ApiKeyTable({
   apiKeys,
   isLoading,
   showUserColumn = false,
+  updateActionLabel = "Edit",
   onUpdate,
   onRevoke,
 }: ApiKeyTableProps) {
@@ -36,14 +39,31 @@ export function ApiKeyTable({
     return new Date(expiresAt) < new Date();
   };
 
+  const getStatuses = (apiKey: IApiKey) => {
+    const statuses: Array<{ color: string; label: string }> = [];
+
+    if (apiKey.spaceAccess?.status === "no_effective_spaces") {
+      statuses.push({ color: "red", label: t("No effective spaces") });
+    }
+    if (isExpired(apiKey.expiresAt)) {
+      statuses.push({ color: "red", label: t("Expired") });
+    }
+    if (statuses.length === 0) {
+      statuses.push({ color: "green", label: t("Active") });
+    }
+
+    return statuses;
+  };
+
   return (
-    <Table.ScrollContainer minWidth={500}>
+    <Table.ScrollContainer minWidth={1000}>
       <Table highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           <Table.Tr>
             <Table.Th>{t("Name")}</Table.Th>
             {showUserColumn && <Table.Th>{t("User")}</Table.Th>}
             <Table.Th>{t("Usage type")}</Table.Th>
+            <Table.Th>{t("Space access")}</Table.Th>
             <Table.Th>{t("Status")}</Table.Th>
             <Table.Th>{t("Last used")}</Table.Th>
             <Table.Th>{t("Expires")}</Table.Th>
@@ -54,8 +74,8 @@ export function ApiKeyTable({
 
         <Table.Tbody>
           {apiKeys && apiKeys.length > 0 ? (
-            apiKeys.map((apiKey: IApiKey, index: number) => (
-              <Table.Tr key={index}>
+            apiKeys.map((apiKey: IApiKey) => (
+              <Table.Tr key={apiKey.id}>
                 <Table.Td>
                   <Text fz="sm" fw={500}>
                     {apiKey.name}
@@ -87,12 +107,24 @@ export function ApiKeyTable({
                 </Table.Td>
 
                 <Table.Td>
-                  <Badge
-                    variant="light"
-                    color={isExpired(apiKey.expiresAt) ? "red" : "green"}
-                  >
-                    {isExpired(apiKey.expiresAt) ? t("Expired") : t("Active")}
-                  </Badge>
+                  <SpaceAccessSummary
+                    access={apiKey.spaceAccess}
+                    showStatus={false}
+                  />
+                </Table.Td>
+
+                <Table.Td>
+                  <Group gap={4} wrap="nowrap">
+                    {getStatuses(apiKey).map((status) => (
+                      <Badge
+                        key={status.label}
+                        variant="light"
+                        color={status.color}
+                      >
+                        {status.label}
+                      </Badge>
+                    ))}
+                  </Group>
                 </Table.Td>
 
                 <Table.Td>
@@ -142,7 +174,7 @@ export function ApiKeyTable({
                           leftSection={<IconEdit size={16} />}
                           onClick={() => onUpdate(apiKey)}
                         >
-                          {t("Rename")}
+                          {t(updateActionLabel)}
                         </Menu.Item>
                       )}
                       {onRevoke && (
@@ -160,7 +192,7 @@ export function ApiKeyTable({
               </Table.Tr>
             ))
           ) : (
-            <NoTableResults colSpan={showUserColumn ? 8 : 7} />
+            <NoTableResults colSpan={showUserColumn ? 9 : 8} />
           )}
         </Table.Tbody>
       </Table>

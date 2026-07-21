@@ -17,6 +17,8 @@ import {
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import { McpToolRegistryService } from './mcp-tool-registry.service';
 import type { McpMode, McpRequestContext } from './mcp.types';
+import { OnEvent } from '@nestjs/event-emitter';
+import { EventName } from '../../common/events/event.contants';
 
 export type { McpMode, McpRequestContext } from './mcp.types';
 
@@ -37,6 +39,7 @@ interface McpSession {
   credentialId: string;
   scopes: string[];
   mode: McpMode;
+  permissionRevision: string;
   context: McpRequestContext;
   lastActivityAt: number;
 }
@@ -88,6 +91,24 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     this.sessions.clear();
   }
 
+  @OnEvent(EventName.SPACE_DELETED)
+  async handleSpaceDeleted(event: { spaceId: string }) {
+    const affected = [...this.sessions.values()]
+      .filter((session) =>
+        session.context.spaceAccess.effectiveSpaceIds.includes(event.spaceId),
+      )
+      .map((session) => session.sessionId);
+    await Promise.all(
+      affected.map((sessionId) =>
+        this.closeSession(
+          sessionId,
+          AuditEvent.MCP_SESSION_CLOSED,
+          'space_deleted',
+        ),
+      ),
+    );
+  }
+
   async handleRequest(
     req: IncomingMessage,
     res: ServerResponse,
@@ -119,7 +140,8 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
       }
       if (
         session.mode !== context.mode ||
-        !sameScopes(session.scopes, context.scopes)
+        !sameScopes(session.scopes, context.scopes) ||
+        session.permissionRevision !== getPermissionRevision(context)
       ) {
         await this.closeSession(
           sessionId,
@@ -174,6 +196,7 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
           credentialId: context.credentialId,
           scopes: [...context.scopes],
           mode: context.mode,
+          permissionRevision: getPermissionRevision(context),
           context: { ...context, scopes: [...context.scopes] },
           lastActivityAt: Date.now(),
         };
@@ -300,12 +323,7 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
       | typeof AuditEvent.MCP_SESSION_EXPIRED,
     reason?: string,
   ) {
-    const context = session.context ?? {
-      authType: session.authType,
-      credentialId: session.credentialId,
-      scopes: session.scopes,
-      mode: session.mode,
-    };
+    const context = session.context;
     this.auditService.logWithContext(
       {
         event,
@@ -322,6 +340,9 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
           clientId: context.clientId,
           mode: context.mode,
           scopes: context.scopes,
+          spaceAccessMode: context.spaceAccess?.mode,
+          selectedSpaceCount: context.spaceAccess?.selectedSpaceIds.length,
+          effectiveSpaceCount: context.spaceAccess?.effectiveSpaceIds.length,
           userAgent: truncateString(context.userAgent, 1000),
         },
       },
@@ -355,6 +376,10 @@ function sameScopes(left: string[], right: string[]) {
   if (left.length !== right.length) return false;
   const leftSet = new Set(left);
   return right.every((scope) => leftSet.has(scope));
+}
+
+function getPermissionRevision(context: McpRequestContext) {
+  return `${context.principalRevision}:${context.spaceAccess.revision}`;
 }
 
 function getPositiveInteger(value: string | undefined, fallback: number) {

@@ -55,6 +55,8 @@ export class McpController {
       oauthClientId: mcpAuth.oauthClientId,
       clientId: mcpAuth.clientId,
       scopes: mcpAuth.scopes ?? [],
+      spaceAccess: mcpAuth.spaceAccess,
+      principalRevision: mcpAuth.principalRevision,
       mode,
       ipAddress: getClientIp(req),
       userAgent: req.headers?.['user-agent'],

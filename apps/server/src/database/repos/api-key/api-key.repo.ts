@@ -78,8 +78,10 @@ export class ApiKeyRepo {
     updatable: UpdatableApiKey,
     apiKeyId: string,
     workspaceId: string,
+    trx?: KyselyTransaction,
   ): Promise<void> {
-    await this.db
+    const db = dbOrTx(this.db, trx);
+    await db
       .updateTable('apiKeys')
       .set({ ...updatable, updatedAt: new Date() })
       .where('id', '=', apiKeyId)

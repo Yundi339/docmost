@@ -33,9 +33,14 @@ export class McpSpaceToolProvider implements McpToolProvider {
         description: 'Get space information by ID',
         inputSchema: { spaceId: z.string() },
         access: 'read',
+        resource: { kind: 'resource_args', spaceIds: ['spaceId'] },
         input: { dto: SpaceInfoDto },
-        handler: async ({ user, workspace }, input) => {
-          await this.access.assertSpaceSettingsRead(user, input.spaceId);
+        handler: async ({ user, workspace, context }, input) => {
+          await this.access.assertSpaceSettingsRead(
+            user,
+            input.spaceId,
+            context,
+          );
           const space = await this.spaceService.getSpaceInfo(
             input.spaceId,
             workspace.id,
@@ -48,12 +53,14 @@ export class McpSpaceToolProvider implements McpToolProvider {
         description: 'List all spaces the user has access to',
         inputSchema: {},
         access: 'read',
+        resource: { kind: 'scoped_collection' },
         input: { noDto: true },
-        handler: async ({ user, workspace }) => {
+        handler: async ({ user, workspace, context }) => {
           const result = await this.spaceMemberService.getUserSpaces(
             user.id,
             this.access.paginate(100),
             workspace.id,
+            context.spaceAccess.effectiveSpaceIds,
           );
           return textResult(result);
         },
@@ -67,6 +74,7 @@ export class McpSpaceToolProvider implements McpToolProvider {
           description: z.string().optional(),
         },
         access: 'write',
+        resource: { kind: 'all_spaces_only' },
         input: { dto: CreateSpaceDto },
         handler: async ({ user, workspace }, input) => {
           const ability = this.workspaceAbility.createForUser(user, workspace);
@@ -99,9 +107,14 @@ export class McpSpaceToolProvider implements McpToolProvider {
           description: z.string().optional(),
         },
         access: 'write',
+        resource: { kind: 'resource_args', spaceIds: ['spaceId'] },
         input: { dto: UpdateSpaceDto },
-        handler: async ({ user, workspace }, input) => {
-          await this.access.assertSpaceSettingsManage(user, input.spaceId);
+        handler: async ({ user, workspace, context }, input) => {
+          await this.access.assertSpaceSettingsManage(
+            user,
+            input.spaceId,
+            context,
+          );
           const space = await this.spaceService.updateSpace(
             input as any,
             workspace.id,

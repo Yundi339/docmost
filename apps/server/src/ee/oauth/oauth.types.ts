@@ -3,6 +3,7 @@ import {
   JwtApiKeyPayload,
   JwtMcpOAuthPayload,
 } from '../../core/auth/dto/jwt-payload';
+import { CredentialSpaceAccessInput } from '../../core/credential-space-access/credential-space-access.types';
 
 export type OAuthProvider = 'chatgpt';
 
@@ -49,6 +50,7 @@ export type OAuthAuthorizeQuery = {
   code_challenge?: string;
   code_challenge_method?: string;
   resource?: string;
+  spaceAccess?: CredentialSpaceAccessInput;
 };
 
 export type OAuthTokenRequest = {

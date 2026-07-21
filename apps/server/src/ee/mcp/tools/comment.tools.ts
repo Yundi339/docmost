@@ -29,14 +29,17 @@ export class McpCommentToolProvider implements McpToolProvider {
         description: 'Get comments on a page',
         inputSchema: { pageId: z.string(), limit: z.number().optional() },
         access: 'read',
+        resource: { kind: 'resource_args', pageIds: ['pageId'] },
         input: { dto: PageIdDto, mapArgs: ({ pageId }) => ({ pageId }) },
-        handler: async ({ user, workspace }, input, { limit }) => {
+        handler: async ({ user, workspace, context }, input, { limit }) => {
           const page = await this.access.findActiveWorkspacePage(
             input.pageId,
             workspace.id,
+            undefined,
+            context,
           );
           if (!page) return pageNotFound();
-          await this.access.validateCanView(page, user);
+          await this.access.validateCanView(page, user, context);
           const comments = await this.commentService.findByPageId(
             input.pageId,
             this.access.paginate(limit),
@@ -53,6 +56,7 @@ export class McpCommentToolProvider implements McpToolProvider {
           content: z.string().describe('JSON ProseMirror content string'),
         },
         access: 'write',
+        resource: { kind: 'resource_args', pageIds: ['pageId'] },
         input: {
           dto: CreateCommentDto,
           mapArgs: ({ pageId, content }) => ({
@@ -61,13 +65,20 @@ export class McpCommentToolProvider implements McpToolProvider {
             type: 'page',
           }),
         },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const page = await this.access.findActiveWorkspacePage(
             input.pageId,
             workspace.id,
+            undefined,
+            context,
           );
           if (!page) return pageNotFound();
-          await this.access.validateCanComment(page, user, workspace.id);
+          await this.access.validateCanComment(
+            page,
+            user,
+            workspace.id,
+            context,
+          );
           const comment = await this.commentService.create(
             { page, workspaceId: workspace.id, user },
             input,
@@ -84,8 +95,9 @@ export class McpCommentToolProvider implements McpToolProvider {
           content: z.string().describe('JSON ProseMirror content string'),
         },
         access: 'write',
+        resource: { kind: 'resource_args', commentIds: ['commentId'] },
         input: { dto: UpdateCommentDto },
-        handler: async ({ user, workspace }, input) => {
+        handler: async ({ user, workspace, context }, input) => {
           const comment = await this.commentService.findById(
             input.commentId,
             workspace.id,
@@ -97,9 +109,16 @@ export class McpCommentToolProvider implements McpToolProvider {
           const page = await this.access.findActiveWorkspacePage(
             comment.pageId,
             workspace.id,
+            undefined,
+            context,
           );
           if (!page) throw new NotFoundException('Page not found');
-          await this.access.validateCanComment(page, user, workspace.id);
+          await this.access.validateCanComment(
+            page,
+            user,
+            workspace.id,
+            context,
+          );
           const updated = await this.commentService.update(
             comment,
             input,
