@@ -58,7 +58,6 @@ type DataItem = {
 type DataGroup = {
   heading: string;
   items: DataItem[];
-  nested?: boolean;
 };
 
 const groupedData: DataGroup[] = [
@@ -80,7 +79,6 @@ const groupedData: DataGroup[] = [
   },
   {
     heading: "MCP connections",
-    nested: true,
     items: [
       {
         label: ACCOUNT_API_KEY_NAVIGATION.mcp.label,
@@ -193,10 +191,7 @@ export default function SettingsSidebar() {
   const menuItems = groupedData.map((group) => {
     return (
       <div key={group.heading}>
-        <Text
-          c="dimmed"
-          className={group.nested ? classes.subgroupHeader : classes.linkHeader}
-        >
+        <Text c="dimmed" className={classes.linkHeader}>
           {t(group.heading)}
         </Text>
         {group.items.map((item) => {
@@ -263,7 +258,7 @@ export default function SettingsSidebar() {
                 withArrow
               >
                 <span
-                  className={`${classes.link} ${group.nested ? classes.subgroupLink : ""}`}
+                  className={classes.link}
                   data-disabled
                   role="link"
                   aria-disabled="true"
@@ -283,7 +278,7 @@ export default function SettingsSidebar() {
           return (
             <Link
               onMouseEnter={prefetchHandler}
-              className={`${classes.link} ${group.nested ? classes.subgroupLink : ""}`}
+              className={classes.link}
               data-active={active.startsWith(item.path) || undefined}
               key={item.label}
               to={item.path}
