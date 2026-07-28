@@ -33,7 +33,7 @@ RUN pnpm build
 # Pin the bundled data services to their official images. Copying Redis from
 # its official Trixie image keeps the runtime on one libc family while the
 # PostgreSQL image supplies the matching server binaries and system user.
-FROM redis:8.6.3-trixie AS redis-runtime
+FROM redis:8.8.0-trixie AS redis-runtime
 
 # Stage 2: runtime with postgres + redis + supervisord
 FROM postgres:18.4-trixie AS runtime
